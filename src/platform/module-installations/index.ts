@@ -1,0 +1,129 @@
+import "server-only";
+import { and, eq, isNull } from "drizzle-orm";
+import { getDb } from "@/server/db";
+import { moduleInstallations } from "@/server/db/schema";
+import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
+import type { UserId, WorkspaceId } from "@/shared/types/ids";
+import { publishEvent } from "@/server/events";
+import { writeAudit } from "@/platform/audit";
+
+export class ModuleNotEnabledError extends Error {
+  readonly moduleKey: ModuleKey;
+  constructor(moduleKey: ModuleKey) {
+    super(`Module "${moduleKey}" is not enabled for this workspace.`);
+    this.name = "ModuleNotEnabledError";
+    this.moduleKey = moduleKey;
+  }
+}
+
+/** Pure helper: derive the set of active module keys from raw installation rows. */
+export function resolveActiveModules(
+  rows: { moduleKey: ModuleKey; status: "active" | "cancelled"; cancelledAt: Date | null }[],
+): ModuleKey[] {
+  return rows
+    .filter((r) => r.status === "active" && r.cancelledAt === null)
+    .map((r) => r.moduleKey);
+}
+
+/** List active (installed) modules for a workspace. */
+export async function getInstalledModules(workspaceId: WorkspaceId): Promise<ModuleKey[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      moduleKey: moduleInstallations.moduleKey,
+      status: moduleInstallations.status,
+      cancelledAt: moduleInstallations.cancelledAt,
+    })
+    .from(moduleInstallations)
+    .where(
+      and(
+        eq(moduleInstallations.workspaceId, workspaceId),
+        isNull(moduleInstallations.cancelledAt),
+      ),
+    );
+  return resolveActiveModules(rows);
+}
+
+export async function isModuleEnabled(workspaceId: WorkspaceId, key: ModuleKey): Promise<boolean> {
+  const installed = await getInstalledModules(workspaceId);
+  return installed.includes(key);
+}
+
+/** Throw if a module isn't enabled — used to gate module routes/actions. */
+export async function assertModuleEnabled(workspaceId: WorkspaceId, key: ModuleKey): Promise<void> {
+  if (!(await isModuleEnabled(workspaceId, key))) {
+    throw new ModuleNotEnabledError(key);
+  }
+}
+
+/**
+ * Enable a module for a workspace. Phase 1: inserts/upserts the installation row.
+ * Phase 3 will add the Stripe subscription item before this row becomes active.
+ */
+export async function enableModule(
+  workspaceId: WorkspaceId,
+  key: ModuleKey,
+  actorId: UserId,
+): Promise<void> {
+  if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
+  const db = getDb();
+  await db
+    .insert(moduleInstallations)
+    .values({ workspaceId, moduleKey: key, status: "active" })
+    .onConflictDoUpdate({
+      target: [moduleInstallations.workspaceId, moduleInstallations.moduleKey],
+      set: { status: "active", cancelledAt: null, updatedAt: new Date() },
+    });
+  await publishEvent({
+    type: "ModuleEnabled",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "module",
+    entityId: key,
+    metadata: { moduleKey: key },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "module.enable",
+    targetType: "module",
+    targetId: key,
+    metadata: { moduleKey: key },
+  });
+}
+
+/** Disable (cancel) a module. Phase 4 adds the credit/refund engine on top of this. */
+export async function disableModule(
+  workspaceId: WorkspaceId,
+  key: ModuleKey,
+  actorId: UserId,
+): Promise<void> {
+  if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
+  const db = getDb();
+  await db
+    .update(moduleInstallations)
+    .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(moduleInstallations.workspaceId, workspaceId),
+        eq(moduleInstallations.moduleKey, key),
+        isNull(moduleInstallations.cancelledAt),
+      ),
+    );
+  await publishEvent({
+    type: "ModuleDisabled",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "module",
+    entityId: key,
+    metadata: { moduleKey: key },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "module.disable",
+    targetType: "module",
+    targetId: key,
+    metadata: { moduleKey: key },
+  });
+}

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Menu,
   MoreHorizontal,
+  Plus,
   Search,
   Settings,
   Users,
@@ -18,42 +19,48 @@ import { Button } from "@/shared/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/shared/ui/sheet";
 import { Logo } from "@/shared/components/logo";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
+import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
+import { AccountMenu } from "./account-menu";
+import { MODULES, type ModuleKey } from "@/shared/constants/modules";
 import type { LucideIcon } from "lucide-react";
+import type { WorkspaceId } from "@/shared/types/ids";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
-/**
- * Platform navigation. Module nav items (Invoices, Books, Drive, Quotes) are
- * rendered only when the module is installed for the active workspace — added
- * in Phase 1 once module_installations exists. Disabled modules surface under
- * an "Add module" entry rather than being silently hidden (empty-nav-state rule).
- */
-const platformNav: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/files", label: "Files", icon: FileText },
-  { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/billing", label: "Billing", icon: CreditCard },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
-
-// Bottom nav: max 5 items (bottom-nav-limit). 4 pinned + "More".
-const bottomNav: NavItem[] = [
-  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/billing", label: "Billing", icon: CreditCard },
-];
+export type AppShellProps = {
+  workspaces: WorkspaceOption[];
+  activeWorkspaceId: WorkspaceId;
+  installedModules: ModuleKey[];
+  userEmail: string;
+  children: React.ReactNode;
+};
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function buildNav(installedModules: ModuleKey[]): NavItem[] {
+  const platformNav: NavItem[] = [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ...installedModules.map((key) => ({
+      href: MODULES[key].href,
+      label: MODULES[key].shortName,
+      icon: MODULES[key].icon,
+    })),
+    { href: "/customers", label: "Customers", icon: Users },
+    { href: "/files", label: "Files", icon: FileText },
+    { href: "/activity", label: "Activity", icon: Activity },
+    { href: "/billing", label: "Billing", icon: CreditCard },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ];
+  return platformNav;
+}
+
+function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-col gap-1" aria-label="Primary">
-      {platformNav.map((item) => {
+      {items.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         return (
@@ -74,18 +81,31 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           </Link>
         );
       })}
+      {/* Add-module entry: always visible so disabled modules are surfaced, never silently hidden. */}
+      <Link
+        href="/settings/modules"
+        onClick={onNavigate}
+        className="mt-1 flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+      >
+        <Plus className="size-4 shrink-0" aria-hidden />
+        <span>Add module</span>
+      </Link>
     </nav>
   );
 }
 
-function BottomNav() {
+function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  // Bottom nav: max 5 items (bottom-nav-limit). 4 pinned + "More".
+  const pinned = items.filter((i) =>
+    ["/dashboard", "/customers", "/activity", "/billing"].includes(i.href),
+  );
   return (
     <nav
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {bottomNav.map((item) => {
+      {pinned.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         return (
@@ -121,7 +141,7 @@ function BottomNav() {
             <SheetTitle>Navigation</SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-6 pt-2">
-            <NavList />
+            <NavList items={items} />
           </div>
         </SheetContent>
       </Sheet>
@@ -129,10 +149,16 @@ function BottomNav() {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  workspaces,
+  activeWorkspaceId,
+  installedModules,
+  userEmail,
+  children,
+}: AppShellProps) {
+  const items = buildNav(installedModules);
   return (
     <div className="min-h-dvh">
-      {/* Skip link for keyboard users */}
       <a
         href="#main-content"
         className="sr-only z-50 rounded-md bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4"
@@ -142,15 +168,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
-        <div className="flex h-16 items-center border-b border-sidebar-border px-5">
+        <div className="flex h-16 items-center border-b border-border px-5">
           <Logo />
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-4">
-          <NavList />
+          <NavList items={items} />
         </div>
       </aside>
 
-      {/* Main column */}
       <div className="md:pl-64">
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
@@ -167,22 +192,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </SheetTitle>
               </SheetHeader>
               <div className="px-3 pb-6 pt-2">
-                <NavList />
+                <NavList items={items} />
               </div>
             </SheetContent>
           </Sheet>
 
-          {/* Workspace switcher placeholder — Phase 1 */}
-          <button
-            type="button"
-            className="hidden items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted md:flex"
-            aria-label="Switch workspace"
-          >
-            <span className="grid size-6 place-items-center rounded bg-primary text-xs text-primary-foreground">
-              W
-            </span>
-            <span>My workspace</span>
-          </button>
+          <WorkspaceSwitcher workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
 
           <div className="ml-auto flex items-center gap-1">
             <Button
@@ -194,17 +209,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Search className="size-5" aria-hidden />
             </Button>
             <ThemeToggle />
-            {/* Account menu placeholder — Phase 1 */}
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Account"
-              className="text-muted-foreground"
-            >
-              <span className="grid size-6 place-items-center rounded-full bg-muted text-xs">
-                A
-              </span>
-            </Button>
+            <AccountMenu userEmail={userEmail} />
           </div>
         </header>
 
@@ -213,7 +218,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      <BottomNav />
+      <BottomNav items={items} />
     </div>
   );
 }
