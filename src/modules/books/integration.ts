@@ -5,36 +5,41 @@ import { getDb } from "@/server/db";
 import { bookTransactions } from "@/server/db/schema";
 import { isModuleEnabled } from "@/platform/module-installations";
 import { getCustomer } from "@/platform/customers";
+import { platformLabel } from "@/shared/constants/drive-platforms";
 import { createTransaction } from "./index";
 import {
   branded,
   type CustomerId,
+  type DriveEarningId,
   type InvoiceId,
   type UserId,
   type WorkspaceId,
 } from "@/shared/types/ids";
 
 /**
- * Books cross-module integration (Phase 6c). Subscribes to `InvoicePaid` on the event bus and
- * auto-records a Books income transaction for the paid amount — the first cross-module side
- * effect (brief §9: modules communicate via the event bus, never direct imports). This module
- * imports `@/modules/books` (its own module), `@/platform/*`, `@/server/*`, and `@/shared/*`
- * only. It does **NOT** import `@/modules/invoices` — the entire contract (invoice number,
- * total, currency, customer, invoice id) arrives via `event.metadata` + `event.entityId`.
+ * Books cross-module integration. Subscribes to cross-module events on the bus and
+ * auto-records a Books income transaction for each — modules communicate via the event bus,
+ * never direct imports (brief §9). This module imports `@/modules/books` (its own module),
+ * `@/platform/*`, `@/server/*`, and `@/shared/*` only. It does **NOT** import `@/modules/invoices`
+ * or `@/modules/drive` — the entire contract arrives via `event.metadata` + `event.entityId`.
+ *
+ * Two subscribers (the second added in Phase 7):
+ *
+ * 1. **`InvoicePaid` → Books income** (Phase 6c). Records an income row (category `invoice`)
+ *    for the paid amount, linked to the invoice's customer + `sourceInvoiceId`. Idempotent via
+ *    check-then-insert on `source_invoice_id`.
+ * 2. **`DriveEarningsLogged` → Books income** (Phase 7). Records an income row (category `gig`)
+ *    for the earned amount, linked via `sourceEarningId` (no customer — gig earnings have no
+ *    customer). Idempotent via check-then-insert on `source_earning_id`.
  *
  * Wired once at startup from `src/instrumentation.ts` (fire-and-forget, like
  * `registerNotifications`). Best-effort: the event bus isolates a failing handler from the
- * publisher, and `createTransaction` is wrapped so a thrown error logs + swallows (a failed
- * auto-record must not break the invoice payment flow).
- *
- * Idempotency: the source `InvoicePaid` is itself idempotent (atomic transition publishes only
- * on the first paid mark), but this subscriber adds a second line of defense — a
- * check-then-insert on `book_transactions.source_invoice_id` — so a future queue-backed bus
- * redelivering the event cannot double-count income.
+ * publisher, and each `createTransaction` is wrapped so a thrown error logs + swallows (a
+ * failed auto-record must not break the source flow — invoice payment or Drive create).
  *
  * Module gate: if Books isn't installed for the workspace, the event is a no-op (no orphan
- * rows in a module that isn't there). Income paid while Books is disabled is NOT backfilled
- * when Books is later enabled (documented limitation).
+ * rows in a module that isn't there). Income earned while Books is disabled is NOT backfilled
+ * when Books is later enabled (documented limitation, applies to both subscribers).
  */
 
 /** Defensive parse of the `InvoicePaid` event metadata (the Books-side contract). */
@@ -118,10 +123,95 @@ async function onInvoicePaid(event: BusEvent): Promise<void> {
   }
 }
 
+/** Defensive parse of the `DriveEarningsLogged` event metadata (the Books-side contract). */
+function readDriveEarningsMeta(event: BusEvent): {
+  earningId: DriveEarningId;
+  amountCents: number;
+  currency: string;
+  platform: string;
+  date: Date;
+  description: string;
+} | null {
+  const m = event.metadata;
+  const entityId = typeof event.entityId === "string" ? event.entityId : null;
+  if (!m || !entityId) return null;
+  const amountCents = typeof m.amountCents === "number" && m.amountCents > 0 ? m.amountCents : null;
+  const currency = typeof m.currency === "string" && m.currency.length === 3 ? m.currency : null;
+  const platform = typeof m.platform === "string" ? m.platform : null;
+  const date = m.date instanceof Date ? m.date : null;
+  const description = typeof m.description === "string" ? m.description : "";
+  if (amountCents === null || !currency || !platform || !date) return null;
+  return {
+    earningId: branded<"DriveEarningId">(entityId),
+    amountCents,
+    currency,
+    platform,
+    date,
+    description,
+  };
+}
+
+async function onDriveEarningsLogged(event: BusEvent): Promise<void> {
+  if (!event.workspaceId) return;
+  const workspaceId = event.workspaceId as WorkspaceId;
+
+  // Module gate — no-op if Books isn't installed.
+  if (!(await isModuleEnabled(workspaceId, "books"))) return;
+
+  const meta = readDriveEarningsMeta(event);
+  if (!meta) {
+    console.error("[books] DriveEarningsLogged event missing required metadata:", event.entityId);
+    return;
+  }
+
+  // Idempotency: skip if an income row already exists for this earning.
+  const db = getDb();
+  const existing = await db
+    .select({ id: bookTransactions.id })
+    .from(bookTransactions)
+    .where(
+      and(
+        eq(bookTransactions.workspaceId, workspaceId),
+        eq(bookTransactions.sourceEarningId, meta.earningId),
+      ),
+    )
+    .limit(1);
+  if (existing.length > 0) return;
+
+  // Gig earnings have no customer — record unlinked income. Use the earning's user-chosen date
+  // (from metadata) so the income lands in the right P&L period (a back-dated earning records
+  // in its own month, unlike the InvoicePaid subscriber which uses event-processing time).
+  const label = platformLabel(meta.platform) ?? meta.platform;
+  try {
+    await createTransaction(
+      workspaceId,
+      {
+        type: "income",
+        amountCents: meta.amountCents,
+        currency: meta.currency,
+        date: meta.date,
+        description: `Drive earnings · ${label}`,
+        category: "gig",
+        customerId: null,
+        notes: `Auto-recorded from drive earnings (${label}).`,
+        sourceEarningId: meta.earningId,
+      },
+      event.actorUserId as UserId | undefined,
+    );
+  } catch (err) {
+    console.error("[books] auto-record from drive earning failed:", meta.earningId, err);
+  }
+}
+
 /**
- * Subscribe the Books `InvoicePaid` handler. Returns an unsubscribe (for tests); in production
- * this is fire-and-forget — wired once at startup in `src/instrumentation.ts`.
+ * Subscribe the Books cross-module handlers. Returns a composed unsubscribe (for tests); in
+ * production this is fire-and-forget — wired once at startup in `src/instrumentation.ts`.
  */
 export function registerBooksIntegration(): () => void {
-  return onEvent("InvoicePaid", onInvoicePaid);
+  const u1 = onEvent("InvoicePaid", onInvoicePaid);
+  const u2 = onEvent("DriveEarningsLogged", onDriveEarningsLogged);
+  return () => {
+    u1();
+    u2();
+  };
 }

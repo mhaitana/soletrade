@@ -10,6 +10,7 @@ import type { BookType } from "@/server/db/schema/enums";
 import type {
   BookTransactionId,
   CustomerId,
+  DriveEarningId,
   InvoiceId,
   UserId,
   WorkspaceId,
@@ -46,6 +47,12 @@ export interface TransactionInput {
    * `book_transactions.source_invoice_id` (no FK constraint).
    */
   sourceInvoiceId?: InvoiceId | null;
+  /**
+   * Optional link to the Drive earning that generated this income (Phase 7). Set by the
+   * `DriveEarningsLogged` subscriber; null for manually-recorded transactions. Stored on
+   * `book_transactions.source_earning_id` (no FK constraint).
+   */
+  sourceEarningId?: DriveEarningId | null;
 }
 
 export type TransactionPatch = Partial<TransactionInput>;
@@ -64,6 +71,8 @@ export interface TransactionRow {
   customerName: string | null;
   /** The invoice that generated this income, or null. */
   sourceInvoiceId: InvoiceId | null;
+  /** The Drive earning that generated this income, or null. */
+  sourceEarningId: DriveEarningId | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -80,6 +89,7 @@ const selectTransaction = {
   category: bookTransactions.category,
   customerId: bookTransactions.customerId,
   sourceInvoiceId: bookTransactions.sourceInvoiceId,
+  sourceEarningId: bookTransactions.sourceEarningId,
   notes: bookTransactions.notes,
   createdAt: bookTransactions.createdAt,
   updatedAt: bookTransactions.updatedAt,
@@ -131,6 +141,7 @@ export async function createTransaction(
       category: input.category,
       customerId: input.customerId ?? null,
       sourceInvoiceId: input.sourceInvoiceId ?? null,
+      sourceEarningId: input.sourceEarningId ?? null,
       notes: input.notes ?? null,
     })
     .returning({ id: bookTransactions.id });
@@ -149,6 +160,7 @@ export async function createTransaction(
       category: input.category,
       description: input.description.trim(),
       ...(input.sourceInvoiceId ? { sourceInvoiceId: input.sourceInvoiceId } : {}),
+      ...(input.sourceEarningId ? { sourceEarningId: input.sourceEarningId } : {}),
     },
   });
   await writeAudit({
@@ -164,6 +176,7 @@ export async function createTransaction(
       ...(input.sourceInvoiceId
         ? { sourceInvoiceId: input.sourceInvoiceId, source: "invoice" }
         : {}),
+      ...(input.sourceEarningId ? { sourceEarningId: input.sourceEarningId, source: "drive" } : {}),
     },
   });
   return row.id;
@@ -342,3 +355,11 @@ export async function getTransaction(
   const { customerName, ...tx } = row;
   return { ...tx, customerName: customerName ?? null };
 }
+
+// Re-export the pure aggregator (Phase 9 cross-module dashboard loader uses it).
+export {
+  summarizeTransactions,
+  type TransactionSummary,
+  type TransactionSummaryInput,
+  type MonthlyNetPoint,
+} from "./calc";

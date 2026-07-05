@@ -1,86 +1,173 @@
 import Link from "next/link";
-import { BookOpen, Car, FileText, Receipt, Sparkles, type LucideIcon } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { loadRecentActivity } from "../activity/actions";
+import { cn } from "@/shared/lib/utils";
+import { PERIODS, parsePeriod, type Period } from "@/shared/utils/periods";
+import { MODULES, MODULE_KEYS } from "@/shared/constants/modules";
 import { ActivityFeed } from "../activity/activity-feed";
+import { loadDashboardPage } from "./actions";
+import { KpiCard } from "./kpi-card";
+import { ModuleSummaryCard } from "./module-summary-card";
 
-const modules: { name: string; desc: string; icon: LucideIcon }[] = [
-  { name: "Invoices", desc: "Bill clients and accept card payments.", icon: Receipt },
-  { name: "Books", desc: "Track income, expenses, and receipts.", icon: BookOpen },
-  { name: "Drive", desc: "Log gig earnings and mileage.", icon: Car },
-  { name: "Quotes", desc: "Send proposals and convert to invoices.", icon: FileText },
-];
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Dashboard" };
 
-const checklist = [
+const PERIOD_NOUN: Record<Exclude<Period, "all">, string> = {
+  month: "last month",
+  quarter: "last quarter",
+  year: "last year",
+};
+
+const CHECKLIST = [
   "Create your workspace",
   "Enable your first module",
   "Add a customer",
   "Send your first invoice or quote",
 ];
 
-export default async function DashboardPage() {
-  const { items } = await loadRecentActivity(5);
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string | string[] }>;
+}) {
+  const sp = await searchParams;
+  const rawPeriod = typeof sp.period === "string" ? sp.period : undefined;
+  // Dashboard default is "month" (parsePeriod's own default is "year") so the KPI deltas read
+  // "vs last month". "all" is allowed — its KPIs just render no delta badge (no previous period).
+  const period: Period = rawPeriod ? parsePeriod(rawPeriod) : "month";
+  const data = await loadDashboardPage({ period });
+  const periodNoun: string = period === "all" ? "" : PERIOD_NOUN[period];
 
+  // --- Onboarding branch: zero modules installed → keep the starter checklist + enable cards.
+  if (data.onboarding) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Welcome to your workspace. Enable a module to get started.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="size-4 text-primary" aria-hidden />
+              Onboarding
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {CHECKLIST.map((step, i) => (
+              <div key={step} className="flex items-center gap-3 text-sm">
+                <span
+                  className="grid size-5 place-items-center rounded-full border border-border text-xs text-muted-foreground"
+                  aria-hidden
+                >
+                  {i + 1}
+                </span>
+                <span className="text-foreground">{step}</span>
+                <Badge variant="outline" className="ml-auto text-muted-foreground">
+                  Pending
+                </Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <section>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Modules</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {MODULE_KEYS.map((key) => {
+              const m = MODULES[key];
+              const Icon = m.icon;
+              return (
+                <Card key={key} className="transition-colors hover:border-primary/40">
+                  <CardHeader>
+                    <Icon className="size-5 text-primary" aria-hidden />
+                    <CardTitle className="mt-3 text-sm">soletrade {m.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-muted-foreground">{m.description}</p>
+                    <Link
+                      href="/settings/modules"
+                      className="mt-4 block text-xs font-medium text-brand-blue"
+                    >
+                      Enable module →
+                    </Link>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-medium text-muted-foreground">Recent activity</h2>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/activity">View all</Link>
+            </Button>
+          </div>
+          <ActivityFeed items={data.activity.items} />
+        </section>
+      </div>
+    );
+  }
+
+  // --- Real dashboard: period selector + KPI row + per-module summary cards + activity.
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Welcome to your workspace. Enable a module to get started.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your business at a glance — {period === "all" ? "all time" : `this ${period}`}.
+          </p>
+        </div>
+        {/* Period selector — filter links; active period highlighted. */}
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Dashboard period">
+          {PERIODS.map((p) => (
+            <Link
+              key={p.key}
+              href={`/dashboard?period=${p.key}`}
+              aria-current={p.key === period ? "page" : undefined}
+              className={cn(
+                "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                p.key === period
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
-      {/* Onboarding checklist */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="size-4 text-primary" aria-hidden />
-            Onboarding
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {checklist.map((step, i) => (
-            <div key={step} className="flex items-center gap-3 text-sm">
-              <span
-                className="grid size-5 place-items-center rounded-full border border-border text-xs text-muted-foreground"
-                aria-hidden
-              >
-                {i + 1}
-              </span>
-              <span className="text-foreground">{step}</span>
-              <Badge variant="outline" className="ml-auto text-muted-foreground">
-                Pending
-              </Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Module cards — empty state prompts to enable */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Modules</h2>
+      {/* KPI row */}
+      <section aria-label="Key metrics">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {modules.map((m) => {
-            const Icon = m.icon;
-            return (
-              <Card key={m.name} className="transition-colors hover:border-primary/40">
-                <CardHeader>
-                  <Icon className="size-5 text-primary" aria-hidden />
-                  <CardTitle className="mt-3 text-sm">soletrade {m.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-muted-foreground">{m.desc}</p>
-                  <p className="mt-4 text-xs font-medium text-brand-blue">Enable module →</p>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {data.kpis.map((kpi) => (
+            <KpiCard key={kpi.id} kpi={kpi} periodNoun={periodNoun} />
+          ))}
         </div>
       </section>
 
-      {/* Recent activity — live from the event-sourced activity feed */}
+      {/* Per-module summary cards */}
+      {data.moduleCards.length > 0 ? (
+        <section aria-label="Module summaries">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Modules</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {data.moduleCards.map((card) => (
+              <ModuleSummaryCard key={card.key} card={card} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Recent activity */}
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-medium text-muted-foreground">Recent activity</h2>
@@ -88,7 +175,7 @@ export default async function DashboardPage() {
             <Link href="/activity">View all</Link>
           </Button>
         </div>
-        <ActivityFeed items={items} />
+        <ActivityFeed items={data.activity.items} />
       </section>
     </div>
   );

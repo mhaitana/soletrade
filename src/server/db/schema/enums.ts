@@ -71,6 +71,25 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
 export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number];
 
 /**
+ * Quote lifecycle (Phase 8). `draft → sent → viewed → (accepted | declined | expired)`;
+ * `accepted → converted` (terminal). `viewed` is set by the public-page view tracker
+ * (sent → viewed, idempotent). `expired` is set by the quote-expired cron for sent/viewed
+ * quotes past their `validUntil` (accepted quotes don't expire — they're heading to
+ * conversion). `converted` is terminal and stores `convertedInvoiceId`. Declined/expired
+ * are terminal this phase (no re-send).
+ */
+export const quoteStatusEnum = pgEnum("quote_status", [
+  "draft",
+  "sent",
+  "viewed",
+  "accepted",
+  "declined",
+  "expired",
+  "converted",
+]);
+export type QuoteStatus = (typeof quoteStatusEnum.enumValues)[number];
+
+/**
  * Books module (Phase 6). A book transaction is a flat ledger entry — `income` adds
  * to the workspace's net, `expense` subtracts. There is no lifecycle / status flow
  * (unlike invoices); a transaction is just a dated row. Categories are slugs from the

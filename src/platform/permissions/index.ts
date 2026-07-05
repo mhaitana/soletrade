@@ -101,6 +101,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   accountant: [
     "manage:customer",
     "manage:invoice",
+    "manage:quote",
     "manage:books",
     "manage:file",
     "view:workspace",

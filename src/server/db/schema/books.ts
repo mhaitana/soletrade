@@ -1,5 +1,11 @@
 import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { BookTransactionId, CustomerId, InvoiceId, WorkspaceId } from "@/shared/types/ids";
+import type {
+  BookTransactionId,
+  CustomerId,
+  DriveEarningId,
+  InvoiceId,
+  WorkspaceId,
+} from "@/shared/types/ids";
 import { workspaces } from "./workspaces";
 import { customers } from "./customers";
 import { bookTypeEnum } from "./enums";
@@ -48,6 +54,14 @@ export const bookTransactions = pgTable(
      * manually-recorded transactions.
      */
     sourceInvoiceId: uuid("source_invoice_id").$type<InvoiceId>(),
+    /**
+     * Optional link to the Drive earning that generated this income (Phase 7 event-bus
+     * integration). No FK constraint — keeps Books decoupled from the drive_earnings table at
+     * the DB level (cross-module coupling goes via the event bus, not FKs). Indexed for the
+     * idempotency check-then-insert in the Books integration subscriber. Null for
+     * manually-recorded transactions and invoice-linked rows.
+     */
+    sourceEarningId: uuid("source_earning_id").$type<DriveEarningId>(),
     /** Private workspace note (never exposed publicly). */
     notes: text("notes"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -61,5 +75,7 @@ export const bookTransactions = pgTable(
     index("book_transactions_workspace_customer_idx").on(t.workspaceId, t.customerId),
     // Idempotency lookup for the InvoicePaid → Books income subscriber (6c).
     index("book_transactions_workspace_source_invoice_idx").on(t.workspaceId, t.sourceInvoiceId),
+    // Idempotency lookup for the DriveEarningsLogged → Books income subscriber (7).
+    index("book_transactions_workspace_source_earning_idx").on(t.workspaceId, t.sourceEarningId),
   ],
 );

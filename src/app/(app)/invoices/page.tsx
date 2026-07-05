@@ -5,6 +5,7 @@ import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
+import { formatDate } from "@/shared/utils/format-date";
 import { loadInvoicesPage } from "./actions";
 import type { InvoiceStatus } from "@/server/db/schema/enums";
 
@@ -30,11 +31,6 @@ const STATUS_BADGE: Record<
   void: { label: "Void", variant: "destructive" },
   overdue: { label: "Overdue", variant: "destructive" },
 };
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
 
 export default async function InvoicesPage({
   searchParams,

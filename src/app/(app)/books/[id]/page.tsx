@@ -3,6 +3,7 @@ import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
+import { formatDate } from "@/shared/utils/format-date";
 import { categoryLabel } from "@/shared/constants/books-categories";
 import { loadTransaction } from "../actions";
 import { BookDetailActions } from "../book-detail-actions";
@@ -14,11 +15,6 @@ const TYPE_BADGE: Record<BookType, { label: string; variant: "default" | "destru
   income: { label: "Income", variant: "default" },
   expense: { label: "Expense", variant: "destructive" },
 };
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
 
 export default async function TransactionDetailPage({
   params,

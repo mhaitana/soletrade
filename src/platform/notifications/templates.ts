@@ -206,3 +206,162 @@ export function invoicePaidEmail(
   ].join("\n");
   return { subject, html, text };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quote email templates (Phase 8). Same purity + standalone-HTML contract as the
+// invoice templates above. Two meta shapes:
+//  - `QuoteEmailMeta` — the customer-facing payload on `QuoteSent` (needs publicToken).
+//  - `QuoteMerchantMeta` — the merchant-notification payload on `QuoteAccepted` /
+//    `QuoteDeclined` (no publicToken — the merchant clicks through to the app, not the
+//    public page; informational, no button).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type QuoteEmailMeta = {
+  number: string;
+  totalCents: number;
+  currency: string;
+  publicToken: string;
+  validUntil: Date | null;
+  customerEmail: string | null;
+  customerName: string | null;
+  customerId: CustomerId | null;
+};
+
+/** Coerce a raw event-bus metadata record into a typed `QuoteEmailMeta`. Returns null if
+ *  the record is missing or has no `publicToken` (the caller treats that as a no-op). */
+export function coerceQuoteEmailMeta(
+  record: Record<string, unknown> | undefined,
+): QuoteEmailMeta | null {
+  if (!record) return null;
+  const publicToken = typeof record.publicToken === "string" ? record.publicToken : null;
+  if (!publicToken) return null;
+  return {
+    number: typeof record.number === "string" ? record.number : "",
+    totalCents: typeof record.totalCents === "number" ? record.totalCents : 0,
+    currency: typeof record.currency === "string" ? record.currency : "",
+    publicToken,
+    validUntil: record.validUntil instanceof Date ? record.validUntil : null,
+    customerEmail: typeof record.customerEmail === "string" ? record.customerEmail : null,
+    customerName: typeof record.customerName === "string" ? record.customerName : null,
+    customerId:
+      typeof record.customerId === "string" ? branded<"CustomerId">(record.customerId) : null,
+  };
+}
+
+export type QuoteMerchantMeta = {
+  number: string;
+  totalCents: number;
+  currency: string;
+  customerName: string | null;
+  customerEmail: string | null;
+};
+
+/** Coerce a raw event-bus metadata record into a typed `QuoteMerchantMeta`. Returns null
+ *  if the record is missing or has no `number` (the caller treats that as a no-op). */
+export function coerceQuoteMerchantMeta(
+  record: Record<string, unknown> | undefined,
+): QuoteMerchantMeta | null {
+  if (!record) return null;
+  const number = typeof record.number === "string" ? record.number : null;
+  if (!number) return null;
+  return {
+    number,
+    totalCents: typeof record.totalCents === "number" ? record.totalCents : 0,
+    currency: typeof record.currency === "string" ? record.currency : "",
+    customerName: typeof record.customerName === "string" ? record.customerName : null,
+    customerEmail: typeof record.customerEmail === "string" ? record.customerEmail : null,
+  };
+}
+
+/** Absolute public link to the quote's public page (`/q/[token]`). */
+export function quoteLink(publicToken: string, appUrl: string): string {
+  return `${appUrl.replace(/\/$/, "")}/q/${publicToken}`;
+}
+
+/** "You have a new quote" — sent to the customer on `QuoteSent`. */
+export function quoteSentEmail(m: QuoteEmailMeta, appUrl: string): RenderedEmail {
+  const link = quoteLink(m.publicToken, appUrl);
+  const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
+  const valid = m.validUntil ? ` — valid until ${formatDate(m.validUntil)}` : "";
+  const subject = `Quote ${m.number} from soletrade labs`;
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Quote amount${valid}</p>
+    <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">You have a new quote (${m.number}). Review the details and accept or decline it online.</p>`;
+  const html = emailHtml({
+    accent: "#0f172a",
+    preheading: `Quote ${m.number}`,
+    heading: "You have a new quote",
+    bodyHtml,
+    buttonHref: link,
+    buttonLabel: "View quote",
+    showButton: true,
+  });
+  const text = [
+    `${greeting}`,
+    ``,
+    `You have a new quote (${m.number}).${valid}`,
+    `Amount: ${money(m.totalCents, m.currency)}`,
+    ``,
+    `Review and accept or decline online:`,
+    link,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+/** "A quote was accepted" — sent to workspace members on `QuoteAccepted`. Informational, no button. */
+export function quoteAcceptedEmail(m: QuoteMerchantMeta): RenderedEmail {
+  const customer = m.customerName ? ` from ${m.customerName}` : "";
+  const subject = `Quote ${m.number} accepted`;
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A quote you sent has been accepted.</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Accepted quote${customer}</p>
+    <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Quote ${m.number}${customer} was accepted by the customer. Convert it to an invoice in soletrade labs when you're ready to bill.</p>`;
+  const html = emailHtml({
+    accent: "#059669",
+    preheading: `Accepted · Quote ${m.number}`,
+    heading: "A quote was accepted",
+    bodyHtml,
+    buttonHref: "#",
+    buttonLabel: "",
+    showButton: false,
+  });
+  const text = [
+    `A quote you sent has been accepted.`,
+    ``,
+    `Quote ${m.number}${customer} — ${money(m.totalCents, m.currency)}`,
+    ``,
+    `Convert it to an invoice in soletrade labs when you're ready to bill.`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+/** "A quote was declined" — sent to workspace members on `QuoteDeclined`. Informational, no button. */
+export function quoteDeclinedEmail(m: QuoteMerchantMeta): RenderedEmail {
+  const customer = m.customerName ? ` from ${m.customerName}` : "";
+  const subject = `Quote ${m.number} declined`;
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A quote you sent was declined.</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Declined quote${customer}</p>
+    <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Quote ${m.number}${customer} was declined by the customer. You may want to follow up or issue a revised quote.</p>`;
+  const html = emailHtml({
+    accent: "#DC2626",
+    preheading: `Declined · Quote ${m.number}`,
+    heading: "A quote was declined",
+    bodyHtml,
+    buttonHref: "#",
+    buttonLabel: "",
+    showButton: false,
+  });
+  const text = [
+    `A quote you sent was declined.`,
+    ``,
+    `Quote ${m.number}${customer} — ${money(m.totalCents, m.currency)}`,
+    ``,
+    `You may want to follow up or issue a revised quote.`,
+  ].join("\n");
+  return { subject, html, text };
+}

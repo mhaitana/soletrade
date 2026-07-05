@@ -5,8 +5,9 @@ import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
+import { formatDate } from "@/shared/utils/format-date";
 import { categoryLabel } from "@/shared/constants/books-categories";
-import { PERIODS, parsePeriod, type Period } from "@/modules/books/periods";
+import { PERIODS, parsePeriod, type Period } from "@/shared/utils/periods";
 import { loadBooksPage } from "./actions";
 import { BooksSummary } from "./books-summary";
 import type { BookType } from "@/server/db/schema/enums";
@@ -23,11 +24,6 @@ const TYPE_BADGE: Record<BookType, { label: string; variant: "default" | "destru
   income: { label: "Income", variant: "default" },
   expense: { label: "Expense", variant: "destructive" },
 };
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
 
 /** Build a `/books` href preserving the active period + type + search across filter links. */
 function hrefWith(

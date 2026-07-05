@@ -4,7 +4,13 @@ import {
   invoiceOverdueEmail,
   invoicePaidEmail,
   invoiceSentEmail,
+  quoteAcceptedEmail,
+  quoteDeclinedEmail,
+  quoteLink,
+  quoteSentEmail,
   type InvoiceEmailMeta,
+  type QuoteEmailMeta,
+  type QuoteMerchantMeta,
 } from "./templates";
 
 const APP_URL = "https://app.soletrade.example";
@@ -85,5 +91,90 @@ describe("invoicePaidEmail", () => {
     const b = invoicePaidEmail({ ...meta(), source: "manual" }, APP_URL);
     expect(a.subject).toBe(b.subject);
     expect(a.html).toBe(b.html);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 8 — quote email templates
+// ─────────────────────────────────────────────────────────────────────────────
+
+function quoteMeta(overrides: Partial<QuoteEmailMeta> = {}): QuoteEmailMeta {
+  return {
+    number: "QUO-2026-0003",
+    totalCents: 18000,
+    currency: "AUD",
+    publicToken: "quo-token-xyz",
+    validUntil: new Date("2026-08-15"),
+    customerEmail: "customer@globex.com",
+    customerName: "Globex Corp",
+    customerId: null,
+    ...overrides,
+  };
+}
+
+function merchantMeta(overrides: Partial<QuoteMerchantMeta> = {}): QuoteMerchantMeta {
+  return {
+    number: "QUO-2026-0003",
+    totalCents: 18000,
+    currency: "AUD",
+    customerName: "Globex Corp",
+    customerEmail: "customer@globex.com",
+    ...overrides,
+  };
+}
+
+describe("quoteLink", () => {
+  it("builds the absolute public page URL, stripping a trailing slash", () => {
+    expect(quoteLink("tok", "https://app.example.com")).toBe("https://app.example.com/q/tok");
+    expect(quoteLink("tok", "https://app.example.com/")).toBe("https://app.example.com/q/tok");
+  });
+});
+
+describe("quoteSentEmail", () => {
+  it("includes the quote number in the subject + a working view link in both bodies", () => {
+    const m = quoteMeta();
+    const { subject, html, text } = quoteSentEmail(m, APP_URL);
+    expect(subject).toBe("Quote QUO-2026-0003 from soletrade labs");
+    expect(text).toContain(`${APP_URL}/q/quo-token-xyz`);
+    expect(html).toContain(`href="${APP_URL}/q/quo-token-xyz"`);
+    expect(html).toContain("View quote");
+    expect(html).toContain("AUD 180.00");
+    expect(text).toContain("AUD 180.00");
+  });
+
+  it("greets by customer name when present, falls back to a generic greeting", () => {
+    expect(quoteSentEmail(quoteMeta(), APP_URL).text).toContain("Hi Globex Corp");
+    expect(quoteSentEmail(quoteMeta({ customerName: null }), APP_URL).text).toContain("Hello,");
+  });
+
+  it("mentions the valid-until date when set", () => {
+    const { text } = quoteSentEmail(quoteMeta({ validUntil: new Date("2026-08-15") }), APP_URL);
+    expect(text).toMatch(/valid until .+Aug.+2026/);
+  });
+});
+
+describe("quoteAcceptedEmail", () => {
+  it("uses the emerald accent and is informational (no button)", () => {
+    const m = merchantMeta();
+    const { subject, html, text } = quoteAcceptedEmail(m);
+    expect(subject).toBe("Quote QUO-2026-0003 accepted");
+    expect(html).toContain("#059669"); // emerald accent
+    expect(html).toContain("A quote was accepted");
+    expect(html).not.toContain("View quote"); // merchant notifications have no button
+    expect(text).toContain("AUD 180.00");
+    expect(text).toContain("from Globex Corp");
+  });
+});
+
+describe("quoteDeclinedEmail", () => {
+  it("uses the red accent and is informational (no button)", () => {
+    const m = merchantMeta();
+    const { subject, html, text } = quoteDeclinedEmail(m);
+    expect(subject).toBe("Quote QUO-2026-0003 declined");
+    expect(html).toContain("#DC2626"); // red accent
+    expect(html).toContain("A quote was declined");
+    expect(html).not.toContain("View quote");
+    expect(text).toContain("AUD 180.00");
+    expect(text).toContain("from Globex Corp");
   });
 });

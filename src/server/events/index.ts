@@ -22,6 +22,7 @@ export const EVENT_TYPES = [
   "QuoteAccepted",
   "QuoteDeclined",
   "QuoteConvertedToInvoice",
+  "QuoteExpired",
   "InvoiceCreated",
   "InvoiceSent",
   "InvoiceViewed",

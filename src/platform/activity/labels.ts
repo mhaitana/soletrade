@@ -31,6 +31,7 @@ export const ACTIVITY_LABELS: Record<string, ActivityLabel> = {
   QuoteAccepted: { label: "accepted a quote", tone: "positive" },
   QuoteDeclined: { label: "declined a quote", tone: "danger" },
   QuoteConvertedToInvoice: { label: "converted a quote to an invoice", tone: "positive" },
+  QuoteExpired: { label: "expired a quote", tone: "warning" },
   InvoiceCreated: { label: "created an invoice", tone: "positive" },
   InvoiceSent: { label: "sent an invoice", tone: "info" },
   InvoiceViewed: { label: "viewed an invoice", tone: "neutral" },

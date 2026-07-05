@@ -38,11 +38,11 @@ describe("permissions matrix", () => {
     { role: "manager", perm: "manage:books", expected: false },
     { role: "manager", perm: "delete:workspace", expected: false },
 
-    // Accountant: customer/invoice/books/file + audit view; NO quotes/drive/modules/billing-manage.
+    // Accountant: customer/invoice/quote/books/file + audit view; NO drive/modules/billing-manage.
     { role: "accountant", perm: "manage:books", expected: true },
     { role: "accountant", perm: "manage:invoice", expected: true },
+    { role: "accountant", perm: "manage:quote", expected: true },
     { role: "accountant", perm: "view:audit", expected: true },
-    { role: "accountant", perm: "manage:quote", expected: false },
     { role: "accountant", perm: "manage:drive", expected: false },
     { role: "accountant", perm: "manage:billing", expected: false },
     { role: "accountant", perm: "manage:module", expected: false },

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeInvoiceTotals, lineItemAmountCents } from "./totals";
+import { computeLineItemTotals, lineItemAmountCents } from "./totals";
 
-describe("invoice totals — lineItemAmountCents", () => {
+describe("shared line-item totals — lineItemAmountCents", () => {
   it("rounds quantity × unit price to the nearest cent (half-up)", () => {
-    // 2.5h × $10.01/h (1001 cents) = 2502.5 → 2503 (Math.round is half-to-even in JS
-    // for .5? No — Math.round rounds .5 toward +Infinity, so 2502.5 → 2503).
+    // 2.5h × $10.01/h (1001 cents) = 2502.5 → 2503 (Math.round rounds .5 toward
+    // +Infinity, so 2502.5 → 2503).
     expect(lineItemAmountCents(2.5, 1001)).toBe(2503);
   });
 
@@ -22,9 +22,9 @@ describe("invoice totals — lineItemAmountCents", () => {
   });
 });
 
-describe("invoice totals — computeInvoiceTotals", () => {
+describe("shared line-item totals — computeLineItemTotals", () => {
   it("sums line items into the subtotal with no tax when rate is 0", () => {
-    const totals = computeInvoiceTotals(
+    const totals = computeLineItemTotals(
       [
         { quantity: 2, unitPriceCents: 5000 },
         { quantity: 1, unitPriceCents: 10000 },
@@ -35,13 +35,13 @@ describe("invoice totals — computeInvoiceTotals", () => {
   });
 
   it("applies a 10% GST rate, rounded to the nearest cent", () => {
-    const totals = computeInvoiceTotals([{ quantity: 1, unitPriceCents: 10001 }], 10);
+    const totals = computeLineItemTotals([{ quantity: 1, unitPriceCents: 10001 }], 10);
     // subtotal 10001 → tax 1000.1 → round 1000 → total 11001
     expect(totals).toEqual({ subtotalCents: 10001, taxCents: 1000, totalCents: 11001 });
   });
 
   it("returns all zeros for an empty line-items array", () => {
-    expect(computeInvoiceTotals([], 10)).toEqual({
+    expect(computeLineItemTotals([], 10)).toEqual({
       subtotalCents: 0,
       taxCents: 0,
       totalCents: 0,
@@ -49,13 +49,13 @@ describe("invoice totals — computeInvoiceTotals", () => {
   });
 
   it("clamps a negative tax rate to 0 (never issues negative tax)", () => {
-    const totals = computeInvoiceTotals([{ quantity: 1, unitPriceCents: 5000 }], -10);
+    const totals = computeLineItemTotals([{ quantity: 1, unitPriceCents: 5000 }], -10);
     expect(totals).toEqual({ subtotalCents: 5000, taxCents: 0, totalCents: 5000 });
   });
 
   it("sums fractional quantities across line items before taxing", () => {
     // 1.5h × 4000 + 2.5h × 6000 = 6000 + 15000 = 21000; 10% → 2100; total 23100
-    const totals = computeInvoiceTotals(
+    const totals = computeLineItemTotals(
       [
         { quantity: 1.5, unitPriceCents: 4000 },
         { quantity: 2.5, unitPriceCents: 6000 },
@@ -67,7 +67,7 @@ describe("invoice totals — computeInvoiceTotals", () => {
 
   it("rounds each line item independently before summing (denormalized amounts)", () => {
     // Each line 2.5 × 1001 = 2502.5 → 2503; two lines → 5006 subtotal
-    const totals = computeInvoiceTotals(
+    const totals = computeLineItemTotals(
       [
         { quantity: 2.5, unitPriceCents: 1001 },
         { quantity: 2.5, unitPriceCents: 1001 },

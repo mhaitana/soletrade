@@ -953,3 +953,12 @@ export async function claimPaymentIntentId(
 // Re-export for callers that need the totals math directly (e.g. the create form's
 // live preview). Keeps the barrel minimal.
 export { computeInvoiceTotals, lineItemAmountCents } from "./totals";
+
+// Re-export the pure dashboard aggregator (Phase 9) so the dashboard loader can call it via
+// `@/modules/invoices` without importing `./calc` directly.
+export {
+  summarizeInvoices,
+  type InvoiceSummary,
+  type InvoiceSummaryInput,
+  type MonthlyInvoicePoint,
+} from "./calc";

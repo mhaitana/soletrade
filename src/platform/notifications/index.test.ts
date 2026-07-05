@@ -8,7 +8,7 @@ import {
 } from "@/server/email";
 import { branded } from "@/shared/types/ids";
 import { registerNotifications } from "./index";
-import type { InvoiceEmailMeta } from "./templates";
+import type { InvoiceEmailMeta, QuoteEmailMeta } from "./templates";
 
 // publishEvent reads env.NEXT_PUBLIC_APP_URL via the notifications handlers; the assertions
 // check the link contains `/i/<token>` rather than the exact host, so this test is env-agnostic.
@@ -103,6 +103,36 @@ describe("notifications (event-driven email)", () => {
 
   it("ignores event types it did not subscribe to", async () => {
     await publish("InvoiceViewed", meta()); // viewed is not an email trigger
+    expect(sends).toHaveLength(0);
+  });
+});
+
+describe("notifications (quote-sent email)", () => {
+  function quoteMeta(overrides: Partial<QuoteEmailMeta> = {}): QuoteEmailMeta {
+    return {
+      number: "QUO-2026-0042",
+      totalCents: 33000,
+      currency: "AUD",
+      publicToken: "quo-tok-abc",
+      validUntil: new Date("2026-09-15"),
+      customerEmail: "buyer@globex.com",
+      customerName: "Globex Corp",
+      customerId: null,
+      ...overrides,
+    };
+  }
+
+  it("sends a quote-sent email to the customer when QuoteSent carries an email", async () => {
+    await publish("QuoteSent", quoteMeta());
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.to).toBe("buyer@globex.com");
+    expect(sends[0]?.subject).toBe("Quote QUO-2026-0042 from soletrade labs");
+    expect(sends[0]?.text).toContain(`/q/quo-tok-abc`);
+    expect(sends[0]?.html).toContain(`href="`);
+  });
+
+  it("no-ops when the customer has no email (walk-in quote)", async () => {
+    await publish("QuoteSent", quoteMeta({ customerEmail: null }));
     expect(sends).toHaveLength(0);
   });
 });

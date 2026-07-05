@@ -1,43 +1,11 @@
 /**
- * Pure invoice totals math (Phase 5). No `server-only`, no DB — unit-testable in
- * isolation, mirroring `@/platform/billing/pricing.ts` purity. The service layer
- * (`./index.ts`) calls these to denormalize totals onto the invoice row + line items.
- *
- * Money is integer cents throughout. `quantity` is a decimal (hours, units); a line
- * item's `amountCents` is `round(quantity * unitPriceCents)` — half-up rounding so a
- * 2.5h line at $10.01/h (1001 cents) → 2502.5 → 2503 cents (round, not floor).
+ * Re-export shim — the line-item totals math now lives in `@/shared/utils/totals`
+ * (extracted in Phase 8 so Invoices + Quotes share a single source of truth). The
+ * public names (`computeInvoiceTotals`, `lineItemAmountCents`) are preserved so the
+ * invoices service, form, and integration test keep importing from `./totals`
+ * unchanged. See `@/shared/utils/totals.ts` for the implementation.
  */
-
-export interface LineItemInput {
-  quantity: number;
-  unitPriceCents: number;
-}
-
-export interface InvoiceTotals {
-  subtotalCents: number;
-  taxCents: number;
-  totalCents: number;
-}
-
-/** A single line item's amount, rounded to the nearest cent. */
-export function lineItemAmountCents(quantity: number, unitPriceCents: number): number {
-  return Math.round(quantity * unitPriceCents);
-}
-
-/**
- * Compute the invoice totals from its line items + a flat tax rate. `taxRate` is an
- * integer percent (10 = 10%); clamped to ≥ 0 so a stray negative never issues a
- * negative tax. Empty line items → all zeros.
- */
-export function computeInvoiceTotals(
-  items: readonly LineItemInput[],
-  taxRate: number,
-): InvoiceTotals {
-  const subtotalCents = items.reduce(
-    (sum, it) => sum + lineItemAmountCents(it.quantity, it.unitPriceCents),
-    0,
-  );
-  const rate = Math.max(0, taxRate);
-  const taxCents = Math.round((subtotalCents * rate) / 100);
-  return { subtotalCents, taxCents, totalCents: subtotalCents + taxCents };
-}
+export {
+  computeLineItemTotals as computeInvoiceTotals,
+  lineItemAmountCents,
+} from "@/shared/utils/totals";
