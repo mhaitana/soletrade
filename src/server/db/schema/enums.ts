@@ -29,9 +29,14 @@ export type InvitationStatus = (typeof invitationStatusEnum.enumValues)[number];
  * Billing enums (Phase 4). One subscription per workspace; credit ledger is
  * append-only with signed entries — the balance is always derived (SUM), never
  * stored as a mutable column.
+ *
+ * Brief §10 — there is no Free/Pro tier. A workspace's billing is determined by its
+ * active modules (the highest-standalone is the anchor app, charged standalone; the
+ * rest are add-ons). `billing_interval` records whether the unified Stripe
+ * subscription bills monthly or annually; it is null when billing has not started.
  */
-export const planTierEnum = pgEnum("plan_tier", ["free", "pro"]);
-export type PlanTier = (typeof planTierEnum.enumValues)[number];
+export const billingIntervalEnum = pgEnum("billing_interval", ["monthly", "annual"]);
+export type BillingInterval = (typeof billingIntervalEnum.enumValues)[number];
 
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "active",

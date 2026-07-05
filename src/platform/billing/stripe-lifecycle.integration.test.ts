@@ -13,22 +13,23 @@ import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus } from "@/server/events";
 import { ensureSubscription } from "@/platform/billing/subscriptions";
-import { ensureStripeCustomer, createProCheckoutSession } from "@/server/stripe/stripe-lifecycle";
+import { ensureStripeCustomer, createCheckoutSession } from "@/server/stripe/stripe-lifecycle";
 import { getStripe } from "@/server/stripe/client";
 
 /**
  * Optional real-Stripe test-mode integration suite. Only runs when BOTH
- * DATABASE_URL and STRIPE_SECRET_KEY (and the 5 price ids) are set — manual / CI
- * opt-in. Creates real Stripe customers/subscriptions and tears them down in
- * afterEach. Skipped by default (no keys in the normal CI run).
+ * DATABASE_URL and STRIPE_SECRET_KEY (and the per-module price ids) are set —
+ * manual / CI opt-in. Creates real Stripe customers/subscriptions and tears them down
+ * in afterEach. Skipped by default (no keys in the normal CI run).
  *
  *   DATABASE_URL=... STRIPE_SECRET_KEY=sk_test_... \
- *   STRIPE_PRICE_ANCHOR=... STRIPE_PRICE_MODULE_POS_0..3=... pnpm test:ci
+ *   STRIPE_PRICE_BOOKS_STANDALONE_MONTHLY=... (×16) pnpm test:ci
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 const HAS_STRIPE = Boolean(process.env.STRIPE_SECRET_KEY);
 const HAS_PRICES = Boolean(
-  process.env.STRIPE_PRICE_ANCHOR && process.env.STRIPE_PRICE_MODULE_POS_0,
+  process.env.STRIPE_PRICE_BOOKS_STANDALONE_MONTHLY &&
+  process.env.STRIPE_PRICE_INVOICES_ADDON_MONTHLY,
 );
 const RUN = HAS_DB && HAS_STRIPE && HAS_PRICES;
 
@@ -110,9 +111,11 @@ describe.skipIf(!RUN)(
       expect(id2).toBe(id1); // idempotent
     });
 
-    it("createProCheckoutSession returns a hosted Checkout URL", async () => {
+    it("createCheckoutSession returns a hosted Checkout URL for a chosen module set", async () => {
       const ws = await freshWorkspace("checkout");
-      const { url, sessionId } = await createProCheckoutSession(ws, {
+      const { url, sessionId } = await createCheckoutSession(ws, {
+        moduleKeys: ["books", "invoices"],
+        interval: "monthly",
         email: "lc-checkout@soletrade-test.local",
         successUrl: "https://example.com/s?session_id={CHECKOUT_SESSION_ID}",
         cancelUrl: "https://example.com/c",

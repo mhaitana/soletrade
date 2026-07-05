@@ -2,30 +2,28 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { subscriptions } from "@/server/db/schema";
-import type { PlanTier } from "@/server/db/schema/enums";
-import type { SubscriptionId, UserId, WorkspaceId } from "@/shared/types/ids";
-import { publishEvent } from "@/server/events";
-import { writeAudit } from "@/platform/audit";
+import type { BillingInterval } from "@/server/db/schema/enums";
+import type { SubscriptionId, WorkspaceId } from "@/shared/types/ids";
 
 /**
- * Subscription service (brief §4 — one unified subscription per workspace).
+ * Subscription service (brief §10 — one unified subscription per workspace).
  *
  * One row per workspace (`workspaceId` is unique). The row exists from workspace
- * creation onward at the `free` tier; `stripeCustomerId`/`stripeSubscriptionId`
- * stay null until 4b. `anchorBillingDate` is set on the FIRST upgrade to Pro and
- * never touched again — the anchor billing date is preserved across later
- * plan/module changes.
+ * creation onward with `billingInterval = null` (billing not started) and null Stripe
+ * ids. `billingInterval` + the Stripe ids are populated when the workspace starts
+ * billing via Stripe Checkout (Phase 4b lifecycle). `anchorBillingDate` is set on the
+ * FIRST start-billing and never touched again — the anchor billing date is preserved
+ * across later module/anchor changes.
  *
- * 4a is local-only: `changeTier` mutates the row without calling Stripe. It is
- * NOT exposed as a server action here (no free-upgrade loophole — real upgrades
- * require Stripe in 4b). It exists for the integration test and as the seam 4b
- * will wrap with Stripe customer/subscription creation.
+ * The local row is the cache of Stripe's truth; webhooks reconcile it. Money math lives
+ * in the pure pricing engine (`@/platform/billing/pricing`); this service only stores
+ * state + publishes events + audits.
  */
 
 export interface SubscriptionRow {
   id: SubscriptionId;
   workspaceId: WorkspaceId;
-  tier: PlanTier;
+  billingInterval: BillingInterval | null;
   status: "active" | "past_due" | "canceled" | "incomplete";
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
@@ -37,7 +35,7 @@ export interface SubscriptionRow {
 const selectRow = {
   id: subscriptions.id,
   workspaceId: subscriptions.workspaceId,
-  tier: subscriptions.tier,
+  billingInterval: subscriptions.billingInterval,
   status: subscriptions.status,
   stripeCustomerId: subscriptions.stripeCustomerId,
   stripeSubscriptionId: subscriptions.stripeSubscriptionId,
@@ -58,15 +56,15 @@ export async function getSubscription(workspaceId: WorkspaceId): Promise<Subscri
 }
 
 /**
- * Idempotently create a free-tier subscription for a workspace if none exists.
- * Called by the WorkspaceCreated event handler (in instrumentation) and lazily
- * by the billing loader. Safe to call repeatedly — always returns the row.
+ * Idempotently create an unbilled subscription row for a workspace if none exists.
+ * Called by the WorkspaceCreated event handler (in instrumentation) and lazily by the
+ * billing loader. Safe to call repeatedly — always returns the row.
  */
 export async function ensureSubscription(workspaceId: WorkspaceId): Promise<SubscriptionRow> {
   const db = getDb();
   await db
     .insert(subscriptions)
-    .values({ workspaceId, tier: "free", status: "active" })
+    .values({ workspaceId, billingInterval: null, status: "active" })
     .onConflictDoNothing({ target: subscriptions.workspaceId });
   // Re-read so we always return the canonical row (whether inserted or pre-existing).
   const row = await getSubscription(workspaceId);
@@ -75,54 +73,18 @@ export async function ensureSubscription(workspaceId: WorkspaceId): Promise<Subs
 }
 
 /**
- * Change the workspace's plan tier locally (no Stripe call). Sets
- * `anchorBillingDate = now()` ONLY when upgrading to Pro AND the anchor is
- * currently null — the anchor is preserved on every subsequent change.
- *
- * 4a: internal/test-only. 4b will wrap this in the Stripe customer + unified
- * subscription creation flow.
+ * Flip the workspace's `billingInterval` (monthly↔annual). Used by the 4c interval-switch
+ * orchestrator AFTER the Stripe-side reprice (`switchSubscriptionInterval`) succeeds, so
+ * the local column always reflects the prices Stripe is now billing. The `anchorBillingDate`
+ * is preserved — switching interval does not reset the anchor.
  */
-export async function changeTier(
+export async function setBillingInterval(
   workspaceId: WorkspaceId,
-  tier: PlanTier,
-  actorUserId?: UserId,
-): Promise<SubscriptionRow> {
+  interval: BillingInterval,
+): Promise<void> {
   const db = getDb();
-  const current = await getSubscription(workspaceId);
-  if (!current) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
-  if (current.tier === tier) return current;
-
-  const set: Partial<{ tier: PlanTier; anchorBillingDate: Date; updatedAt: Date }> = {
-    tier,
-    updatedAt: new Date(),
-  };
-  if (tier === "pro" && current.anchorBillingDate == null) {
-    set.anchorBillingDate = new Date();
-  }
-
-  const rows = await db
+  await db
     .update(subscriptions)
-    .set(set)
-    .where(eq(subscriptions.workspaceId, workspaceId))
-    .returning(selectRow);
-  const updated = rows[0];
-  if (!updated) throw new Error(`Failed to update subscription for workspace ${workspaceId}.`);
-
-  await publishEvent({
-    type: "SubscriptionChanged",
-    workspaceId,
-    actorUserId,
-    entityType: "subscription",
-    entityId: updated.id,
-    metadata: { from: current.tier, to: tier },
-  });
-  await writeAudit({
-    workspaceId,
-    actorUserId,
-    action: "billing.subscription.update",
-    targetType: "subscription",
-    targetId: updated.id,
-    metadata: { from: current.tier, to: tier },
-  });
-  return updated;
+    .set({ billingInterval: interval, updatedAt: new Date() })
+    .where(eq(subscriptions.workspaceId, workspaceId));
 }

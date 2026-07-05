@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { MODULE_KEYS } from "@/shared/constants/modules";
 
 /**
  * Server-side environment variable validation.
@@ -12,6 +13,27 @@ import { z } from "zod";
  * here too for a single source of truth — but importing this module from
  * client code is blocked by `server-only`.
  */
+
+/**
+ * Stripe Price object id env keys — one per (module × role × interval). Brief §10.1
+ * gives every module a standalone and an add-on price, each in monthly and annual
+ * recurring variants = 4 modules × 2 roles × 2 intervals = 16 ids. `pnpm stripe:setup`
+ * creates the Price objects and prints these keys for `.env.local`. Generated here
+ * (not hand-listed) so the schema stays in sync with the module catalog.
+ */
+const ROLES = ["standalone", "addon"] as const;
+const INTERVALS = ["monthly", "annual"] as const;
+const stripePriceKeyShape: Record<string, z.ZodOptional<z.ZodString>> = {};
+for (const moduleKey of MODULE_KEYS) {
+  for (const role of ROLES) {
+    for (const interval of INTERVALS) {
+      stripePriceKeyShape[
+        `STRIPE_PRICE_${moduleKey.toUpperCase()}_${role.toUpperCase()}_${interval.toUpperCase()}`
+      ] = z.string().optional();
+    }
+  }
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
@@ -30,13 +52,8 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
-  // Stripe Price object ids (recurring) — created by `pnpm stripe:setup`, pasted
-  // here. Anchor = Pro $29/mo; module positions 0..3 = $15/$13.50/$12.75/$12.00.
-  STRIPE_PRICE_ANCHOR: z.string().optional(),
-  STRIPE_PRICE_MODULE_POS_0: z.string().optional(),
-  STRIPE_PRICE_MODULE_POS_1: z.string().optional(),
-  STRIPE_PRICE_MODULE_POS_2: z.string().optional(),
-  STRIPE_PRICE_MODULE_POS_3: z.string().optional(),
+  // 16 Stripe Price object ids (module × role × interval) — see stripePriceKeyShape.
+  ...stripePriceKeyShape,
 
   // Email (Resend)
   RESEND_API_KEY: z.string().optional(),

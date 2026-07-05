@@ -1,4 +1,6 @@
 import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { uniqueIndex } from "drizzle-orm/pg-core";
 import type { CreditLedgerEntryId, UserId, WorkspaceId } from "@/shared/types/ids";
 import { workspaces } from "./workspaces";
 import { creditEntryTypeEnum, moduleKeyEnum } from "./enums";
@@ -37,5 +39,14 @@ export const creditLedger = pgTable(
     metadata: jsonb("metadata"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("credit_ledger_workspace_created_idx").on(t.workspaceId, t.createdAt)],
+  (t) => [
+    index("credit_ledger_workspace_created_idx").on(t.workspaceId, t.createdAt),
+    // Partial unique index so a duplicate `invoice.paid` delivery (different Stripe event
+    // id, same invoice) can never double-grant credits. The caller-level check is the
+    // primary guard; this is DB-level defense-in-depth. Nullable column → partial index
+    // (NULLs are excluded so non-Stripe ledger rows don't collide).
+    uniqueIndex("credit_ledger_stripe_invoice_unique")
+      .on(t.workspaceId, t.stripeInvoiceId)
+      .where(sql`stripe_invoice_id IS NOT NULL`),
+  ],
 );

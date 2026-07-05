@@ -42,32 +42,28 @@ describe("mapStripeStatusToLocal", () => {
 });
 
 describe("mapCheckoutSessionToUpdate", () => {
-  it("extracts customer/subscription as strings and sets tier=pro/status=active", () => {
+  it("extracts customer/subscription as strings and sets status=active", () => {
     const session = {
       customer: "cus_test_123",
       subscription: "sub_test_456",
     } as Pick<Stripe.Checkout.Session, "customer" | "subscription">;
     expect(mapCheckoutSessionToUpdate(session)).toEqual({
-      tier: "pro",
       status: "active",
       stripeCustomerId: "cus_test_123",
       stripeSubscriptionId: "sub_test_456",
     });
   });
 
-  it("coerces non-string customer/subscription to strings", () => {
-    // Stripe types customer/subscription as string | Customer | Subscription | null.
-    // The mapper uses String() so a literal object or null is coerced. We assert the
-    // function never throws on the realistic string case (covered above) and coerces
-    // a null subscription to the literal "null" (the route guards against this in
-    // practice — checkout.session.completed always carries a subscription id).
+  it("coerces non-string customer to a string", () => {
+    // Stripe types customer as string | Customer | null. The mapper uses String() so a
+    // null is coerced to "null" (the route guards against this in practice —
+    // checkout.session.completed always carries a customer id).
     const session = {
-      customer: "cus_test",
-      subscription: null,
+      customer: null,
+      subscription: "sub_test",
     } as Pick<Stripe.Checkout.Session, "customer" | "subscription">;
     const result = mapCheckoutSessionToUpdate(session);
-    expect(result.tier).toBe("pro");
     expect(result.status).toBe("active");
-    expect(result.stripeCustomerId).toBe("cus_test");
+    expect(result.stripeSubscriptionId).toBe("sub_test");
   });
 });

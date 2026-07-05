@@ -3,12 +3,16 @@ import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getDb } from "@/server/db";
 import { processedWebhookEvents } from "@/server/db/schema";
+import { getStripe } from "@/server/stripe/client";
+import { buildPriceIdToModuleMap } from "@/server/stripe/prices";
 import {
   reconcileFromCheckoutSession,
   reconcileSubscription,
   markCanceled,
   recordInvoicePaid,
+  type CheckoutItem,
 } from "@/platform/billing/reconcile";
+import type { BillingInterval } from "@/server/db/schema/enums";
 
 /**
  * Stripe webhook dispatcher (brief §4 — signature verification on every webhook,
@@ -42,7 +46,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
-      await reconcileFromCheckoutSession(session);
+      await reconcileCheckoutSession(session);
       break;
     }
     case "customer.subscription.updated": {
@@ -72,4 +76,40 @@ export async function recordProcessedEvent(eventId: string, eventType: string): 
     .insert(processedWebhookEvents)
     .values({ stripeEventId: eventId, stripeEventType: eventType })
     .onConflictDoNothing({ target: processedWebhookEvents.stripeEventId });
+}
+
+/**
+ * `checkout.session.completed` Stripe I/O: retrieve the subscription (expanding its
+ * items + prices), read the chosen billing interval from `subscription.metadata`, map
+ * each item's price id back to a module + role, then hand the resolved payload to the
+ * reconcile function (which owns the DB writes). Keeps Stripe SDK usage out of
+ * `@/platform/billing/reconcile`.
+ */
+async function reconcileCheckoutSession(session: Stripe.Checkout.Session): Promise<void> {
+  if (!session.subscription || typeof session.subscription !== "string") {
+    console.error("[stripe] checkout.session.completed has no subscription id", { id: session.id });
+    return;
+  }
+  const stripe = getStripe();
+  const sub = await stripe.subscriptions.retrieve(session.subscription, {
+    expand: ["items.data.price"],
+  });
+  const interval = sub.metadata?.interval as BillingInterval | undefined;
+  if (interval !== "monthly" && interval !== "annual") {
+    console.error("[stripe] checkout.session.completed subscription missing metadata.interval", {
+      id: session.id,
+      subId: sub.id,
+    });
+    return;
+  }
+  const priceMap = buildPriceIdToModuleMap();
+  const items: CheckoutItem[] = [];
+  for (const si of sub.items.data) {
+    const priceId = typeof si.price === "string" ? si.price : si.price?.id;
+    if (!priceId) continue;
+    const mapping = priceMap.get(priceId);
+    if (!mapping) continue; // unrelated price — skip defensively
+    items.push({ moduleKey: mapping.moduleKey, role: mapping.role, itemId: si.id });
+  }
+  await reconcileFromCheckoutSession(session, { interval, items });
 }

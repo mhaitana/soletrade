@@ -9,7 +9,7 @@ import { ensureSubscription } from "@/platform/billing/subscriptions";
 import {
   addModuleToSubscription,
   removeModuleFromSubscription,
-  UpgradeRequiredError,
+  BillingNotStartedError,
 } from "@/platform/billing/modules";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 
@@ -19,7 +19,7 @@ const forbid = (msg = "You don't have permission to manage modules.") => ({
   error: msg,
 });
 
-const UPGRADE_MSG = "Upgrade to Pro to enable modules.";
+const START_BILLING_MSG = "Start billing to enable modules.";
 
 export type EnableModuleResult = { ok: true; moduleKey: ModuleKey } | { ok: false; error: string };
 
@@ -31,16 +31,20 @@ export async function enableModuleAction(input: unknown): Promise<EnableModuleRe
   if (!authorize(ctx.role, "manage:module").ok) return forbid();
 
   try {
-    // Free workspaces can't have paid modules — surface an upgrade prompt instead
-    // of hitting the orchestrator (which would throw UpgradeRequiredError anyway).
+    // A workspace without active billing can't add paid modules — surface a
+    // start-billing prompt instead of hitting the orchestrator (which would
+    // throw BillingNotStartedError anyway). `ensureSubscription` lazily creates
+    // the unbilled row if the WorkspaceCreated subscriber hasn't run yet.
     const sub = await ensureSubscription(ctx.workspaceId);
-    if (sub.tier !== "pro") return { ok: false, error: UPGRADE_MSG };
+    if (sub.stripeSubscriptionId == null || sub.status !== "active") {
+      return { ok: false, error: START_BILLING_MSG };
+    }
 
     await addModuleToSubscription(ctx.workspaceId, parsed.data, ctx.user.id);
     revalidatePath("/", "layout");
     return { ok: true, moduleKey: parsed.data };
   } catch (err) {
-    if (err instanceof UpgradeRequiredError) return { ok: false, error: UPGRADE_MSG };
+    if (err instanceof BillingNotStartedError) return { ok: false, error: START_BILLING_MSG };
     return { ok: false, error: err instanceof Error ? err.message : "Failed to enable module." };
   }
 }
@@ -55,9 +59,10 @@ export async function disableModuleAction(input: unknown): Promise<DisableModule
   if (!authorize(ctx.role, "manage:module").ok) return forbid();
 
   try {
-    // Permissive on tier: a Free workspace with a stray legacy module can still
-    // disable it locally. removeModuleFromSubscription removes the Stripe item if
-    // one exists (returns null for legacy rows) and disables the local row.
+    // Permissive on billing state: a canceled/unbilled workspace with a stray
+    // legacy module can still disable it locally. removeModuleFromSubscription
+    // removes the Stripe item if one exists (returns null for legacy rows) and
+    // disables the local row.
     await removeModuleFromSubscription(ctx.workspaceId, parsed.data, ctx.user.id);
     revalidatePath("/", "layout");
     return { ok: true, moduleKey: parsed.data };

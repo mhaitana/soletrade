@@ -5,7 +5,8 @@ import { Button } from "@/shared/ui/button";
 import { MODULES } from "@/shared/constants/modules";
 import { formatCents } from "@/platform/billing";
 import { loadBillingOverview } from "./actions";
-import { BillingUpgradeButton } from "./billing-upgrade-button";
+import { BillingStartCard } from "./billing-start-card";
+import { BillingManageActions } from "./billing-manage-actions";
 
 export const metadata = { title: "Billing" };
 
@@ -16,9 +17,18 @@ const entryTypeLabel: Record<string, string> = {
   adjustment: "Adjustment",
 };
 
+const intervalLabel: Record<string, string> = {
+  monthly: "Monthly",
+  annual: "Annual",
+};
+
+const suffixFor = (interval: string) => (interval === "annual" ? "/yr" : "/mo");
+
 export default async function BillingPage() {
   const data = await loadBillingOverview();
   const balanceClass = data.balanceCents < 0 ? "text-destructive" : "text-[#059669]";
+  const interval = data.currentPricing.interval;
+  const suffix = suffixFor(interval);
 
   return (
     <div className="space-y-6">
@@ -26,24 +36,30 @@ export default async function BillingPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
           <p className="text-sm text-muted-foreground">
-            Your plan, credit balance, and recent ledger activity.
+            Your billing state, credit balance, and recent ledger activity.
           </p>
         </div>
-        {data.canManage && data.tier === "free" ? <BillingUpgradeButton /> : null}
-        {data.canManage && data.tier === "pro" ? (
-          <Button asChild variant="outline">
-            <Link href="/settings/modules">Manage modules</Link>
-          </Button>
+        {data.canManage && data.hasActiveBilling ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href="/settings/modules">Manage modules</Link>
+            </Button>
+            <BillingManageActions interval={data.billingInterval} />
+          </div>
         ) : null}
       </div>
 
-      {/* Plan + credit summary */}
+      {/* Billing state + credit summary */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardDescription>Current plan</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl capitalize">
-              {data.tier}
+            <CardDescription>Billing</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-2xl">
+              {data.billingInterval ? (
+                <span>{intervalLabel[data.billingInterval]}</span>
+              ) : (
+                <span>Not started</span>
+              )}
               <Badge variant="secondary" className="capitalize">
                 {data.status}
               </Badge>
@@ -58,7 +74,7 @@ export default async function BillingPage() {
                 </span>
               </p>
             ) : (
-              <p>Upgrade to Pro to enable paid modules.</p>
+              <p>Start billing to enable paid modules.</p>
             )}
           </CardContent>
         </Card>
@@ -76,44 +92,59 @@ export default async function BillingPage() {
         </Card>
       </div>
 
-      {/* Current pricing breakdown */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Current pricing</CardTitle>
-          <CardDescription>
-            {data.tier === "free"
-              ? "Free tier — no modules billed."
-              : `Pro anchor + ${data.installedModules.length} module${data.installedModules.length === 1 ? "" : "s"}.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Pro anchor</span>
-            <span className="tabular-nums">
-              {formatCents(data.currentPricing.anchorCents, data.currency)}/mo
-            </span>
-          </div>
-          {data.currentPricing.modules.map((m) => (
-            <div key={m.key} className="flex justify-between">
-              <span className="text-muted-foreground">
-                {MODULES[m.key].name}
-                {m.discountCents > 0 ? (
-                  <Badge variant="outline" className="ml-2 text-muted-foreground">
-                    {Math.round((m.discountCents / m.grossCents) * 100)}% off
-                  </Badge>
-                ) : null}
-              </span>
-              <span className="tabular-nums">{formatCents(m.netCents, data.currency)}/mo</span>
-            </div>
-          ))}
-          <div className="flex justify-between border-t pt-2 font-medium">
-            <span>Total</span>
-            <span className="tabular-nums">
-              {formatCents(data.currentPricing.totalCents, data.currency)}/mo
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Start-billing card OR current pricing breakdown */}
+      {data.hasActiveBilling ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Current pricing</CardTitle>
+            <CardDescription>
+              {data.currentPricing.anchorKey
+                ? `${MODULES[data.currentPricing.anchorKey].name} is your anchor app (full price); the rest are add-ons.`
+                : "No modules installed."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {data.currentPricing.modules.length === 0 ? (
+              <p className="text-muted-foreground">
+                No modules billed. Enable modules from{" "}
+                <Link href="/settings/modules" className="text-primary hover:underline">
+                  module settings
+                </Link>
+                .
+              </p>
+            ) : (
+              <>
+                {data.currentPricing.modules.map((m) => (
+                  <div key={m.key} className="flex justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      {MODULES[m.key].name}
+                      <Badge
+                        variant={m.role === "standalone" ? "default" : "outline"}
+                        className="capitalize"
+                      >
+                        {m.role === "standalone" ? "Anchor" : "Add-on"}
+                      </Badge>
+                    </span>
+                    <span className="tabular-nums">
+                      {formatCents(m.netCents, data.currency)}
+                      {suffix}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t pt-2 font-medium">
+                  <span>Total</span>
+                  <span className="tabular-nums">
+                    {formatCents(data.currentPricing.totalCents, data.currency)}
+                    {suffix}
+                  </span>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ) : data.canManage ? (
+        <BillingStartCard />
+      ) : null}
 
       {/* Recent ledger */}
       <Card>
@@ -180,7 +211,7 @@ export default async function BillingPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Upgrade to Pro to enable paid modules, then manage them from{" "}
+        Manage your modules from{" "}
         <Link href="/settings/modules" className="text-primary hover:underline">
           module settings
         </Link>
@@ -188,7 +219,8 @@ export default async function BillingPage() {
         <Link href="/pricing" className="text-primary hover:underline">
           public pricing
         </Link>{" "}
-        for plan details.
+        for plan details. Cancelling your subscription refunds unused time in the current period to
+        your credit balance, pro-rated per module; switching interval takes effect next cycle.
       </p>
     </div>
   );

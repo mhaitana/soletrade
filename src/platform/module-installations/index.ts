@@ -62,11 +62,16 @@ export async function assertModuleEnabled(workspaceId: WorkspaceId, key: ModuleK
  * path), it is written on insert AND on re-enable (overwriting a stale item id
  * from a prior cycle). When omitted (legacy/test/seed path), the column is
  * untouched on re-enable, preserving backward compatibility.
+ *
+ * `actorId` is optional so the webhook reconcile path
+ * (`reconcileFromCheckoutSession` on `checkout.session.completed`) can call this
+ * with no user actor — `publishEvent`/`writeAudit` both accept an undefined
+ * `actorUserId`. Existing callers passing `ctx.user.id` are unaffected.
  */
 export async function enableModule(
   workspaceId: WorkspaceId,
   key: ModuleKey,
-  actorId: UserId,
+  actorId?: UserId,
   stripeSubscriptionItemId?: string,
 ): Promise<void> {
   if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);

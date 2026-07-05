@@ -22,6 +22,20 @@
       "when": 1783248901592,
       "tag": "0002_smiling_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783249100000,
+      "tag": "0003_billing_interval",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783252394203,
+      "tag": "0004_deep_impossible_man",
+      "breakpoints": true
     }
   ]
 }
