@@ -43,6 +43,13 @@
       "when": 1783253832465,
       "tag": "0005_light_mister_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783255599595,
+      "tag": "0006_busy_the_enforcers",
+      "breakpoints": true
     }
   ]
 }

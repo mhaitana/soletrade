@@ -54,6 +54,9 @@ const envSchema = z.object({
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   // 16 Stripe Price object ids (module × role × interval) — see stripePriceKeyShape.
   ...stripePriceKeyShape,
+  // 5b: shared bearer secret for the /api/cron/invoice-overdue route (Vercel Cron sends it
+  // as `Authorization: Bearer <secret>`). Optional — the cron route 401s if unset/mismatched.
+  CRON_SECRET: z.string().optional(),
 
   // Email (Resend)
   RESEND_API_KEY: z.string().optional(),

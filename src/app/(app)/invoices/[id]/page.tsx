@@ -18,6 +18,7 @@ const STATUS_BADGE: Record<
   viewed: { label: "Viewed", variant: "default" },
   paid: { label: "Paid", variant: "outline" },
   void: { label: "Void", variant: "destructive" },
+  overdue: { label: "Overdue", variant: "destructive" },
 };
 
 function formatDate(d: Date | null): string {

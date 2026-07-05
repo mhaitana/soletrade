@@ -2,6 +2,7 @@ import { onEvent, setEventPersister } from "@/server/events";
 import { getDb } from "@/server/db";
 import { activityEvents } from "@/server/db/schema";
 import { ensureSubscription } from "@/platform/billing";
+import { registerNotifications } from "@/platform/notifications";
 
 /**
  * Server bootstrap. Runs once on startup. Wires the event bus persister so
@@ -33,4 +34,8 @@ export async function register(): Promise<void> {
       console.error("[billing] ensureSubscription failed for", event.workspaceId, err);
     });
   });
+
+  // Phase 5c: subscribe invoice email handlers (InvoiceSent/Overdue/Paid → Resend).
+  // Fire-and-forget — `registerNotifications` just attaches handlers; no await needed.
+  registerNotifications();
 }

@@ -12,6 +12,8 @@ import {
   recordInvoicePaid,
   type CheckoutItem,
 } from "@/platform/billing/reconcile";
+import { markInvoicePaidByStripe } from "@/modules/invoices";
+import { branded } from "@/shared/types/ids";
 import type { BillingInterval } from "@/server/db/schema/enums";
 
 /**
@@ -64,6 +66,11 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       await recordInvoicePaid(invoice);
       break;
     }
+    case "payment_intent.succeeded": {
+      const pi = event.data.object as Stripe.PaymentIntent;
+      await reconcileInvoicePayment(pi);
+      break;
+    }
     default:
       console.log("[stripe] unhandled event type", { type: event.type, id: event.id });
   }
@@ -112,4 +119,31 @@ async function reconcileCheckoutSession(session: Stripe.Checkout.Session): Promi
     items.push({ moduleKey: mapping.moduleKey, role: mapping.role, itemId: si.id });
   }
   await reconcileFromCheckoutSession(session, { interval, items });
+}
+
+/**
+ * `payment_intent.succeeded` (5b — customer paying a soletrade invoice, NOT the subscription
+ * billing invoice handled by `recordInvoicePaid` above). The PaymentIntent carries
+ * `metadata.invoiceId` + `metadata.workspaceId` set by `createInvoicePaymentIntentAction`.
+ * Hands off to the invoices service, which atomically flips the invoice to `paid` (idempotent
+ * — the `processed_webhook_events` pre-check by event id is the primary guard; the service
+ * `inArray(status, ["sent","viewed","overdue"])` guard is defense-in-depth for the rare
+ * same-PI/different-event case). PIs without our metadata are ignored defensively.
+ */
+export async function reconcileInvoicePayment(pi: Stripe.PaymentIntent): Promise<void> {
+  const invoiceId = pi.metadata?.invoiceId;
+  const workspaceId = pi.metadata?.workspaceId;
+  if (!invoiceId || !workspaceId) {
+    // Not a PI we created (e.g. test/legacy) — nothing to reconcile.
+    return;
+  }
+  const latestChargeId =
+    typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge?.id ?? null);
+
+  await markInvoicePaidByStripe(
+    branded<"WorkspaceId">(workspaceId),
+    branded<"InvoiceId">(invoiceId),
+    pi.id,
+    latestChargeId,
+  );
 }

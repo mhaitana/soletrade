@@ -15,6 +15,7 @@ const STATUS_FILTERS: { key: "all" | InvoiceStatus; label: string }[] = [
   { key: "draft", label: "Draft" },
   { key: "sent", label: "Sent" },
   { key: "paid", label: "Paid" },
+  { key: "overdue", label: "Overdue" },
   { key: "void", label: "Void" },
 ];
 
@@ -27,6 +28,7 @@ const STATUS_BADGE: Record<
   viewed: { label: "Sent", variant: "default" },
   paid: { label: "Paid", variant: "outline" },
   void: { label: "Void", variant: "destructive" },
+  overdue: { label: "Overdue", variant: "destructive" },
 };
 
 function formatDate(d: Date | null): string {
@@ -43,7 +45,11 @@ export default async function InvoicesPage({
   const rawStatus = typeof sp.status === "string" ? sp.status : undefined;
   const rawSearch = typeof sp.search === "string" ? sp.search : undefined;
   const status =
-    rawStatus === "draft" || rawStatus === "sent" || rawStatus === "paid" || rawStatus === "void"
+    rawStatus === "draft" ||
+    rawStatus === "sent" ||
+    rawStatus === "paid" ||
+    rawStatus === "overdue" ||
+    rawStatus === "void"
       ? (rawStatus as InvoiceStatus)
       : undefined;
   const data = await loadInvoicesPage({ status, search: rawSearch });

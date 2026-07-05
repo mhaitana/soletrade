@@ -20,11 +20,13 @@ import { invoiceStatusEnum } from "./enums";
  * `totalCents`) are denormalized onto the invoice row so a sent invoice's history is
  * preserved even if line items are later edited on a different draft.
  *
- * Status flow (Phase 5a): `draft → sent → paid | void`. `viewed` (5b public-page view
- * tracker) and `overdue` (5b reminder job) are unreachable in 5a — they exist in the enum
- * so 5b adds no migration. `publicToken` is set on send (a signed random token for the 5b
- * public payment page `/i/[token]`); the partial unique index keeps it unguessable and
- * allows nulls (drafts) without collision.
+ * Status flow: `draft → sent → paid | void`; `viewed` (5b public-page view tracker) and
+ * `overdue` (5b cron job) are reached from `sent` (or `viewed` → `overdue`). `publicToken`
+ * is set on send (a signed random token for the 5b public payment page `/i/[token]`); the
+ * partial unique index keeps it unguessable and allows nulls (drafts) without collision.
+ * `stripePaymentIntentId` (5b) is set when a PaymentIntent is created for the invoice, and
+ * `stripeChargeId` when the payment succeeds — both written by the 5b webhook reconcile.
+ * The partial unique index on the PI id is the idempotency guard (one PI per invoice).
  *
  * Money is integer cents throughout. `quantity` is a decimal (hours, units) stored as
  * numeric(12,2); `amountCents` is `round(quantity * unitPriceCents)` denormalized.
@@ -58,6 +60,10 @@ export const invoices = pgTable(
     publicToken: text("public_token"),
     sentAt: timestamp("sent_at"),
     paidAt: timestamp("paid_at"),
+    /** 5b: Stripe PaymentIntent id for the customer's payment. Set when the PI is created. */
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    /** 5b: Stripe charge id once the payment succeeds (receipt reference). */
+    stripeChargeId: text("stripe_charge_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -70,6 +76,11 @@ export const invoices = pgTable(
     uniqueIndex("invoices_public_token_unique")
       .on(t.publicToken)
       .where(sql`public_token IS NOT NULL`),
+    // 5b: one PaymentIntent per invoice — idempotency guard. Partial so unpaid invoices
+    // (null) don't collide.
+    uniqueIndex("invoices_stripe_pi_unique")
+      .on(t.stripePaymentIntentId)
+      .where(sql`stripe_payment_intent_id IS NOT NULL`),
   ],
 );
 

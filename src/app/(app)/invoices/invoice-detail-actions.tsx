@@ -61,7 +61,7 @@ export function InvoiceDetailActions({
   const [error, setError] = useState<string>("");
 
   const isDraft = status === "draft";
-  const isSent = status === "sent" || status === "viewed";
+  const isSent = status === "sent" || status === "viewed" || status === "overdue";
 
   async function run(kind: Action["kind"]) {
     setPending(null);
