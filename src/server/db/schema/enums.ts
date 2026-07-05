@@ -98,3 +98,11 @@ export type QuoteStatus = (typeof quoteStatusEnum.enumValues)[number];
  */
 export const bookTypeEnum = pgEnum("book_type", ["income", "expense"]);
 export type BookType = (typeof bookTypeEnum.enumValues)[number];
+
+/**
+ * AI assistant (Phase 10). Only `user` and `assistant` text is persisted — tool calls
+ * and tool results are NOT replayed (read-only Q&A; the model re-derives data per turn
+ * via tools rather than trusting cached tool output).
+ */
+export const aiMessageRoleEnum = pgEnum("ai_message_role", ["user", "assistant"]);
+export type AiMessageRole = (typeof aiMessageRoleEnum.enumValues)[number];

@@ -8,6 +8,9 @@ describe("env validation (shared/lib/env)", () => {
     expect(env.NODE_ENV).toBe("test");
     expect(env.AI_PROVIDER).toBe("mock");
     expect(env.NEXT_PUBLIC_APP_URL).toMatch(/^https?:\/\//);
+    // Phase 10 — model ids default so a newer Claude/GPT release is opt-in via env.
+    expect(env.ANTHROPIC_MODEL).toBe("claude-sonnet-5");
+    expect(env.OPENAI_MODEL).toBe("gpt-4o");
   });
 
   it("rejects an invalid AI_PROVIDER", () => {

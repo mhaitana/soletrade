@@ -23,6 +23,8 @@ export type DriveTripId = Brand<string, "DriveTripId">;
 export type FileId = Brand<string, "FileId">;
 export type SubscriptionId = Brand<string, "SubscriptionId">;
 export type CreditLedgerEntryId = Brand<string, "CreditLedgerEntryId">;
+export type AiConversationId = Brand<string, "AiConversationId">;
+export type AiMessageId = Brand<string, "AiMessageId">;
 
 /** Cast a runtime string to a branded ID (no validation — use at trust boundaries). */
 export function branded<B extends string>(value: string): Brand<string, B> {

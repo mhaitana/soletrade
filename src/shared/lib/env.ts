@@ -67,10 +67,14 @@ const envSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM_NUMBER: z.string().optional(),
 
-  // AI layer
+  // AI layer (Phase 10). `mock` needs no key (canned text from real workspace data);
+  // `anthropic`/`openai` throw at the provider boundary if their key is unset. Model ids
+  // are configurable so a newer Claude/GPT release can be opted into without a code change.
   AI_PROVIDER: z.enum(["mock", "openai", "anthropic"]).default("mock"),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
+  OPENAI_MODEL: z.string().default("gpt-4o"),
 });
 
 export type Env = z.infer<typeof envSchema>;

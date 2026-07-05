@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  Bot,
   CreditCard,
   FileText,
   LayoutDashboard,
@@ -42,6 +43,7 @@ function isActive(pathname: string, href: string) {
 function buildNav(installedModules: ModuleKey[]): NavItem[] {
   const platformNav: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/assistant", label: "Assistant", icon: Bot },
     ...installedModules.map((key) => ({
       href: MODULES[key].href,
       label: MODULES[key].shortName,

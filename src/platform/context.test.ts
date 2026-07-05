@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/server/auth/session", () => ({
-  requireUser: vi.fn(),
+  getCurrentUser: vi.fn(),
 }));
 
 vi.mock("@/platform/workspaces", () => ({
@@ -22,7 +22,7 @@ vi.mock("@/platform/workspaces", () => ({
 }));
 
 import { requireWorkspaceContext } from "./context";
-import { requireUser } from "@/server/auth/session";
+import { getCurrentUser } from "@/server/auth/session";
 import {
   getActiveWorkspaceId,
   getMembershipRole,
@@ -31,7 +31,7 @@ import {
 } from "@/platform/workspaces";
 import { branded } from "@/shared/types/ids";
 
-const mockRequireUser = vi.mocked(requireUser);
+const mockGetCurrentUser = vi.mocked(getCurrentUser);
 const mockListUserWorkspaces = vi.mocked(listUserWorkspaces);
 const mockGetMembershipRole = vi.mocked(getMembershipRole);
 const mockGetActiveWorkspaceId = vi.mocked(getActiveWorkspaceId);
@@ -48,7 +48,7 @@ function setupMembership(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockRequireUser.mockResolvedValue({ id: UID(), email: "owner@example.com" });
+  mockGetCurrentUser.mockResolvedValue({ id: UID(), email: "owner@example.com" });
   mockGetMembershipRole.mockResolvedValue("owner");
   mockSetActiveWorkspaceId.mockResolvedValue(undefined);
 });
@@ -101,6 +101,15 @@ describe("requireWorkspaceContext", () => {
     mockGetActiveWorkspaceId.mockResolvedValue(null);
 
     await expect(requireWorkspaceContext()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+
+  it("redirects to /onboarding when there is no session (getCurrentUser null)", async () => {
+    // tryWorkspaceContext maps a null session to null → requireWorkspaceContext redirects.
+    // Route handlers consume the null directly (401); server components/actions redirect.
+    mockGetCurrentUser.mockResolvedValue(null);
+
+    await expect(requireWorkspaceContext()).rejects.toThrow("REDIRECT:/onboarding");
+    expect(mockListUserWorkspaces).not.toHaveBeenCalled();
   });
 
   it("redirects to /onboarding when membership role is null (revoked mid-session)", async () => {

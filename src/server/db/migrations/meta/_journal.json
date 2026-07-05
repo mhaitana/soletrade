@@ -78,6 +78,13 @@
       "when": 1783265221770,
       "tag": "0010_nostalgic_solo",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783292612008,
+      "tag": "0011_cold_scorpion",
+      "breakpoints": true
     }
   ]
 }

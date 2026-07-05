@@ -14,4 +14,5 @@ export * from "./books";
 export * from "./drive";
 export * from "./subscriptions";
 export * from "./credit-ledger";
+export * from "./ai";
 export * from "./processed-webhook-events";
