@@ -49,7 +49,13 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 function parseEnv(): Env {
-  const parsed = envSchema.safeParse(process.env);
+  // Treat empty strings as unset — `KEY=` lines in .env files are common and
+  // should not fail validation (e.g. EMAIL_FROM="" must not trip `.email()`).
+  const input: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    input[key] = value === "" ? undefined : value;
+  }
+  const parsed = envSchema.safeParse(input);
   if (!parsed.success) {
     console.error(
       "❌ Invalid environment variables:",

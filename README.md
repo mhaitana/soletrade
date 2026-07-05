@@ -24,12 +24,33 @@ customers, files, activity, AI, permissions, and settings.
 
 ```bash
 pnpm install
-cp .env.example .env.local   # fill in secrets as you enable phases
-pnpm dev                     # http://localhost:3000
+pnpm db:start          # start local Supabase (Docker) — first run pulls images
+pnpm db:migrate        # apply Drizzle migrations to the local Postgres
+pnpm dev               # http://localhost:3000
 ```
 
-The app boots with defaults even without secrets — modules assert their own required
-secrets at their boundaries.
+This drops a `.env.local` with the local Supabase connection values (see
+`supabase status` to refresh them after a `db:stop`/`db:start`). The app boots
+with defaults even without secrets — modules assert their own required secrets
+at their boundaries.
+
+### Local database & integration tests
+
+The project ships a local Supabase stack for development and for the
+`DATABASE_URL`-gated integration tests (customers, activity). Workflow:
+
+```bash
+pnpm db:start          # supabase start — Postgres + Auth + Studio on 54321–54323
+pnpm db:migrate        # drizzle-kit migrate (applies src/server/db/migrations)
+pnpm db:studio         # (optional) Drizzle Studio to browse tables
+pnpm test:ci           # runs unit + integration tests against the local DB
+pnpm db:stop           # stop the local stack (data persists in Docker volumes)
+pnpm db:reset          # wipe + recreate local DB, then re-apply migrations
+```
+
+Integration tests auto-skip when `DATABASE_URL` is unset, so `pnpm test:ci`
+stays green in environments without a DB (e.g. CI smoke checks). With the local
+stack running, they execute for real.
 
 ## Scripts
 
@@ -43,6 +64,13 @@ secrets at their boundaries.
 | `pnpm test:ci`      | Vitest run (CI)                           |
 | `pnpm format`       | Prettier write                            |
 | `pnpm check`        | type-check + lint + tests + format:check |
+| `pnpm db:start`     | Start local Supabase stack                |
+| `pnpm db:stop`      | Stop local Supabase stack                 |
+| `pnpm db:status`    | Show local Supabase URLs + keys           |
+| `pnpm db:migrate`   | Apply pending Drizzle migrations          |
+| `pnpm db:generate`  | Generate migrations from schema changes   |
+| `pnpm db:reset`     | Wipe + recreate local DB, re-apply migrations |
+| `pnpm db:studio`    | Drizzle Studio (table browser)            |
 
 ## Project structure
 
@@ -77,14 +105,17 @@ variables.
 
 ## Implementation phases
 
-Multi-phase build. Phase 0 (repo foundation) is complete. Do not build product modules
-until workspace, module-installation, and billing foundations are stable.
+Multi-phase build. Do not build product modules until workspace, module-installation,
+and billing foundations are stable.
 
 - [x] Phase 0 — Repo foundation
-- [ ] Phase 1 — Core platform (auth, workspaces, permissions, app shell, module model)
-- [ ] Phase 2 — Shared customers, files, activity, search
-- [ ] Phase 3 — Billing foundation (pricing engine, Stripe)
-- [ ] Phase 4 — Cancellation & credit-ledger engine
+- [x] Phase 1 — Core platform (auth, workspaces, permissions, app shell, module model)
+- [x] Phase 2 — Shared customers (schema, service, UI, integration tests)
+- [x] Phase 3 — Activity feed (event-sourced read side, dashboard + /activity UI)
+- [ ] Phase 4 — Billing foundation (pricing engine, credit ledger, Stripe)
 - [ ] Phases 5–8 — Invoices, Books, Drive, Quotes
 - [ ] Phase 9 — Unified dashboard & cross-module workflows
 - [ ] Phase 10–12 — AI, notifications, hardening
+
+Local Supabase + the integration test harness are wired (see "Local database &
+integration tests" above).

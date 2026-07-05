@@ -119,10 +119,7 @@ ALTER TABLE "workspace_settings" ADD CONSTRAINT "workspace_settings_workspace_id
 ALTER TABLE "module_installations" ADD CONSTRAINT "module_installations_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "activity_events" ADD CONSTRAINT "activity_events_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "customers" ADD CONSTRAINT "customers_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "users_email_unique" ON "users" USING btree ("email");--> statement-breakpoint
-CREATE UNIQUE INDEX "workspaces_slug_unique" ON "workspaces" USING btree ("slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "workspace_members_workspace_user_unique" ON "workspace_members" USING btree ("workspace_id","user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "workspace_invitations_token_unique" ON "workspace_invitations" USING btree ("token");--> statement-breakpoint
 CREATE UNIQUE INDEX "module_installations_workspace_module_unique" ON "module_installations" USING btree ("workspace_id","module_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "customers_workspace_email_unique" ON "customers" USING btree ("workspace_id","email") WHERE "customers"."email" is not null and "customers"."deleted_at" is null;--> statement-breakpoint
 CREATE INDEX "customers_workspace_idx" ON "customers" USING btree ("workspace_id");

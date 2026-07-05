@@ -98,9 +98,18 @@ describe.skipIf(!HAS_DB)("customers integration (requires DATABASE_URL)", () => 
   });
 
   it("rejects a duplicate email within the same workspace", async () => {
-    await expect(
-      createCustomer(ws1!, { name: "Dup", email: "jane@example.com" }, actor),
-    ).rejects.toThrow(/unique|duplicate/i);
+    // drizzle 0.45 wraps DB errors in a DrizzleQueryError whose top-level
+    // message is "Failed query: …"; the real Postgres error lives on .cause.
+    const causeMessage = (err: unknown) => {
+      const e = err as { message?: string; cause?: { message?: string } };
+      return `${e.message ?? ""} ${e.cause?.message ?? ""}`;
+    };
+    try {
+      await createCustomer(ws1!, { name: "Dup", email: "jane@example.com" }, actor);
+      expect.unreachable("createCustomer should have thrown for a duplicate email");
+    } catch (err) {
+      expect(causeMessage(err)).toMatch(/unique|duplicate/i);
+    }
   });
 
   it("updates a customer and reflects the change", async () => {

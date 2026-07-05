@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase CLI local artifacts (config.toml + migrations/ + seed.sql ARE committed)
+supabase/.temp
+supabase/.branches

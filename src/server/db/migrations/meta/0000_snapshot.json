@@ -1,5 +1,5 @@
 {
-  "id": "eaa27d39-7e77-4883-a17f-31c3432736ef",
+  "id": "fa016b53-e46d-4fea-80c8-868467ae04f5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -53,30 +53,16 @@
           "notNull": false
         }
       },
-      "indexes": {
-        "users_email_unique": {
-          "name": "users_email_unique",
-          "columns": [
-            {
-              "expression": "email",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": ["email"]
+          "columns": [
+            "email"
+          ]
         }
       },
       "policies": {},
@@ -140,30 +126,18 @@
           "notNull": false
         }
       },
-      "indexes": {
-        "workspaces_slug_unique": {
-          "name": "workspaces_slug_unique",
-          "columns": [
-            {
-              "expression": "slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "workspaces_owner_user_id_users_id_fk": {
           "name": "workspaces_owner_user_id_users_id_fk",
           "tableFrom": "workspaces",
           "tableTo": "users",
-          "columnsFrom": ["owner_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -173,7 +147,9 @@
         "workspaces_slug_unique": {
           "name": "workspaces_slug_unique",
           "nullsNotDistinct": false,
-          "columns": ["slug"]
+          "columns": [
+            "slug"
+          ]
         }
       },
       "policies": {},
@@ -260,8 +236,12 @@
           "name": "workspace_members_workspace_id_workspaces_id_fk",
           "tableFrom": "workspace_members",
           "tableTo": "workspaces",
-          "columnsFrom": ["workspace_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -269,8 +249,12 @@
           "name": "workspace_members_user_id_users_id_fk",
           "tableFrom": "workspace_members",
           "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -359,30 +343,18 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "workspace_invitations_token_unique": {
-          "name": "workspace_invitations_token_unique",
-          "columns": [
-            {
-              "expression": "token",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "workspace_invitations_workspace_id_workspaces_id_fk": {
           "name": "workspace_invitations_workspace_id_workspaces_id_fk",
           "tableFrom": "workspace_invitations",
           "tableTo": "workspaces",
-          "columnsFrom": ["workspace_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -390,8 +362,12 @@
           "name": "workspace_invitations_invited_by_user_id_users_id_fk",
           "tableFrom": "workspace_invitations",
           "tableTo": "users",
-          "columnsFrom": ["invited_by_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "invited_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -401,7 +377,9 @@
         "workspace_invitations_token_unique": {
           "name": "workspace_invitations_token_unique",
           "nullsNotDistinct": false,
-          "columns": ["token"]
+          "columns": [
+            "token"
+          ]
         }
       },
       "policies": {},
@@ -474,8 +452,12 @@
           "name": "workspace_settings_workspace_id_workspaces_id_fk",
           "tableFrom": "workspace_settings",
           "tableTo": "workspaces",
-          "columnsFrom": ["workspace_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -485,7 +467,9 @@
         "workspace_settings_workspace_id_unique": {
           "name": "workspace_settings_workspace_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["workspace_id"]
+          "columns": [
+            "workspace_id"
+          ]
         }
       },
       "policies": {},
@@ -586,8 +570,12 @@
           "name": "module_installations_workspace_id_workspaces_id_fk",
           "tableFrom": "module_installations",
           "tableTo": "workspaces",
-          "columnsFrom": ["workspace_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -659,8 +647,12 @@
           "name": "activity_events_workspace_id_workspaces_id_fk",
           "tableFrom": "activity_events",
           "tableTo": "workspaces",
-          "columnsFrom": ["workspace_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -852,8 +844,12 @@
           "name": "customers_workspace_id_workspaces_id_fk",
           "tableFrom": "customers",
           "tableTo": "workspaces",
-          "columnsFrom": ["workspace_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -869,22 +865,41 @@
     "public.invitation_status": {
       "name": "invitation_status",
       "schema": "public",
-      "values": ["pending", "accepted", "revoked"]
+      "values": [
+        "pending",
+        "accepted",
+        "revoked"
+      ]
     },
     "public.module_installation_status": {
       "name": "module_installation_status",
       "schema": "public",
-      "values": ["active", "cancelled"]
+      "values": [
+        "active",
+        "cancelled"
+      ]
     },
     "public.module_key": {
       "name": "module_key",
       "schema": "public",
-      "values": ["invoices", "books", "drive", "quotes"]
+      "values": [
+        "invoices",
+        "books",
+        "drive",
+        "quotes"
+      ]
     },
     "public.workspace_role": {
       "name": "workspace_role",
       "schema": "public",
-      "values": ["owner", "admin", "manager", "accountant", "employee", "readonly"]
+      "values": [
+        "owner",
+        "admin",
+        "manager",
+        "accountant",
+        "employee",
+        "readonly"
+      ]
     }
   },
   "schemas": {},
