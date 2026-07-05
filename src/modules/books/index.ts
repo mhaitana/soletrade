@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, ilike, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lte, or, type SQL } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { bookTransactions, customers } from "@/server/db/schema";
 import { getCustomer } from "@/platform/customers";
@@ -7,7 +7,13 @@ import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { isBookCategory } from "@/shared/constants/books-categories";
 import type { BookType } from "@/server/db/schema/enums";
-import type { BookTransactionId, CustomerId, UserId, WorkspaceId } from "@/shared/types/ids";
+import type {
+  BookTransactionId,
+  CustomerId,
+  InvoiceId,
+  UserId,
+  WorkspaceId,
+} from "@/shared/types/ids";
 
 /**
  * Books module service (Phase 6). Workspace-scoped CRUD for flat income/expense
@@ -34,6 +40,12 @@ export interface TransactionInput {
   category: string;
   customerId?: CustomerId | null;
   notes?: string | null;
+  /**
+   * Optional link to the invoice that generated this income (Phase 6c). Set by the
+   * `InvoicePaid` subscriber; null for manually-recorded transactions. Stored on
+   * `book_transactions.source_invoice_id` (no FK constraint).
+   */
+  sourceInvoiceId?: InvoiceId | null;
 }
 
 export type TransactionPatch = Partial<TransactionInput>;
@@ -50,6 +62,8 @@ export interface TransactionRow {
   customerId: CustomerId | null;
   /** Joined from `customers.name`; null for walk-in / no customer. */
   customerName: string | null;
+  /** The invoice that generated this income, or null. */
+  sourceInvoiceId: InvoiceId | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -65,6 +79,7 @@ const selectTransaction = {
   description: bookTransactions.description,
   category: bookTransactions.category,
   customerId: bookTransactions.customerId,
+  sourceInvoiceId: bookTransactions.sourceInvoiceId,
   notes: bookTransactions.notes,
   createdAt: bookTransactions.createdAt,
   updatedAt: bookTransactions.updatedAt,
@@ -87,11 +102,17 @@ async function assertCustomerInWorkspace(
   if (!c) throw new Error("Customer not found in this workspace.");
 }
 
-/** Create a transaction. Validates the category matches `type` and the customer (if any) is in the workspace. */
+/**
+ * Create a transaction. Validates the category matches `type` and the customer (if any) is in
+ * the workspace. `actorId` is optional — `undefined` marks a system-generated transaction (e.g.
+ * the `InvoicePaid` subscriber records income on behalf of the user who marked the invoice
+ * paid, or the system for the Stripe webhook path); the audit log + event carry
+ * `actorUserId: undefined` in that case.
+ */
 export async function createTransaction(
   workspaceId: WorkspaceId,
   input: TransactionInput,
-  actorId: UserId,
+  actorId?: UserId,
 ): Promise<BookTransactionId> {
   if (input.amountCents <= 0) throw new Error("Amount must be greater than 0.");
   assertCategoryForType(input.type, input.category);
@@ -109,6 +130,7 @@ export async function createTransaction(
       description: input.description.trim(),
       category: input.category,
       customerId: input.customerId ?? null,
+      sourceInvoiceId: input.sourceInvoiceId ?? null,
       notes: input.notes ?? null,
     })
     .returning({ id: bookTransactions.id });
@@ -126,6 +148,7 @@ export async function createTransaction(
       amountCents: input.amountCents,
       category: input.category,
       description: input.description.trim(),
+      ...(input.sourceInvoiceId ? { sourceInvoiceId: input.sourceInvoiceId } : {}),
     },
   });
   await writeAudit({
@@ -134,7 +157,14 @@ export async function createTransaction(
     action: "transaction.create",
     targetType: "transaction",
     targetId: row.id,
-    metadata: { type: input.type, amountCents: input.amountCents, category: input.category },
+    metadata: {
+      type: input.type,
+      amountCents: input.amountCents,
+      category: input.category,
+      ...(input.sourceInvoiceId
+        ? { sourceInvoiceId: input.sourceInvoiceId, source: "invoice" }
+        : {}),
+    },
   });
   return row.id;
 }
@@ -245,13 +275,27 @@ export async function deleteTransaction(
 /** List transactions for a workspace, optionally filtered by type/search/customer. */
 export async function listTransactions(
   workspaceId: WorkspaceId,
-  opts?: { type?: BookType; search?: string; customerId?: CustomerId; limit?: number },
+  opts?: {
+    type?: BookType;
+    search?: string;
+    customerId?: CustomerId;
+    /** Inclusive lower bound on `date` (transaction date). */
+    dateFrom?: Date;
+    /** Inclusive upper bound on `date`. */
+    dateTo?: Date;
+    limit?: number;
+  },
 ): Promise<TransactionRow[]> {
   const db = getDb();
-  const limit = Math.min(opts?.limit ?? 100, 200);
+  // Default 100 (the page list view); clamped to 2000 so the summary loader can fetch a full
+  // period. A workspace with >2000 transactions in a period gets an approximate summary —
+  // DB-side aggregation is a later optimization.
+  const limit = Math.min(opts?.limit ?? 100, 2000);
   const conditions: (SQL | undefined)[] = [eq(bookTransactions.workspaceId, workspaceId)];
   if (opts?.type) conditions.push(eq(bookTransactions.type, opts.type));
   if (opts?.customerId) conditions.push(eq(bookTransactions.customerId, opts.customerId));
+  if (opts?.dateFrom) conditions.push(gte(bookTransactions.date, opts.dateFrom));
+  if (opts?.dateTo) conditions.push(lte(bookTransactions.date, opts.dateTo));
   const search = opts?.search?.trim();
   if (search) {
     const term = `%${search}%`;

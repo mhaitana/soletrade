@@ -23,6 +23,7 @@ function meta(overrides: Partial<InvoiceEmailMeta> = {}): InvoiceEmailMeta {
     currency: "AUD",
     customerEmail: "customer@globex.com",
     customerName: "Globex Corp",
+    customerId: null,
     publicToken: "tok-xyz",
     dueDate: new Date("2026-09-01"),
     ...overrides,

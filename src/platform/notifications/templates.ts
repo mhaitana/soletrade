@@ -12,7 +12,14 @@
  *
  * The `customerEmail` null case is handled by the **handlers** in `index.ts` (no email → no
  * send); templates always render, so they don't branch on it.
+ *
+ * `customerId` (Phase 6c) is carried by the metadata but ignored by the email templates — it's
+ * there so cross-module subscribers (e.g. the Books `InvoicePaid` income recorder) can link
+ * without importing the invoices module. Kept in this type because `InvoiceEmailMeta` is the
+ * documented "payload the invoices module publishes on the event bus".
  */
+
+import { branded, type CustomerId } from "@/shared/types/ids";
 
 export type InvoiceEmailMeta = {
   number: string;
@@ -20,6 +27,7 @@ export type InvoiceEmailMeta = {
   currency: string;
   customerEmail: string | null;
   customerName: string | null;
+  customerId: CustomerId | null;
   publicToken: string;
   dueDate: Date | null;
 };
@@ -50,6 +58,8 @@ export function coerceInvoiceEmailMeta(
     dueDate: record.dueDate instanceof Date ? record.dueDate : null,
     customerEmail: typeof record.customerEmail === "string" ? record.customerEmail : null,
     customerName: typeof record.customerName === "string" ? record.customerName : null,
+    customerId:
+      typeof record.customerId === "string" ? branded<"CustomerId">(record.customerId) : null,
   };
 }
 

@@ -6,7 +6,9 @@ import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
 import { categoryLabel } from "@/shared/constants/books-categories";
+import { PERIODS, parsePeriod, type Period } from "@/modules/books/periods";
 import { loadBooksPage } from "./actions";
+import { BooksSummary } from "./books-summary";
 import type { BookType } from "@/server/db/schema/enums";
 
 export const metadata = { title: "Books" };
@@ -27,18 +29,44 @@ function formatDate(d: Date | null): string {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** Build a `/books` href preserving the active period + type + search across filter links. */
+function hrefWith(
+  patch: { type?: "all" | BookType; period?: Period },
+  current: { type: BookType | null; search: string; period: Period },
+): string {
+  const params = new URLSearchParams();
+  const nextType = patch.type ?? "all";
+  if (nextType !== "all") params.set("type", nextType);
+  if (current.search) params.set("search", current.search);
+  if (patch.period) {
+    if (patch.period !== "year") params.set("period", patch.period);
+  } else if (current.period !== "year") {
+    params.set("period", current.period);
+  }
+  const qs = params.toString();
+  return qs ? `/books?${qs}` : "/books";
+}
+
 export default async function BooksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string | string[]; search?: string | string[] }>;
+  searchParams: Promise<{
+    type?: string | string[];
+    search?: string | string[];
+    period?: string | string[];
+  }>;
 }) {
   const sp = await searchParams;
   const rawType = typeof sp.type === "string" ? sp.type : undefined;
   const rawSearch = typeof sp.search === "string" ? sp.search : undefined;
+  const rawPeriod = typeof sp.period === "string" ? sp.period : undefined;
   const type = rawType === "income" || rawType === "expense" ? (rawType as BookType) : undefined;
-  const data = await loadBooksPage({ type, search: rawSearch });
+  const period = parsePeriod(rawPeriod);
+  const data = await loadBooksPage({ type, search: rawSearch, period });
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="books" />;
+
+  const current = { type: data.typeFilter, search: data.search, period: data.period };
 
   return (
     <div className="space-y-6">
@@ -57,35 +85,53 @@ export default async function BooksPage({
         ) : null}
       </div>
 
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="Filter transactions by type"
-      >
-        {TYPE_FILTERS.map((f) => {
-          const active = (f.key === "all" && !type) || f.key === type;
-          const href =
-            f.key === "all"
-              ? data.search
-                ? `/books?search=${encodeURIComponent(data.search)}`
-                : "/books"
-              : `/books?type=${f.key}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`;
-          return (
-            <Button
-              key={f.key}
-              asChild
-              variant={active ? "default" : "outline"}
-              size="sm"
-              aria-current={active ? "page" : undefined}
-            >
-              <Link href={href}>{f.label}</Link>
-            </Button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-4" aria-label="Filters">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Filter transactions by period"
+        >
+          {PERIODS.map((p) => {
+            const active = p.key === data.period;
+            return (
+              <Button
+                key={p.key}
+                asChild
+                variant={active ? "default" : "outline"}
+                size="sm"
+                aria-current={active ? "page" : undefined}
+              >
+                <Link href={hrefWith({ period: p.key }, current)}>{p.label}</Link>
+              </Button>
+            );
+          })}
+        </div>
+
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Filter transactions by type"
+        >
+          {TYPE_FILTERS.map((f) => {
+            const active = (f.key === "all" && !type) || f.key === type;
+            return (
+              <Button
+                key={f.key}
+                asChild
+                variant={active ? "default" : "outline"}
+                size="sm"
+                aria-current={active ? "page" : undefined}
+              >
+                <Link href={hrefWith({ type: f.key }, current)}>{f.label}</Link>
+              </Button>
+            );
+          })}
+        </div>
       </div>
 
       <form action="/books" method="get" className="flex flex-wrap gap-2" role="search">
         {type ? <input type="hidden" name="type" value={type} /> : null}
+        {data.period !== "year" ? <input type="hidden" name="period" value={data.period} /> : null}
         <Input
           type="search"
           name="search"
@@ -98,12 +144,14 @@ export default async function BooksPage({
           <Search className="size-4" aria-hidden />
           Search
         </Button>
-        {data.search || type ? (
+        {data.search || type || data.period !== "year" ? (
           <Button asChild variant="ghost">
             <Link href="/books">Clear</Link>
           </Button>
         ) : null}
       </form>
+
+      <BooksSummary summary={data.summary} currency="AUD" period={data.period} />
 
       {data.transactions.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">

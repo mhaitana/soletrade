@@ -23,6 +23,7 @@ export const INCOME_CATEGORIES = [
   { key: "services", label: "Services" },
   { key: "software", label: "Software" },
   { key: "hardware", label: "Hardware" },
+  { key: "invoice", label: "Invoice" },
   { key: "other_income", label: "Other income" },
 ] as const satisfies readonly BookCategory[];
 

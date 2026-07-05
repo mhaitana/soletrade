@@ -57,6 +57,13 @@
       "when": 1783259314114,
       "tag": "0007_orange_starjammers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783261392694,
+      "tag": "0008_windy_talkback",
+      "breakpoints": true
     }
   ]
 }

@@ -254,6 +254,59 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     expect(byDescription.some((t) => t.id === createdTxIds[0])).toBe(true);
   });
 
+  it("filters transactions by inclusive date range", async () => {
+    // Seed two transactions with distinct, known dates.
+    const febId = await createTransaction(
+      ws1!,
+      {
+        type: "income",
+        amountCents: 2000,
+        date: new Date("2026-02-15T12:00:00Z"),
+        description: "Range — Feb",
+        category: "sales",
+      },
+      actor,
+    );
+    createdTxIds.push(febId);
+    const aprId = await createTransaction(
+      ws1!,
+      {
+        type: "income",
+        amountCents: 3000,
+        date: new Date("2026-04-15T12:00:00Z"),
+        description: "Range — Apr",
+        category: "sales",
+      },
+      actor,
+    );
+    createdTxIds.push(aprId);
+
+    const fromMarch = await listTransactions(ws1!, {
+      dateFrom: new Date("2026-03-01T00:00:00Z"),
+      limit: 2000,
+    });
+    // The Feb transaction is excluded; the Apr one is included.
+    expect(fromMarch.some((t) => t.id === febId)).toBe(false);
+    expect(fromMarch.some((t) => t.id === aprId)).toBe(true);
+
+    // Inclusive upper bound: up to end of Feb excludes the Apr row but includes Feb.
+    const toEndOfFeb = await listTransactions(ws1!, {
+      dateTo: new Date("2026-02-28T23:59:59Z"),
+      limit: 2000,
+    });
+    expect(toEndOfFeb.some((t) => t.id === aprId)).toBe(false);
+    expect(toEndOfFeb.some((t) => t.id === febId)).toBe(true);
+
+    // Both bounds: a tight March–April window.
+    const window = await listTransactions(ws1!, {
+      dateFrom: new Date("2026-03-01T00:00:00Z"),
+      dateTo: new Date("2026-04-30T23:59:59Z"),
+      limit: 2000,
+    });
+    expect(window.some((t) => t.id === febId)).toBe(false);
+    expect(window.some((t) => t.id === aprId)).toBe(true);
+  });
+
   it("deletes a transaction and fires TransactionDeleted", async () => {
     const id = await createTransaction(
       ws1!,

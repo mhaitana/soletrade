@@ -494,6 +494,7 @@ async function fetchInvoiceEmailContext(
       currency: invoices.currency,
       publicToken: invoices.publicToken,
       dueDate: invoices.dueDate,
+      customerId: invoices.customerId,
       customerEmail: customers.email,
       customerName: customers.name,
     })
@@ -509,6 +510,7 @@ async function fetchInvoiceEmailContext(
     currency: row.currency,
     publicToken: row.publicToken,
     dueDate: row.dueDate,
+    customerId: row.customerId,
     customerEmail: row.customerEmail,
     customerName: row.customerName,
   };

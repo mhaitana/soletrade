@@ -15,6 +15,8 @@ import {
   type TransactionInput,
   type TransactionRow,
 } from "@/modules/books";
+import { summarizeTransactions, type TransactionSummary } from "@/modules/books/calc";
+import { type Period, parsePeriod } from "@/modules/books/periods";
 import { isBookCategory } from "@/shared/constants/books-categories";
 import type { BookType } from "@/server/db/schema/enums";
 import { branded } from "@/shared/types/ids";
@@ -165,6 +167,29 @@ export async function deleteTransactionAction(input: unknown): Promise<Transacti
 
 // --- Loaders (view:books ok for any role that can view) --------------------
 
+/**
+ * Resolve a `Period` into an inclusive date range. `end` is always `now`; `start` is null
+ * for "all" (no lower bound). Quarter start = first day of the current quarter
+ * (months 0/3/6/9 → `Math.floor(month/3)*3`). Server-side only — uses `Date`.
+ */
+function periodRange(period: Period, now: Date = new Date()): { start: Date | null; end: Date } {
+  const end = now;
+  if (period === "all") return { start: null, end };
+  const start = new Date(now);
+  start.setUTCHours(0, 0, 0, 0);
+  if (period === "month") {
+    start.setUTCDate(1);
+  } else if (period === "quarter") {
+    start.setUTCDate(1);
+    start.setUTCMonth(Math.floor(start.getUTCMonth() / 3) * 3);
+  } else {
+    // year
+    start.setUTCDate(1);
+    start.setUTCMonth(0);
+  }
+  return { start, end };
+}
+
 export type BooksPageData =
   | {
       installed: true;
@@ -172,27 +197,57 @@ export type BooksPageData =
       canManage: boolean;
       typeFilter: BookType | null;
       search: string;
+      period: Period;
+      summary: TransactionSummary;
     }
   | { installed: false };
 
 export async function loadBooksPage(params?: {
   type?: BookType;
   search?: string;
+  period?: Period;
 }): Promise<BooksPageData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
 
+  const period = params?.period ?? parsePeriod(undefined);
   const search = params?.search?.trim() ?? "";
-  const [transactions, canManage] = await Promise.all([
-    listTransactions(ctx.workspaceId, { type: params?.type, search: search || undefined }),
+  const range = periodRange(period);
+  const [transactions, summaryRows, canManage] = await Promise.all([
+    // Page list: cap at the default 100, with the type + search + date range.
+    listTransactions(ctx.workspaceId, {
+      type: params?.type,
+      search: search || undefined,
+      dateFrom: range.start ?? undefined,
+      dateTo: range.end,
+      limit: 100,
+    }),
+    // Summary: type + date range (NO search — the header is the period overview), full
+    // period fetch capped at 2000. Aggregated in JS by the pure `summarizeTransactions`.
+    listTransactions(ctx.workspaceId, {
+      type: params?.type,
+      dateFrom: range.start ?? undefined,
+      dateTo: range.end,
+      limit: 2000,
+    }),
     Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
+  const summary = summarizeTransactions(
+    summaryRows.map((t) => ({
+      type: t.type,
+      amountCents: t.amountCents,
+      date: t.date,
+      category: t.category,
+    })),
+  );
   return {
     installed: true,
     transactions,
     canManage,
     typeFilter: params?.type ?? null,
     search,
+    period,
+    summary,
   };
 }
 

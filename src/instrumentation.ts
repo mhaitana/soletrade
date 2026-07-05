@@ -3,6 +3,7 @@ import { getDb } from "@/server/db";
 import { activityEvents } from "@/server/db/schema";
 import { ensureSubscription } from "@/platform/billing";
 import { registerNotifications } from "@/platform/notifications";
+import { registerBooksIntegration } from "@/modules/books/integration";
 
 /**
  * Server bootstrap. Runs once on startup. Wires the event bus persister so
@@ -38,4 +39,8 @@ export async function register(): Promise<void> {
   // Phase 5c: subscribe invoice email handlers (InvoiceSent/Overdue/Paid → Resend).
   // Fire-and-forget — `registerNotifications` just attaches handlers; no await needed.
   registerNotifications();
+
+  // Phase 6c: subscribe the Books InvoicePaid → income recorder (cross-module, via the bus).
+  // Fire-and-forget — `registerBooksIntegration` just attaches the handler; no await needed.
+  registerBooksIntegration();
 }
