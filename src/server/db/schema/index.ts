@@ -7,3 +7,4 @@ export * from "./settings";
 export * from "./module-installations";
 export * from "./activity";
 export * from "./audit";
+export * from "./customers";

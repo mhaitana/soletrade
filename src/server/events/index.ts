@@ -15,6 +15,8 @@ export const EVENT_TYPES = [
   "ModuleDisabled",
   "ModuleCancelled",
   "CustomerCreated",
+  "CustomerUpdated",
+  "CustomerDeleted",
   "QuoteSent",
   "QuoteViewed",
   "QuoteAccepted",
