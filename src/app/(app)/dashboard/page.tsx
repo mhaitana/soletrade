@@ -1,8 +1,10 @@
+import Link from "next/link";
+import { BookOpen, Car, FileText, Receipt, Sparkles, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
-import { Skeleton } from "@/shared/ui/skeleton";
-import { BookOpen, Car, FileText, Receipt, Sparkles } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Button } from "@/shared/ui/button";
+import { loadRecentActivity } from "../activity/actions";
+import { ActivityFeed } from "../activity/activity-feed";
 
 const modules: { name: string; desc: string; icon: LucideIcon }[] = [
   { name: "Invoices", desc: "Bill clients and accept card payments.", icon: Receipt },
@@ -18,7 +20,9 @@ const checklist = [
   "Send your first invoice or quote",
 ];
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const { items } = await loadRecentActivity(5);
+
   return (
     <div className="space-y-8">
       <div>
@@ -76,22 +80,15 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Loading skeleton example — replaced by real summaries in Phase 9 */}
+      {/* Recent activity — live from the event-sourced activity feed */}
       <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Recent activity</h2>
-        <Card>
-          <CardContent className="space-y-3 py-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-8 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-3 w-1/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground">Recent activity</h2>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/activity">View all</Link>
+          </Button>
+        </div>
+        <ActivityFeed items={items} />
       </section>
     </div>
   );
