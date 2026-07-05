@@ -1,0 +1,280 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { inArray } from "drizzle-orm";
+import { getDb } from "@/server/db";
+import {
+  auditLogs,
+  bookTransactions as bookTransactionsTable,
+  customers as customersTable,
+  users as usersTable,
+  workspaces as workspacesTable,
+  workspaceMembers,
+} from "@/server/db/schema";
+import {
+  branded,
+  type BookTransactionId,
+  type CustomerId,
+  type WorkspaceId,
+} from "@/shared/types/ids";
+import { createWorkspace } from "@/platform/workspaces";
+import { createCustomer } from "@/platform/customers";
+import { onEvent } from "@/server/events";
+import {
+  createTransaction,
+  deleteTransaction,
+  getTransaction,
+  listTransactions,
+  updateTransaction,
+} from "./index";
+
+/**
+ * Integration tests for the books service against a real Postgres. Run only when
+ * DATABASE_URL is set; skipped otherwise (keeps `pnpm test:ci` green without a DB).
+ *
+ *   DATABASE_URL="postgresql://..." pnpm test:ci
+ */
+const HAS_DB = Boolean(process.env.DATABASE_URL);
+
+describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
+  const actor = branded<"UserId">("00000000-0000-7000-8000-0000000000a1");
+  const otherActor = branded<"UserId">("00000000-0000-7000-8000-0000000000a2");
+  let ws1: WorkspaceId;
+  let ws2: WorkspaceId;
+  let ws1Customer: CustomerId;
+  const createdTxIds: BookTransactionId[] = [];
+
+  const captured: { type: string; transactionId?: string; metadata?: Record<string, unknown> }[] =
+    [];
+  let unsub: (() => void) | null = null;
+
+  beforeAll(async () => {
+    const db = getDb();
+    await db.insert(usersTable).values([
+      { id: actor, email: "books-actor@soletrade-test.local", fullName: "Books Actor" },
+      { id: otherActor, email: "books-other@soletrade-test.local", fullName: "Books Other" },
+    ]);
+    ws1 = await createWorkspace(actor, "Books Test One", `books-test-one-${Date.now()}`);
+    ws2 = await createWorkspace(otherActor, "Books Test Two", `books-test-two-${Date.now()}`);
+    ws1Customer = await createCustomer(
+      ws1,
+      { name: "Initech Pty Ltd", email: "initech@soletrade-test.local" },
+      actor,
+    );
+
+    const u1 = onEvent("TransactionCreated", (e) => {
+      captured.push({
+        type: "TransactionCreated",
+        transactionId: e.entityId,
+        metadata: e.metadata as Record<string, unknown> | undefined,
+      });
+    });
+    const u2 = onEvent("TransactionUpdated", (e) => {
+      captured.push({ type: "TransactionUpdated", transactionId: e.entityId });
+    });
+    const u3 = onEvent("TransactionDeleted", (e) => {
+      captured.push({ type: "TransactionDeleted", transactionId: e.entityId });
+    });
+    unsub = () => {
+      u1();
+      u2();
+      u3();
+    };
+  });
+
+  afterAll(async () => {
+    const db = getDb();
+    unsub?.();
+    const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
+    if (workspaceIds.length === 0) return;
+    await db
+      .delete(bookTransactionsTable)
+      .where(inArray(bookTransactionsTable.workspaceId, workspaceIds));
+    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
+    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
+    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
+    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
+    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+  });
+
+  it("creates an income transaction with the stored fields", async () => {
+    const id = await createTransaction(
+      ws1!,
+      {
+        type: "income",
+        amountCents: 12000,
+        date: new Date("2026-01-15"),
+        description: "Consulting — January",
+        category: "services",
+        customerId: ws1Customer,
+      },
+      actor,
+    );
+    createdTxIds.push(id);
+
+    const tx = await getTransaction(ws1!, id);
+    expect(tx).not.toBeNull();
+    expect(tx!.type).toBe("income");
+    expect(tx!.amountCents).toBe(12000);
+    expect(tx!.currency).toBe("AUD");
+    expect(tx!.description).toBe("Consulting — January");
+    expect(tx!.category).toBe("services");
+    expect(tx!.customerId).toBe(ws1Customer);
+    expect(tx!.customerName).toBe("Initech Pty Ltd");
+
+    const evt = captured.find((e) => e.type === "TransactionCreated" && e.transactionId === id);
+    expect(evt).toBeDefined();
+    expect(evt?.metadata).toMatchObject({
+      type: "income",
+      amountCents: 12000,
+      category: "services",
+    });
+  });
+
+  it("creates an expense transaction with no customer", async () => {
+    const id = await createTransaction(
+      ws1!,
+      {
+        type: "expense",
+        amountCents: 4500,
+        date: new Date("2026-01-20"),
+        description: "Office supplies",
+        category: "supplies",
+      },
+      actor,
+    );
+    createdTxIds.push(id);
+
+    const tx = await getTransaction(ws1!, id);
+    expect(tx!.type).toBe("expense");
+    expect(tx!.customerId).toBeNull();
+    expect(tx!.customerName).toBeNull();
+  });
+
+  it("isolates transactions per workspace (no IDOR)", async () => {
+    // ws2 cannot see ws1's transaction via getTransaction…
+    const cross = await getTransaction(ws2!, createdTxIds[0]!);
+    expect(cross).toBeNull();
+
+    // …and listTransactions only returns the workspace's own rows.
+    const ws1List = await listTransactions(ws1!);
+    const ws2List = await listTransactions(ws2!);
+    expect(ws1List.some((t) => t.id === createdTxIds[0])).toBe(true);
+    expect(ws2List.some((t) => t.id === createdTxIds[0])).toBe(false);
+  });
+
+  it("rejects a category that doesn't match the transaction type", async () => {
+    await expect(
+      createTransaction(
+        ws1!,
+        {
+          type: "income",
+          amountCents: 1000,
+          date: new Date("2026-02-01"),
+          description: "Bad category",
+          category: "rent", // rent is an expense category, not income
+        },
+        actor,
+      ),
+    ).rejects.toThrow(/Unknown category/i);
+  });
+
+  it("rejects a non-positive amount", async () => {
+    await expect(
+      createTransaction(
+        ws1!,
+        {
+          type: "income",
+          amountCents: 0,
+          date: new Date("2026-02-02"),
+          description: "Zero amount",
+          category: "sales",
+        },
+        actor,
+      ),
+    ).rejects.toThrow(/greater than 0/i);
+  });
+
+  it("rejects assigning a customer from another workspace", async () => {
+    await expect(
+      createTransaction(
+        ws2!,
+        {
+          type: "income",
+          amountCents: 5000,
+          date: new Date("2026-02-03"),
+          description: "Cross-customer",
+          category: "sales",
+          customerId: ws1Customer, // belongs to ws1
+        },
+        otherActor,
+      ),
+    ).rejects.toThrow(/not found in this workspace/i);
+  });
+
+  it("updates a transaction's amount + description and fires TransactionUpdated", async () => {
+    const before = captured.filter((e) => e.type === "TransactionUpdated").length;
+    await updateTransaction(
+      ws1!,
+      createdTxIds[0]!,
+      { amountCents: 15000, description: "Consulting — January (revised)" },
+      actor,
+    );
+    const tx = await getTransaction(ws1!, createdTxIds[0]!);
+    expect(tx!.amountCents).toBe(15000);
+    expect(tx!.description).toBe("Consulting — January (revised)");
+    const after = captured.filter((e) => e.type === "TransactionUpdated").length;
+    expect(after).toBe(before + 1);
+  });
+
+  it("updateTransaction on another workspace's row throws (not found)", async () => {
+    await expect(
+      updateTransaction(ws2!, createdTxIds[0]!, { amountCents: 9999 }, otherActor),
+    ).rejects.toThrow(/not found/i);
+    // ws1 row is unchanged
+    const tx = await getTransaction(ws1!, createdTxIds[0]!);
+    expect(tx!.amountCents).toBe(15000);
+  });
+
+  it("requires a category when changing transaction type", async () => {
+    await expect(
+      updateTransaction(ws1!, createdTxIds[0]!, { type: "expense" }, actor),
+    ).rejects.toThrow(/Category is required/i);
+  });
+
+  it("filters transactions by type and search", async () => {
+    const income = await listTransactions(ws1!, { type: "income" });
+    expect(income.every((t) => t.type === "income")).toBe(true);
+    expect(income.some((t) => t.id === createdTxIds[0])).toBe(true);
+
+    const expense = await listTransactions(ws1!, { type: "expense" });
+    expect(expense.every((t) => t.type === "expense")).toBe(true);
+    expect(expense.some((t) => t.id === createdTxIds[1])).toBe(true);
+
+    const byDescription = await listTransactions(ws1!, { search: "Consulting" });
+    expect(byDescription.length).toBeGreaterThan(0);
+    expect(byDescription.some((t) => t.id === createdTxIds[0])).toBe(true);
+  });
+
+  it("deletes a transaction and fires TransactionDeleted", async () => {
+    const id = await createTransaction(
+      ws1!,
+      {
+        type: "expense",
+        amountCents: 1000,
+        date: new Date("2026-03-01"),
+        description: "To delete",
+        category: "other_expense",
+      },
+      actor,
+    );
+    const ok = await deleteTransaction(ws1!, id, actor);
+    expect(ok).toBe(true);
+    expect(await getTransaction(ws1!, id)).toBeNull();
+    expect(captured.some((e) => e.type === "TransactionDeleted" && e.transactionId === id)).toBe(
+      true,
+    );
+
+    // Deleting from another workspace returns false (not found there).
+    const refused = await deleteTransaction(ws2!, createdTxIds[0]!, otherActor);
+    expect(refused).toBe(false);
+  });
+});

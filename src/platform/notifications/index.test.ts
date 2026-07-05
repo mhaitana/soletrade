@@ -6,16 +6,12 @@ import {
   type EmailClient,
   type EmailPayload,
 } from "@/server/email";
-import { branded, type WorkspaceId, type InvoiceId } from "@/shared/types/ids";
+import { branded } from "@/shared/types/ids";
 import { registerNotifications } from "./index";
 import type { InvoiceEmailMeta } from "./templates";
 
-const APP_URL = "https://app.soletrade.example";
-
-// publishEvent reads env.NEXT_PUBLIC_APP_URL via the notifications handlers — override it on
-// process.env before importing would be too late, so set it here (env is parsed once at import;
-// this test asserts the link uses whatever appUrl the env resolved to). We check the link
-// contains `/i/<token>` rather than the exact host to stay env-agnostic.
+// publishEvent reads env.NEXT_PUBLIC_APP_URL via the notifications handlers; the assertions
+// check the link contains `/i/<token>` rather than the exact host, so this test is env-agnostic.
 
 const ws = branded<"WorkspaceId">("00000000-0000-6000-8000-0000000000c1");
 const invoiceId = branded<"InvoiceId">("00000000-0000-6000-8000-0000000000d1");

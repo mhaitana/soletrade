@@ -15,6 +15,7 @@ export type AuditLogId = Brand<string, "AuditLogId">;
 export type CustomerId = Brand<string, "CustomerId">;
 export type InvoiceId = Brand<string, "InvoiceId">;
 export type InvoiceLineItemId = Brand<string, "InvoiceLineItemId">;
+export type BookTransactionId = Brand<string, "BookTransactionId">;
 export type FileId = Brand<string, "FileId">;
 export type SubscriptionId = Brand<string, "SubscriptionId">;
 export type CreditLedgerEntryId = Brand<string, "CreditLedgerEntryId">;

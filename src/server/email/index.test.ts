@@ -23,7 +23,7 @@ describe("sendEmail", () => {
 
   it("returns ok + id when the configured client succeeds", async () => {
     const fake: EmailClient = {
-      async send(_p: EmailPayload) {
+      async send() {
         return { id: "re_fake_123" };
       },
     };

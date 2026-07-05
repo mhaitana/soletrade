@@ -1,0 +1,55 @@
+import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { BookTransactionId, CustomerId, WorkspaceId } from "@/shared/types/ids";
+import { workspaces } from "./workspaces";
+import { customers } from "./customers";
+import { bookTypeEnum } from "./enums";
+
+/**
+ * Books module schema (Phase 6). One flat ledger row per income/expense transaction,
+ * workspace-scoped. There is no document lifecycle or status — a transaction is a dated
+ * entry (income adds to net, expense subtracts). Money is integer cents throughout.
+ *
+ * `category` is a slug from the pure `src/shared/constants/books-categories` catalog
+ * (validated at the action boundary + in the service). Stored as `text` (not an enum)
+ * so the seed list can grow without a DB migration.
+ *
+ * `customerId` is optional — income is often tied to a customer, expenses rarely are.
+ * No cascade: workspace + customer are soft-deleted parents (mirrors `invoices`), so a
+ * deleted customer's historical transactions are preserved. No invoice FK yet — the
+ * future `InvoicePaid → Books income` integration goes via the event bus to keep 6a
+ * decoupled from the invoices module.
+ */
+export const bookTransactions = pgTable(
+  "book_transactions",
+  {
+    id: uuid("id").primaryKey().$type<BookTransactionId>().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .$type<WorkspaceId>()
+      .references(() => workspaces.id),
+    type: bookTypeEnum("type").notNull(),
+    /** Integer cents. Income adds, expense subtracts — sign is implied by `type`. */
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("AUD"),
+    /** User-chosen transaction date (when the income/expense occurred). */
+    date: timestamp("date").notNull(),
+    description: text("description").notNull(),
+    /** Slug from `src/shared/constants/books-categories`, validated per `type`. */
+    category: text("category").notNull(),
+    /** Optional — income is often linked to a customer; expenses usually aren't. */
+    customerId: uuid("customer_id")
+      .$type<CustomerId>()
+      .references(() => customers.id),
+    /** Private workspace note (never exposed publicly). */
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // Primary list view is "newest transaction date first"; the secondary order keeps
+    // ties deterministic.
+    index("book_transactions_workspace_date_idx").on(t.workspaceId, t.date),
+    index("book_transactions_workspace_type_idx").on(t.workspaceId, t.type),
+    index("book_transactions_workspace_customer_idx").on(t.workspaceId, t.customerId),
+  ],
+);

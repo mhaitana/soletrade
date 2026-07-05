@@ -69,3 +69,13 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "overdue",
 ]);
 export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number];
+
+/**
+ * Books module (Phase 6). A book transaction is a flat ledger entry — `income` adds
+ * to the workspace's net, `expense` subtracts. There is no lifecycle / status flow
+ * (unlike invoices); a transaction is just a dated row. Categories are slugs from the
+ * pure `src/shared/constants/books-categories` catalog, stored as `text` so the seed
+ * list can grow without a migration.
+ */
+export const bookTypeEnum = pgEnum("book_type", ["income", "expense"]);
+export type BookType = (typeof bookTypeEnum.enumValues)[number];

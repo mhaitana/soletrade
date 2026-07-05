@@ -13,6 +13,36 @@
  * can never drift from the public `/pricing` page.
  */
 import { loadEnvConfig } from "@next/env";
+import Module from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// `Module._resolveFilename` is a private Node loader hook (not in the @types/node public
+// surface), so declare the minimal shape we use.
+type ModuleLoader = typeof Module & {
+  _resolveFilename(request: string, parent: unknown, options: unknown, isMain: boolean): string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _cache: any;
+};
+
+// Stub `server-only` before any server module is imported. `server-only` is a Next-bundler
+// guard that throws under plain Node (tsx uses the `default` export condition; only Next's
+// server build applies `react-server`, which maps it to an empty module). We redirect it to an
+// empty CJS stub — see `scripts/stubs/server-only.js` for why we don't use `--conditions
+// react-server` (it routes `react` to its RSC build and breaks lucide-react).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const serverOnlyStub = path.resolve(__dirname, "stubs/server-only.js");
+const loader = Module as unknown as ModuleLoader;
+const origResolveFilename = loader._resolveFilename.bind(loader);
+loader._resolveFilename = function (
+  request: string,
+  parent: unknown,
+  options: unknown,
+  isMain: boolean,
+): string {
+  if (request === "server-only") return serverOnlyStub;
+  return origResolveFilename(request, parent, options, isMain);
+};
 
 // Load .env.local / .env into process.env before importing the server modules
 // (env.ts reads process.env once at import).
