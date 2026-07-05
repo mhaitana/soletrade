@@ -9,11 +9,12 @@ import { env } from "@/shared/lib/env";
  * matched request and redirects unauthenticated users away from protected
  * (app)-group routes.
  *
- * Public prefixes: marketing (/), /login, /signup, /pricing, public invoice/quote
- * share pages (/i/, /q/), and /api/. Everything else requires a session.
+ * Public prefixes: marketing (/), /login, /signup, /pricing, the auth email-link
+ * callback (/auth/), public invoice/quote share pages (/i/, /q/), and /api/.
+ * Everything else requires a session.
  */
 
-const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/pricing", "/i/", "/q/", "/api"];
+const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/auth", "/pricing", "/i/", "/q/", "/api"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)));

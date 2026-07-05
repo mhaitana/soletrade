@@ -1,0 +1,223 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq, inArray } from "drizzle-orm";
+import type Stripe from "stripe";
+import { getDb } from "@/server/db";
+import {
+  auditLogs,
+  moduleInstallations,
+  processedWebhookEvents,
+  subscriptions as subscriptionsTable,
+  users as usersTable,
+  workspaces as workspacesTable,
+  workspaceMembers,
+} from "@/server/db/schema";
+import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
+import { createWorkspace } from "@/platform/workspaces";
+import { clearEventBus } from "@/server/events";
+import { ensureSubscription, getSubscription } from "@/platform/billing/subscriptions";
+import { enableModule } from "@/platform/module-installations";
+import { getInstalledModules } from "@/platform/module-installations";
+import { handleStripeEvent, recordProcessedEvent } from "./handlers";
+
+/**
+ * Integration tests for the Stripe webhook dispatcher + reconcile handlers
+ * against a real Postgres.
+ *
+ *   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres" pnpm test:ci
+ *
+ * Skipped when DATABASE_URL is unset. Creates its own user + workspaces and cleans
+ * everything up in `afterAll`. Uses synthetic Stripe.Event objects (typed via
+ * `as Stripe.Event`) — no network, no real Stripe signature.
+ */
+const HAS_DB = Boolean(process.env.DATABASE_URL);
+
+describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE_URL)", () => {
+  const actor: UserId = branded<"UserId">("00000000-0000-4000-8000-0000000000b4");
+  const workspaceIds: WorkspaceId[] = [];
+
+  // Track every event id we create so afterAll can clean processed_webhook_events.
+  const allEventIds: string[] = [];
+  function makeEvent(type: string, id: string, object: unknown): Stripe.Event {
+    allEventIds.push(id);
+    return { id, type, data: { object } } as unknown as Stripe.Event;
+  }
+
+  async function freshWorkspace(slug: string): Promise<WorkspaceId> {
+    const ws = await createWorkspace(
+      actor,
+      `Stripe Test ${slug}`,
+      `stripe-test-${slug}-${Date.now()}`,
+    );
+    workspaceIds.push(ws);
+    await ensureSubscription(ws);
+    return ws;
+  }
+
+  beforeAll(async () => {
+    const db = getDb();
+    clearEventBus();
+    await db.insert(usersTable).values({
+      id: actor,
+      email: "stripe-handler@soletrade-test.local",
+      fullName: "Stripe Handler",
+    });
+  });
+
+  afterAll(async () => {
+    const db = getDb();
+    // Clean up in FK order. processed_webhook_events + audit_logs reference
+    // nothing; module_installations + subscriptions reference workspaces.
+    if (workspaceIds.length > 0) {
+      await db
+        .delete(processedWebhookEvents)
+        .where(inArray(processedWebhookEvents.stripeEventId, allEventIds));
+      await db
+        .delete(moduleInstallations)
+        .where(inArray(moduleInstallations.workspaceId, workspaceIds));
+      await db
+        .delete(subscriptionsTable)
+        .where(inArray(subscriptionsTable.workspaceId, workspaceIds));
+      await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
+      await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
+      await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
+    }
+    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    clearEventBus();
+  });
+
+  it("checkout.session.completed marks the workspace pro/active with Stripe ids + anchor", async () => {
+    const ws = await freshWorkspace("checkout");
+    const event = makeEvent("checkout.session.completed", `evt_checkout_${ws}`, {
+      id: `cs_test_${ws}`,
+      client_reference_id: String(ws),
+      customer: `cus_test_${ws}`,
+      subscription: `sub_test_${ws}`,
+    });
+
+    await handleStripeEvent(event);
+
+    const sub = await getSubscription(ws);
+    expect(sub?.tier).toBe("pro");
+    expect(sub?.status).toBe("active");
+    expect(sub?.stripeCustomerId).toBe(`cus_test_${ws}`);
+    expect(sub?.stripeSubscriptionId).toBe(`sub_test_${ws}`);
+    expect(sub?.anchorBillingDate).not.toBeNull();
+  });
+
+  it("a second delivery of the same event id is a no-op (pre-check idempotency)", async () => {
+    const ws = await freshWorkspace("idempotent");
+    const event = makeEvent("checkout.session.completed", `evt_idempotent_${ws}`, {
+      id: `cs_test_${ws}`,
+      client_reference_id: String(ws),
+      customer: `cus_test_${ws}`,
+      subscription: `sub_test_${ws}`,
+    });
+
+    await handleStripeEvent(event);
+    await handleStripeEvent(event); // retry — should be a no-op
+
+    const sub = await getSubscription(ws);
+    expect(sub?.stripeSubscriptionId).toBe(`sub_test_${ws}`);
+
+    // Exactly one audit row for the checkout reconcile (not two).
+    const db = getDb();
+    const auditRows = await db
+      .select({ action: auditLogs.action })
+      .from(auditLogs)
+      .where(eq(auditLogs.workspaceId, ws));
+    const checkoutAudits = auditRows.filter((r) => r.action === "billing.subscription.update");
+    expect(checkoutAudits.length).toBe(1);
+  });
+
+  it("customer.subscription.updated syncs the local status and writes one audit row", async () => {
+    const ws = await freshWorkspace("subupdated");
+    // Start as pro so the status update is the only change.
+    const checkoutEvent = makeEvent("checkout.session.completed", `evt_subupdated_checkout_${ws}`, {
+      id: `cs_test_${ws}`,
+      client_reference_id: String(ws),
+      customer: `cus_test_${ws}`,
+      subscription: `sub_test_${ws}`,
+    });
+    await handleStripeEvent(checkoutEvent);
+
+    const updateEvent = makeEvent("customer.subscription.updated", `evt_subupdated_${ws}`, {
+      id: `sub_test_${ws}`,
+      status: "past_due",
+      metadata: { workspaceId: String(ws) },
+    });
+    await handleStripeEvent(updateEvent);
+
+    const sub = await getSubscription(ws);
+    expect(sub?.status).toBe("past_due");
+    expect(sub?.tier).toBe("pro"); // tier unchanged
+  });
+
+  it("customer.subscription.deleted downgrades to free+canceled and cascade-disables modules", async () => {
+    const ws = await freshWorkspace("subdeleted");
+    // Upgrade to pro + enable a module so the cascade has something to disable.
+    const checkoutEvent = makeEvent("checkout.session.completed", `evt_subdeleted_checkout_${ws}`, {
+      id: `cs_test_${ws}`,
+      client_reference_id: String(ws),
+      customer: `cus_test_${ws}`,
+      subscription: `sub_test_${ws}`,
+    });
+    await handleStripeEvent(checkoutEvent);
+    await enableModule(ws, "invoices", actor, "si_test_legacy");
+
+    const deleteEvent = makeEvent("customer.subscription.deleted", `evt_subdeleted_${ws}`, {
+      id: `sub_test_${ws}`,
+      status: "canceled",
+      metadata: { workspaceId: String(ws) },
+    });
+    await handleStripeEvent(deleteEvent);
+
+    const sub = await getSubscription(ws);
+    expect(sub?.tier).toBe("free");
+    expect(sub?.status).toBe("canceled");
+
+    const installed = await getInstalledModules(ws);
+    expect(installed).toEqual([]); // cascade-disabled
+  });
+
+  it("invoice.paid writes one billing.invoice.paid audit row", async () => {
+    const ws = await freshWorkspace("invoice");
+    // Run a checkout first so the subscription row has a stripeCustomerId for
+    // recordInvoicePaid to join on (it resolves the workspace by customer id).
+    const checkoutEvent = makeEvent("checkout.session.completed", `evt_invoice_checkout_${ws}`, {
+      id: `cs_test_${ws}`,
+      client_reference_id: String(ws),
+      customer: `cus_test_${ws}`,
+      subscription: `sub_test_${ws}`,
+    });
+    await handleStripeEvent(checkoutEvent);
+
+    const event = makeEvent("invoice.paid", `evt_invoice_${ws}`, {
+      id: `in_test_${ws}`,
+      amount_paid: 2900,
+      currency: "aud",
+      customer: `cus_test_${ws}`,
+    });
+    await handleStripeEvent(event);
+
+    const db = getDb();
+    const rows = await db
+      .select({ action: auditLogs.action })
+      .from(auditLogs)
+      .where(eq(auditLogs.workspaceId, ws));
+    const invoiceAudits = rows.filter((r) => r.action === "billing.invoice.paid");
+    expect(invoiceAudits.length).toBe(1);
+  });
+
+  it("recordProcessedEvent is idempotent (onConflictDoNothing)", async () => {
+    const id = `evt_record_${Date.now()}`;
+    allEventIds.push(id);
+    await recordProcessedEvent(id, "invoice.paid");
+    await recordProcessedEvent(id, "invoice.paid"); // duplicate — no-op
+    const db = getDb();
+    const rows = await db
+      .select({ id: processedWebhookEvents.id })
+      .from(processedWebhookEvents)
+      .where(eq(processedWebhookEvents.stripeEventId, id));
+    expect(rows.length).toBe(1);
+  });
+});

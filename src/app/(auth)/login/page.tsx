@@ -1,20 +1,34 @@
-import Link from "next/link";
-import { Button } from "@/shared/ui/button";
 import { Logo } from "@/shared/components/logo";
+import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
+export const metadata = { title: "Sign in" };
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[]; error?: string | string[] }>;
+}) {
+  const sp = await searchParams;
+  const next = typeof sp.next === "string" ? sp.next : null;
+  const error = sp.error === "auth" ? "The sign-in link was invalid or expired." : null;
+
   return (
     <div className="rounded-lg border border-border bg-card p-8 shadow-sm">
       <div className="flex flex-col items-center text-center">
         <Logo href={null} />
         <h1 className="mt-6 text-xl font-semibold">Sign in to your workspace</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Authentication is wired up in Phase 1. For now, continue into the demo app.
+          Enter your credentials, or use a magic link.
         </p>
       </div>
-      <Button asChild className="mt-6 w-full">
-        <Link href="/dashboard">Continue</Link>
-      </Button>
+      {error ? (
+        <p className="mt-4 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-6">
+        <LoginForm next={next} />
+      </div>
     </div>
   );
 }

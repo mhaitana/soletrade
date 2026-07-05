@@ -11,6 +11,9 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         <nav className="flex items-center gap-2">
           <ThemeToggle />
           <Button asChild variant="ghost" size="sm">
+            <Link href="/pricing">Pricing</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <Link href="/login">Sign in</Link>
           </Button>
           <Button asChild size="sm">

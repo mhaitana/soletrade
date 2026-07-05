@@ -8,6 +8,20 @@
       "when": 1783240696273,
       "tag": "0000_silky_frank_castle",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783246430214,
+      "tag": "0001_careless_speedball",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783248901592,
+      "tag": "0002_smiling_mastermind",
+      "breakpoints": true
     }
   ]
 }

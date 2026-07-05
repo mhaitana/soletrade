@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/server/auth/session";
 import { createWorkspace, listUserWorkspaces, setActiveWorkspaceId } from "@/platform/workspaces";
+import { ensureUserMirror } from "@/platform/users";
 
 const createWorkspaceSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(80, "Name is too long."),
@@ -35,12 +36,22 @@ export async function createWorkspaceAction(input: unknown): Promise<CreateWorks
 
   const user = await requireUser();
   try {
+    // Defensive mirror: guarantee the public.users row exists before the FK on
+    // workspaces.owner_user_id can reference it, regardless of how the session
+    // was established (signup, magic link, or a stale cookie from Phase 1).
+    await ensureUserMirror({ id: user.id, email: user.email });
     const id = await createWorkspace(user.id, parsed.data.name, parsed.data.slug);
     await setActiveWorkspaceId(id);
     revalidatePath("/", "layout");
     return { ok: true, workspaceId: id };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to create workspace.";
+    // drizzle 0.45 wraps DB errors in DrizzleQueryError whose `.message` is
+    // "Failed query: …"; the real Postgres error (e.g. unique_violation) lives
+    // on `.cause.message`. Read both so slug-taken detection actually works.
+    const causeMessage = (err as { cause?: { message?: string } })?.cause?.message;
+    const message =
+      (err instanceof Error ? (causeMessage ?? err.message) : "Failed to create workspace.") ??
+      "Failed to create workspace.";
     return {
       ok: false,
       error: /unique|duplicate/i.test(message) ? "That slug is taken." : message,

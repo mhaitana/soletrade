@@ -30,6 +30,13 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  // Stripe Price object ids (recurring) — created by `pnpm stripe:setup`, pasted
+  // here. Anchor = Pro $29/mo; module positions 0..3 = $15/$13.50/$12.75/$12.00.
+  STRIPE_PRICE_ANCHOR: z.string().optional(),
+  STRIPE_PRICE_MODULE_POS_0: z.string().optional(),
+  STRIPE_PRICE_MODULE_POS_1: z.string().optional(),
+  STRIPE_PRICE_MODULE_POS_2: z.string().optional(),
+  STRIPE_PRICE_MODULE_POS_3: z.string().optional(),
 
   // Email (Resend)
   RESEND_API_KEY: z.string().optional(),

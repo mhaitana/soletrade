@@ -4,12 +4,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { assertModuleEnabled, getInstalledModules } from "@/platform/module-installations";
+import { ensureSubscription } from "@/platform/billing/subscriptions";
 import {
-  assertModuleEnabled,
-  disableModule,
-  enableModule,
-  getInstalledModules,
-} from "@/platform/module-installations";
+  addModuleToSubscription,
+  removeModuleFromSubscription,
+  UpgradeRequiredError,
+} from "@/platform/billing/modules";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 
 const moduleKeySchema = z.enum(MODULE_KEYS);
@@ -17,6 +18,8 @@ const forbid = (msg = "You don't have permission to manage modules.") => ({
   ok: false as const,
   error: msg,
 });
+
+const UPGRADE_MSG = "Upgrade to Pro to enable modules.";
 
 export type EnableModuleResult = { ok: true; moduleKey: ModuleKey } | { ok: false; error: string };
 
@@ -28,10 +31,16 @@ export async function enableModuleAction(input: unknown): Promise<EnableModuleRe
   if (!authorize(ctx.role, "manage:module").ok) return forbid();
 
   try {
-    await enableModule(ctx.workspaceId, parsed.data, ctx.user.id);
+    // Free workspaces can't have paid modules — surface an upgrade prompt instead
+    // of hitting the orchestrator (which would throw UpgradeRequiredError anyway).
+    const sub = await ensureSubscription(ctx.workspaceId);
+    if (sub.tier !== "pro") return { ok: false, error: UPGRADE_MSG };
+
+    await addModuleToSubscription(ctx.workspaceId, parsed.data, ctx.user.id);
     revalidatePath("/", "layout");
     return { ok: true, moduleKey: parsed.data };
   } catch (err) {
+    if (err instanceof UpgradeRequiredError) return { ok: false, error: UPGRADE_MSG };
     return { ok: false, error: err instanceof Error ? err.message : "Failed to enable module." };
   }
 }
@@ -46,7 +55,10 @@ export async function disableModuleAction(input: unknown): Promise<DisableModule
   if (!authorize(ctx.role, "manage:module").ok) return forbid();
 
   try {
-    await disableModule(ctx.workspaceId, parsed.data, ctx.user.id);
+    // Permissive on tier: a Free workspace with a stray legacy module can still
+    // disable it locally. removeModuleFromSubscription removes the Stripe item if
+    // one exists (returns null for legacy rows) and disables the local row.
+    await removeModuleFromSubscription(ctx.workspaceId, parsed.data, ctx.user.id);
     revalidatePath("/", "layout");
     return { ok: true, moduleKey: parsed.data };
   } catch (err) {

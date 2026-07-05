@@ -57,22 +57,36 @@ export async function assertModuleEnabled(workspaceId: WorkspaceId, key: ModuleK
 }
 
 /**
- * Enable a module for a workspace. Phase 1: inserts/upserts the installation row.
- * Phase 3 will add the Stripe subscription item before this row becomes active.
+ * Enable a module for a workspace. Inserts/upserts the installation row. 4b adds
+ * an optional `stripeSubscriptionItemId` — when provided (the 4b orchestrator
+ * path), it is written on insert AND on re-enable (overwriting a stale item id
+ * from a prior cycle). When omitted (legacy/test/seed path), the column is
+ * untouched on re-enable, preserving backward compatibility.
  */
 export async function enableModule(
   workspaceId: WorkspaceId,
   key: ModuleKey,
   actorId: UserId,
+  stripeSubscriptionItemId?: string,
 ): Promise<void> {
   if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
   const db = getDb();
   await db
     .insert(moduleInstallations)
-    .values({ workspaceId, moduleKey: key, status: "active" })
+    .values({
+      workspaceId,
+      moduleKey: key,
+      status: "active",
+      ...(stripeSubscriptionItemId ? { stripeSubscriptionItemId } : {}),
+    })
     .onConflictDoUpdate({
       target: [moduleInstallations.workspaceId, moduleInstallations.moduleKey],
-      set: { status: "active", cancelledAt: null, updatedAt: new Date() },
+      set: {
+        status: "active",
+        cancelledAt: null,
+        updatedAt: new Date(),
+        ...(stripeSubscriptionItemId ? { stripeSubscriptionItemId } : {}),
+      },
     });
   await publishEvent({
     type: "ModuleEnabled",
@@ -92,11 +106,17 @@ export async function enableModule(
   });
 }
 
-/** Disable (cancel) a module. Phase 4 adds the credit/refund engine on top of this. */
+/**
+ * Disable (cancel) a module. `actorId` is optional so the webhook cascade
+ * (`markCanceled` on `subscription.deleted`) can call this with no user actor —
+ * `publishEvent`/`writeAudit` both accept an undefined `actorUserId`. Existing
+ * callers passing `ctx.user.id` are unaffected. The `stripeSubscriptionItemId`
+ * column is NOT nulled (per brief — the row retains the now-deleted item id).
+ */
 export async function disableModule(
   workspaceId: WorkspaceId,
   key: ModuleKey,
-  actorId: UserId,
+  actorId?: UserId,
 ): Promise<void> {
   if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
   const db = getDb();

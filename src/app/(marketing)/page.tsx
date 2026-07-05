@@ -24,12 +24,12 @@ export default function MarketingPage() {
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Button asChild size="lg">
-            <Link href="/login">
+            <Link href="/signup">
               Get started <ArrowRight className="size-4" />
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <Link href="/dashboard">Open the app</Link>
+            <Link href="/login">Sign in</Link>
           </Button>
         </div>
       </section>
