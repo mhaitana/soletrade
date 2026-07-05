@@ -8,6 +8,7 @@ export * from "./module-installations";
 export * from "./activity";
 export * from "./audit";
 export * from "./customers";
+export * from "./invoices";
 export * from "./subscriptions";
 export * from "./credit-ledger";
 export * from "./processed-webhook-events";

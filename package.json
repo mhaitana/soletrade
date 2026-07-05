@@ -22,7 +22,8 @@
     "db:stop": "supabase stop",
     "db:status": "supabase status",
     "db:reset": "supabase db reset && drizzle-kit migrate",
-    "stripe:setup": "tsx scripts/stripe-setup.ts"
+    "stripe:setup": "tsx scripts/stripe-setup.ts",
+    "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.0",

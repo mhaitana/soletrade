@@ -36,6 +36,13 @@
       "when": 1783252394203,
       "tag": "0004_deep_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783253832465,
+      "tag": "0005_light_mister_sinister",
+      "breakpoints": true
     }
   ]
 }

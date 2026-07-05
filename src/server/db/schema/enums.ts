@@ -53,3 +53,17 @@ export const creditEntryTypeEnum = pgEnum("credit_entry_type", [
   "adjustment",
 ]);
 export type CreditEntryType = (typeof creditEntryTypeEnum.enumValues)[number];
+
+/**
+ * Invoice lifecycle (Phase 5). `viewed` is set by the 5b public-page view tracker;
+ * `overdue` is set by the 5b reminder job. Phase 5a only transitions
+ * `draft → sent → paid | void`; `viewed`/`overdue` are unreachable until 5b.
+ */
+export const invoiceStatusEnum = pgEnum("invoice_status", [
+  "draft",
+  "sent",
+  "viewed",
+  "paid",
+  "void",
+]);
+export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number];
