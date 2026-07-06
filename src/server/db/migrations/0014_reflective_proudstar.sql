@@ -1,0 +1,1 @@
+ALTER TABLE "ai_conversations" ADD COLUMN "write_enabled" boolean DEFAULT false NOT NULL;

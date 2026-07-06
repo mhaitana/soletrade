@@ -28,6 +28,8 @@ export interface ConversationMessage {
 }
 
 export interface Conversation extends ConversationSummary {
+  /** Whether write-tools are offered in this conversation (Phase 11d). Default false. */
+  writeEnabled: boolean;
   messages: ConversationMessage[];
 }
 
@@ -67,6 +69,7 @@ export async function getConversation(
     .select({
       id: aiConversations.id,
       title: aiConversations.title,
+      writeEnabled: aiConversations.writeEnabled,
       updatedAt: aiConversations.updatedAt,
     })
     .from(aiConversations)
@@ -94,6 +97,7 @@ export async function getConversation(
   return {
     id: conv.id,
     title: conv.title,
+    writeEnabled: conv.writeEnabled,
     updatedAt: conv.updatedAt,
     messages: msgs.map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
   };
@@ -181,6 +185,32 @@ export async function renameConversation(
   await db
     .update(aiConversations)
     .set({ title, updatedAt: new Date() })
+    .where(
+      and(
+        eq(aiConversations.id, conversationId),
+        eq(aiConversations.workspaceId, workspaceId),
+        eq(aiConversations.userId, userId),
+      ),
+    );
+}
+
+/**
+ * Toggle write-tools for a conversation (Phase 11d). The hard opt-in boundary: write
+ * tools are only offered when this is `true` AND the role holds `manage:R` AND the
+ * module is installed. IDOR-safe ownership filter — a cross-user/cross-workspace id
+ * updates zero rows (no leaking that it belongs to someone else). Bumps `updatedAt`
+ * so the conversation jumps to the top of the sidebar.
+ */
+export async function setConversationWriteEnabled(
+  workspaceId: WorkspaceId,
+  userId: UserId,
+  conversationId: AiConversationId,
+  enabled: boolean,
+): Promise<void> {
+  const db = getDb();
+  await db
+    .update(aiConversations)
+    .set({ writeEnabled: enabled, updatedAt: new Date() })
     .where(
       and(
         eq(aiConversations.id, conversationId),

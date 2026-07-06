@@ -22,6 +22,7 @@ export type DriveEarningId = Brand<string, "DriveEarningId">;
 export type DriveTripId = Brand<string, "DriveTripId">;
 export type FileId = Brand<string, "FileId">;
 export type SubscriptionId = Brand<string, "SubscriptionId">;
+export type NotificationId = Brand<string, "NotificationId">;
 export type CreditLedgerEntryId = Brand<string, "CreditLedgerEntryId">;
 export type AiConversationId = Brand<string, "AiConversationId">;
 export type AiMessageId = Brand<string, "AiMessageId">;

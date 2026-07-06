@@ -11,7 +11,6 @@ import {
   Menu,
   MoreHorizontal,
   Plus,
-  Search,
   Settings,
   ShieldCheck,
   Users,
@@ -21,6 +20,7 @@ import { Button } from "@/shared/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/shared/ui/sheet";
 import { Logo } from "@/shared/components/logo";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
+import { NotificationBell } from "@/shared/components/notification-bell/notification-bell";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
 import { AccountMenu } from "./account-menu";
 import { MODULES, type ModuleKey } from "@/shared/constants/modules";
@@ -34,6 +34,8 @@ export type AppShellProps = {
   activeWorkspaceId: WorkspaceId;
   installedModules: ModuleKey[];
   userEmail: string;
+  /** Initial unread notification count (server-rendered for first-paint badge). */
+  notificationCount: number;
   children: React.ReactNode;
 };
 
@@ -158,6 +160,7 @@ export function AppShell({
   activeWorkspaceId,
   installedModules,
   userEmail,
+  notificationCount,
   children,
 }: AppShellProps) {
   const items = buildNav(installedModules);
@@ -204,14 +207,7 @@ export function AppShell({
           <WorkspaceSwitcher workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
 
           <div className="ml-auto flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Search"
-              className="text-muted-foreground"
-            >
-              <Search className="size-5" aria-hidden />
-            </Button>
+            <NotificationBell initialUnreadCount={notificationCount} />
             <ThemeToggle />
             <AccountMenu userEmail={userEmail} />
           </div>

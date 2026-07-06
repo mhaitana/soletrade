@@ -17,6 +17,7 @@ import {
   quoteDeclinedEmail,
   quoteSentEmail,
 } from "./templates";
+import { createNotification, memberIdsWithPermission } from "./store";
 
 /**
  * Notifications platform (Phase 5c + Phase 8 quotes). Subscribes **cross-module side
@@ -113,6 +114,14 @@ export function registerNotifications(): () => void {
   const u4 = onEvent("QuoteSent", onQuoteSent);
   const u5 = onEvent("QuoteAccepted", onQuoteAccepted);
   const u6 = onEvent("QuoteDeclined", onQuoteDeclined);
+  // In-app bell notifications (Phase 11c) — merchant-facing events get a row per
+  // qualifying member so the bell badge lights up. Best-effort: a DB hiccup is
+  // caught + logged so it can't break the event bus or the email side.
+  const u7 = onEvent("InvoicePaid", onInvoicePaidInApp);
+  const u8 = onEvent("InvoiceOverdue", onInvoiceOverdueInApp);
+  const u9 = onEvent("QuoteAccepted", onQuoteAcceptedInApp);
+  const u10 = onEvent("QuoteDeclined", onQuoteDeclinedInApp);
+  const u11 = onEvent("QuoteExpired", onQuoteExpiredInApp);
   return () => {
     u1();
     u2();
@@ -120,5 +129,106 @@ export function registerNotifications(): () => void {
     u4();
     u5();
     u6();
+    u7();
+    u8();
+    u9();
+    u10();
+    u11();
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// In-app bell notifications (Phase 11c). Customer-facing events stay email-only;
+// these merchant-facing events fan out one `notifications` row per active member
+// who holds `view:R` for the resource. The bell + `/notifications` page read them.
+// All handlers are best-effort: a thrown error is caught so the bus isolates it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function money(cents: number, currency: string): string {
+  return `${currency} ${(cents / 100).toFixed(2)}`;
+}
+
+/** Fan out an in-app notification to every qualifying member. Swallows errors. */
+async function fanOutInApp(
+  event: BusEvent,
+  permission: import("@/platform/permissions").Permission,
+  build: () => { type: string; title: string; body?: string } | null,
+): Promise<void> {
+  try {
+    const built = build();
+    if (!built) return;
+    const recipients = await memberIdsWithPermission(event.workspaceId, permission);
+    if (recipients.length === 0) return;
+    await Promise.all(
+      recipients.map((userId) =>
+        createNotification({
+          workspaceId: event.workspaceId,
+          userId,
+          type: built.type,
+          title: built.title,
+          body: built.body,
+          entityType: event.entityType,
+          entityId: event.entityId,
+        }),
+      ),
+    );
+  } catch (err) {
+    console.warn(`In-app notification fan-out failed for ${event.type}:`, err);
+  }
+}
+
+/** "Invoice paid" — merchant bell row. */
+async function onInvoicePaidInApp(event: BusEvent): Promise<void> {
+  const m = coerceInvoiceEmailMeta(event.metadata);
+  if (!m) return;
+  await fanOutInApp(event, "view:invoice", () => ({
+    type: "invoice.paid",
+    title: `Invoice ${m.number} paid`,
+    body: `${money(m.totalCents, m.currency)}${m.customerName ? ` from ${m.customerName}` : ""}`,
+  }));
+}
+
+/** "Invoice overdue" — merchant bell row. */
+async function onInvoiceOverdueInApp(event: BusEvent): Promise<void> {
+  const m = coerceInvoiceEmailMeta(event.metadata);
+  if (!m) return;
+  await fanOutInApp(event, "view:invoice", () => ({
+    type: "invoice.overdue",
+    title: `Invoice ${m.number} is overdue`,
+    body: `${money(m.totalCents, m.currency)}${m.customerName ? ` from ${m.customerName}` : ""}`,
+  }));
+}
+
+/** "Quote accepted" — merchant bell row. */
+async function onQuoteAcceptedInApp(event: BusEvent): Promise<void> {
+  const m = coerceQuoteMerchantMeta(event.metadata);
+  if (!m) return;
+  await fanOutInApp(event, "view:quote", () => ({
+    type: "quote.accepted",
+    title: `Quote ${m.number} accepted`,
+    body: `${money(m.totalCents, m.currency)}${m.customerName ? ` from ${m.customerName}` : ""}`,
+  }));
+}
+
+/** "Quote declined" — merchant bell row. */
+async function onQuoteDeclinedInApp(event: BusEvent): Promise<void> {
+  const m = coerceQuoteMerchantMeta(event.metadata);
+  if (!m) return;
+  await fanOutInApp(event, "view:quote", () => ({
+    type: "quote.declined",
+    title: `Quote ${m.number} declined`,
+    body: m.customerName ? `from ${m.customerName}` : undefined,
+  }));
+}
+
+/** "Quote expired" — merchant bell row. Metadata carries only `number`. */
+async function onQuoteExpiredInApp(event: BusEvent): Promise<void> {
+  const number =
+    event.metadata && typeof event.metadata.number === "string" ? event.metadata.number : null;
+  if (!number) return;
+  await fanOutInApp(event, "view:quote", () => ({
+    type: "quote.expired",
+    title: `Quote ${number} expired`,
+    body: "This quote passed its valid-until date without being accepted.",
+  }));
 }

@@ -52,16 +52,30 @@ async function clientIp(): Promise<string> {
 
 const SYSTEM_DATE = new Date().toISOString().slice(0, 10);
 
-/** Build the system prompt from the resolved context + installed modules. */
-function buildSystemPrompt(role: string, installedModules: readonly string[]): string {
-  return [
+/** Build the system prompt from the resolved context + installed modules + write toggle. */
+function buildSystemPrompt(
+  role: string,
+  installedModules: readonly string[],
+  writeEnabled: boolean,
+): string {
+  const lines = [
     "You are the soletrade labs assistant, an AI helper inside a small-business SaaS workspace.",
     "You answer questions about the user's business by calling read-only tools — never invent numbers.",
     "Money is integer cents in the workspace currency (AUD). When displaying money, format as $X.XX.",
     "Keep answers concise and grounded in tool output. If a tool returns null/empty, say so plainly.",
     `The user's role is "${role}". Installed modules: ${installedModules.length ? installedModules.join(", ") : "none"}.`,
     `Today is ${SYSTEM_DATE}.`,
-  ].join("\n");
+  ];
+  if (writeEnabled) {
+    lines.push(
+      "",
+      "WRITE TOOLS ARE ENABLED for this conversation. You may create customers, invoices, quotes, and transactions.",
+      "SAFETY RULE (must follow every time): before calling a write tool, state exactly what you will create — the entity type, customer (if any), line items or amount, and the total in $X.XX — then ask the user to confirm. Only call the write tool AFTER the user explicitly approves.",
+      "If the user has not yet confirmed, do NOT call a write tool. Summarise the proposed action and wait. If the user asks to change something, restate the updated proposal and ask again.",
+      "After a successful create, tell the user the new id/number and where to find it (e.g. /invoices).",
+    );
+  }
+  return lines.join("\n");
 }
 
 /** Map persisted conversation messages to AI SDK `UIMessage`s for the model call. */
@@ -149,7 +163,8 @@ export async function POST(request: Request): Promise<Response> {
 
   // 7. Installed modules + system prompt + tools.
   const installedModules = await getInstalledModules(ctx.workspaceId);
-  const system = buildSystemPrompt(ctx.role, installedModules);
+  const writeEnabled = conversation.writeEnabled;
+  const system = buildSystemPrompt(ctx.role, installedModules, writeEnabled);
   const conversationIdStr = conversationId as string;
 
   // 8. Mock provider — canned reply from real workspace data (no model/key).
@@ -163,7 +178,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // 9. Real provider — streamText tool-calling loop; persist the assistant turn on finish.
-  const tools = buildAssistantTools(ctx, installedModules);
+  const tools = buildAssistantTools(ctx, installedModules, { writeEnabled });
   const persistCtx: WorkspaceContext = ctx;
   return streamAssistant({
     model: getAIModel(),

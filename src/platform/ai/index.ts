@@ -7,6 +7,7 @@ export {
   appendMessage,
   deleteConversation,
   renameConversation,
+  setConversationWriteEnabled,
   type ConversationSummary,
   type ConversationMessage,
   type Conversation,

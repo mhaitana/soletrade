@@ -3,14 +3,16 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { authorize, type Permission } from "@/platform/permissions";
 import type { WorkspaceContext } from "@/platform/context";
-import { listCustomers } from "@/platform/customers";
+import { createCustomer, listCustomers } from "@/platform/customers";
+import { writeAudit } from "@/platform/audit";
 import { listActivity } from "@/platform/activity";
-import { listInvoices, summarizeInvoices } from "@/modules/invoices";
-import { listQuotes, summarizeQuotes } from "@/modules/quotes";
-import { listTransactions, summarizeTransactions } from "@/modules/books";
+import { createInvoice, listInvoices, summarizeInvoices } from "@/modules/invoices";
+import { createQuote, listQuotes, summarizeQuotes } from "@/modules/quotes";
+import { createTransaction, listTransactions, summarizeTransactions } from "@/modules/books";
 import { listEarnings } from "@/modules/drive";
 import type { ModuleKey } from "@/shared/constants/modules";
 import { periodRange } from "@/shared/utils/periods";
+import { branded } from "@/shared/types/ids";
 
 /**
  * Workspace-aware read-only tools for the AI assistant (Phase 10). This is the
@@ -116,14 +118,24 @@ export async function computeWorkspaceOverview(
  * Only permitted, installed tools are included — the record may be empty for
  * a fresh workspace with no modules (the model then answers from the system
  * prompt alone, or via `getWorkspaceOverview` which is always offered).
+ *
+ * Write tools (Phase 11d) are offered ONLY when `opts.writeEnabled` is true — the
+ * per-conversation opt-in flag is the hard safety boundary. Even then each write
+ * tool is fail-closed on `manage:R` + module-install, and `execute` re-checks
+ * `manage:R` (defense in depth — the closure could be stale if the flag toggled).
+ * The system prompt instructs the model to state exactly what it will create and
+ * ask the user to confirm before calling a write tool (human-in-the-loop via
+ * turn-taking, persisted in `ai_messages`).
  */
 export function buildAssistantTools(
   ctx: WorkspaceContext,
   installedModules: readonly ModuleKey[],
+  opts: { writeEnabled?: boolean } = {},
 ): ToolSet {
-  const { workspaceId, role } = ctx;
+  const { workspaceId, role, user } = ctx;
   const can = (perm: Permission) => authorize(role, perm).ok;
   const hasModule = (key: ModuleKey) => installedModules.includes(key);
+  const writeEnabled = opts.writeEnabled === true;
 
   const tools: ToolSet = {};
 
@@ -330,6 +342,200 @@ export function buildAssistantTools(
         }));
       },
     });
+  }
+
+  // ── Write tools (Phase 11d) ───────────────────────────────────────────────
+  // Offered ONLY when the per-conversation `writeEnabled` flag is on. Each is
+  // fail-closed on `manage:R` + module-install, and `execute` re-checks `manage:R`
+  // (defense in depth). The services already `publishEvent` + `writeAudit` (invoices,
+  // quotes, books); `createCustomer` is platform-level + event-only, so the tool
+  // wraps it with `writeAudit` to keep customer creates auditable. Each returns a
+  // trimmed confirmation ({ id, number? }) — never the full row.
+  if (writeEnabled) {
+    // 8. createCustomer — platform service, not module-gated. Needs manage:customer.
+    if (can("manage:customer")) {
+      tools.createCustomer = tool({
+        description:
+          "Create a new customer in the workspace. Use after the user confirms. Returns the new customer id. Required: name. Optional: email, phone, company, notes.",
+        inputSchema: z.object({
+          name: z.string().min(1).max(200).describe("Customer display name."),
+          email: z.string().email().optional().describe("Optional contact email."),
+          phone: z.string().max(50).optional().describe("Optional phone number."),
+          company: z.string().max(200).optional().describe("Optional company name."),
+          notes: z.string().max(2000).optional().describe("Optional free-form notes."),
+        }),
+        execute: async (input) => {
+          // Re-check the gate inside execute (defense in depth).
+          if (!authorize(role, "manage:customer").ok) {
+            return { error: "You don't have permission to create customers." };
+          }
+          const id = await createCustomer(workspaceId, input, user.id);
+          // createCustomer is event-only (no audit) — audit it here so AI-created
+          // customers are traceable, mirroring the invoice/quote/books services.
+          await writeAudit({
+            workspaceId,
+            actorUserId: user.id,
+            action: "customer.create",
+            targetType: "customer",
+            targetId: id,
+            metadata: { source: "ai_assistant", name: input.name },
+          });
+          return { id, name: input.name };
+        },
+      });
+    }
+
+    // 9. createInvoice — module-gated. Needs manage:invoice.
+    if (hasModule("invoices") && can("manage:invoice")) {
+      tools.createInvoice = tool({
+        description:
+          "Create a draft invoice in the workspace. Use after the user confirms the line items + totals. Returns the new invoice id + number. Required: issueDate (ISO), taxRate (integer percent, 10 = 10%), lineItems (≥1). Optional: customerId (uuid), dueDate (ISO), currency, notes.",
+        inputSchema: z.object({
+          customerId: z.string().uuid().optional().describe("Optional customer id."),
+          issueDate: z.string().datetime().describe("Issue date (ISO 8601)."),
+          dueDate: z.string().datetime().optional().describe("Optional due date (ISO 8601)."),
+          currency: z.string().length(3).optional().describe("ISO 4217 code, e.g. AUD."),
+          taxRate: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .describe("Tax as integer percent (10 = 10% GST)."),
+          notes: z.string().max(2000).optional().describe("Optional invoice notes."),
+          lineItems: z
+            .array(
+              z.object({
+                description: z.string().min(1).max(500),
+                quantity: z.number().int().min(1),
+                unitPriceCents: z.number().int().min(0),
+              }),
+            )
+            .min(1)
+            .describe("Line items (at least one)."),
+        }),
+        execute: async (input) => {
+          if (!authorize(role, "manage:invoice").ok) {
+            return { error: "You don't have permission to create invoices." };
+          }
+          const id = await createInvoice(
+            workspaceId,
+            {
+              customerId: input.customerId ? branded<"CustomerId">(input.customerId) : null,
+              issueDate: new Date(input.issueDate),
+              dueDate: input.dueDate ? new Date(input.dueDate) : null,
+              currency: input.currency,
+              taxRate: input.taxRate,
+              notes: input.notes ?? null,
+              lineItems: input.lineItems.map((li) => ({
+                description: li.description,
+                quantity: li.quantity,
+                unitPriceCents: li.unitPriceCents,
+              })),
+            },
+            user.id,
+          );
+          return { id };
+        },
+      });
+    }
+
+    // 10. createQuote — module-gated. Needs manage:quote.
+    if (hasModule("quotes") && can("manage:quote")) {
+      tools.createQuote = tool({
+        description:
+          "Create a draft quote in the workspace. Use after the user confirms the line items + totals. Returns the new quote id. Required: issueDate (ISO), taxRate (integer percent), lineItems (≥1). Optional: customerId (uuid), validUntil (ISO), currency, notes.",
+        inputSchema: z.object({
+          customerId: z.string().uuid().optional().describe("Optional customer id."),
+          issueDate: z.string().datetime().describe("Issue date (ISO 8601)."),
+          validUntil: z
+            .string()
+            .datetime()
+            .optional()
+            .describe("Optional validity expiry (ISO 8601)."),
+          currency: z.string().length(3).optional().describe("ISO 4217 code, e.g. AUD."),
+          taxRate: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .describe("Tax as integer percent (10 = 10% GST)."),
+          notes: z.string().max(2000).optional().describe("Optional quote notes."),
+          lineItems: z
+            .array(
+              z.object({
+                description: z.string().min(1).max(500),
+                quantity: z.number().int().min(1),
+                unitPriceCents: z.number().int().min(0),
+              }),
+            )
+            .min(1)
+            .describe("Line items (at least one)."),
+        }),
+        execute: async (input) => {
+          if (!authorize(role, "manage:quote").ok) {
+            return { error: "You don't have permission to create quotes." };
+          }
+          const id = await createQuote(
+            workspaceId,
+            {
+              customerId: input.customerId ? branded<"CustomerId">(input.customerId) : null,
+              issueDate: new Date(input.issueDate),
+              validUntil: input.validUntil ? new Date(input.validUntil) : null,
+              currency: input.currency,
+              taxRate: input.taxRate,
+              notes: input.notes ?? null,
+              lineItems: input.lineItems.map((li) => ({
+                description: li.description,
+                quantity: li.quantity,
+                unitPriceCents: li.unitPriceCents,
+              })),
+            },
+            user.id,
+          );
+          return { id };
+        },
+      });
+    }
+
+    // 11. createTransaction — module-gated (Books). Needs manage:books.
+    if (hasModule("books") && can("manage:books")) {
+      tools.createTransaction = tool({
+        description:
+          "Create a Books transaction (income or expense) in the workspace. Use after the user confirms. Returns the new transaction id. Required: type (income|expense), amountCents (positive integer), date (ISO), description, category (slug matching the type). Optional: customerId (uuid), notes.",
+        inputSchema: z.object({
+          type: z.enum(["income", "expense"]).describe("Transaction type."),
+          amountCents: z.number().int().min(1).describe("Amount in integer cents (positive)."),
+          date: z.string().datetime().describe("Transaction date (ISO 8601)."),
+          description: z.string().min(1).max(500).describe("Short description."),
+          category: z
+            .string()
+            .min(1)
+            .max(50)
+            .describe("Category slug (must match the type's catalog)."),
+          customerId: z.string().uuid().optional().describe("Optional linked customer id."),
+          notes: z.string().max(2000).optional().describe("Optional notes."),
+        }),
+        execute: async (input) => {
+          if (!authorize(role, "manage:books").ok) {
+            return { error: "You don't have permission to create transactions." };
+          }
+          const id = await createTransaction(
+            workspaceId,
+            {
+              type: input.type,
+              amountCents: input.amountCents,
+              date: new Date(input.date),
+              description: input.description,
+              category: input.category,
+              customerId: input.customerId ? branded<"CustomerId">(input.customerId) : null,
+              notes: input.notes ?? null,
+            },
+            user.id,
+          );
+          return { id };
+        },
+      });
+    }
   }
 
   return tools as ToolSet;

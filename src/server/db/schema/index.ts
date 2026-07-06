@@ -13,6 +13,7 @@ export * from "./quotes";
 export * from "./books";
 export * from "./drive";
 export * from "./files";
+export * from "./notifications";
 export * from "./subscriptions";
 export * from "./credit-ledger";
 export * from "./ai";

@@ -18,6 +18,7 @@ import {
   getConversation,
   listConversations,
   renameConversation,
+  setConversationWriteEnabled,
 } from "@/platform/ai";
 
 /**
@@ -167,5 +168,24 @@ describe.skipIf(!HAS_DB)("ai conversations integration (requires DATABASE_URL)",
     await renameConversation(ws1!, otherActor, id, "Hijacked");
     const conv2 = await getConversation(ws1!, actor, id);
     expect(conv2!.title).toBe("New title");
+  });
+
+  it("setConversationWriteEnabled toggles the flag (owner only, IDOR-safe)", async () => {
+    const id = await createConversation(ws1!, actor, "Write chat");
+    createdConversationIds.push(id);
+    // New conversations default to writeEnabled = false.
+    const before = await getConversation(ws1!, actor, id);
+    expect(before!.writeEnabled).toBe(false);
+    // Owner can opt in.
+    await setConversationWriteEnabled(ws1!, actor, id, true);
+    const after = await getConversation(ws1!, actor, id);
+    expect(after!.writeEnabled).toBe(true);
+    // A toggle by another user is a filtered no-op (the owner's flag is preserved).
+    await setConversationWriteEnabled(ws1!, otherActor, id, false);
+    const after2 = await getConversation(ws1!, actor, id);
+    expect(after2!.writeEnabled).toBe(true);
+    // Owner can opt back out.
+    await setConversationWriteEnabled(ws1!, actor, id, false);
+    expect((await getConversation(ws1!, actor, id))!.writeEnabled).toBe(false);
   });
 });

@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Bot, Plus, Send, Square, Trash2 } from "lucide-react";
+import { Bot, Plus, Send, Square, Trash2, Zap } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { cn } from "@/shared/lib/utils";
-import { deleteConversationAction, type AssistantPageData } from "./actions";
+import { deleteConversationAction, setWriteEnabledAction, type AssistantPageData } from "./actions";
 
 /**
  * AI assistant chat client (Phase 10). Uses the AI SDK v5 `useChat` hook with a
@@ -56,6 +56,12 @@ export function AssistantChat({
   const [conversationId, setConversationId] = useState<string | null>(initialId);
   const [input, setInput] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // Write-tools opt-in (Phase 11d). Seeded from the server-loaded conversation; the
+  // hard boundary is the `write_enabled` DB flag, toggled via `setWriteEnabledAction`.
+  const [writeEnabled, setWriteEnabled] = useState<boolean>(
+    activeConversation?.writeEnabled ?? false,
+  );
+  const [writeToggling, setWriteToggling] = useState(false);
 
   // Initial messages from the server-loaded conversation. `useState` lazy init runs once
   // (the component remounts via `key={c}` when switching conversations, re-running this).
@@ -122,8 +128,26 @@ export function AssistantChat({
     }
   }
 
+  async function toggleWrite(next: boolean): Promise<void> {
+    // Write-tools need a persisted conversation (created on first send). Before that,
+    // the toggle is disabled in the UI; this guard is defense-in-depth.
+    const id = conversationId ?? initialId;
+    if (!id) return;
+    setWriteToggling(true);
+    setWriteEnabled(next); // optimistic
+    try {
+      const res = await setWriteEnabledAction({ conversationId: id, enabled: next });
+      if (!res.ok) setWriteEnabled(!next); // roll back on failure
+    } catch {
+      setWriteEnabled(!next);
+    } finally {
+      setWriteToggling(false);
+    }
+  }
+
   const activeId = conversationId ?? initialId;
   const hasMessages = messages.length > 0;
+  const canToggleWrite = Boolean(activeId); // needs a persisted conversation
 
   return (
     <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -183,6 +207,31 @@ export function AssistantChat({
           <header className="flex items-center gap-2 border-b px-4 py-3">
             <Bot className="size-5 text-primary" aria-hidden />
             <h1 className="text-sm font-semibold">soletrade labs assistant</h1>
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={writeEnabled}
+                disabled={!canToggleWrite || writeToggling || busy}
+                onClick={() => void toggleWrite(!writeEnabled)}
+                title={
+                  canToggleWrite
+                    ? writeEnabled
+                      ? "Write tools on — assistant will ask before creating anything"
+                      : "Allow the assistant to create customers, invoices, quotes, transactions"
+                    : "Send a message first to enable write tools"
+                }
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                  writeEnabled
+                    ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                    : "border-border text-muted-foreground hover:bg-muted/40",
+                )}
+              >
+                <Zap className="size-3.5" aria-hidden />
+                <span>{writeEnabled ? "Write tools on" : "Write tools off"}</span>
+              </button>
+            </div>
           </header>
 
           {/* Messages */}
@@ -272,6 +321,9 @@ export function AssistantChat({
         <p className="mt-2 px-1 text-xs text-muted-foreground">
           The assistant uses read-only access to your workspace data. Verify important figures in
           the relevant module.{" "}
+          {writeEnabled
+            ? "Write tools are on — the assistant will ask for confirmation before creating anything. "
+            : ""}
           {activeConversation ? `Started ${formatDate(activeConversation.updatedAt)}.` : ""}
         </p>
       </section>

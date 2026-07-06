@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AiConversationId, AiMessageId, UserId, WorkspaceId } from "@/shared/types/ids";
 import { workspaces } from "./workspaces";
 import { users } from "./users";
@@ -28,6 +28,13 @@ export const aiConversations = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** Short label for the sidebar. Default until the first exchange suggests a title. */
     title: text("title").notNull().default("New conversation"),
+    /**
+     * Per-conversation write-tools opt-in (Phase 11d). Default off — write tools are
+     * never offered unless the user explicitly toggles this on for the conversation.
+     * The hard safety boundary: even with this on, each write tool is still gated by
+     * `manage:R` + module-install + a re-check inside `execute`.
+     */
+    writeEnabled: boolean("write_enabled").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

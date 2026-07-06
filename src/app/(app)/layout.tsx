@@ -5,6 +5,7 @@ import { requireWorkspaceContext } from "@/platform/context";
 export const dynamic = "force-dynamic";
 import { listUserWorkspaces } from "@/platform/workspaces";
 import { getInstalledModules } from "@/platform/module-installations";
+import { unreadCount } from "@/platform/notifications/store";
 import { AppShell } from "@/shared/components/app-shell/app-shell";
 import type { ModuleKey } from "@/shared/constants/modules";
 import type { WorkspaceId } from "@/shared/types/ids";
@@ -12,9 +13,11 @@ import type { WorkspaceRole } from "@/server/db/schema/enums";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireWorkspaceContext();
-  const [workspaces, installedModules] = await Promise.all([
+  const [workspaces, installedModules, notificationCount] = await Promise.all([
     listUserWorkspaces(ctx.user.id),
     getInstalledModules(ctx.workspaceId),
+    // Best-effort: a DB hiccup shouldn't break the shell render.
+    unreadCount(ctx.workspaceId, ctx.user.id).catch(() => 0),
   ]);
 
   return (
@@ -28,6 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       activeWorkspaceId={ctx.workspaceId}
       installedModules={installedModules as ModuleKey[]}
       userEmail={ctx.user.email}
+      notificationCount={notificationCount}
     >
       {children}
     </AppShell>

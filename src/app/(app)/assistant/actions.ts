@@ -1,11 +1,13 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { requireWorkspaceContext } from "@/platform/context";
 import {
   deleteConversation,
   getConversation,
   listConversations,
+  setConversationWriteEnabled,
   type Conversation,
   type ConversationSummary,
 } from "@/platform/ai";
@@ -54,4 +56,32 @@ export async function deleteConversationAction(input: unknown): Promise<DeleteCo
     branded<"AiConversationId">(parsed.data.conversationId),
   );
   return { ok: true };
+}
+
+const writeEnabledSchema = z.object({
+  conversationId: z.string().uuid(),
+  enabled: z.boolean(),
+});
+
+export type SetWriteEnabledResult = { ok: true; enabled: boolean } | { ok: false; error: string };
+
+/**
+ * Toggle write-tools for a conversation (Phase 11d). The hard opt-in boundary: write
+ * tools are only offered when this is on. IDOR-safe — `setConversationWriteEnabled`
+ * filters by workspace + user, so a cross-user id is a no-op. Revalidates `/assistant`
+ * so the toggle reflects immediately. No-op (returns ok with current state) when the
+ * conversation doesn't exist for this user — the UI treats it as a fresh conversation.
+ */
+export async function setWriteEnabledAction(input: unknown): Promise<SetWriteEnabledResult> {
+  const ctx = await requireWorkspaceContext();
+  const parsed = writeEnabledSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+  await setConversationWriteEnabled(
+    ctx.workspaceId,
+    ctx.user.id,
+    branded<"AiConversationId">(parsed.data.conversationId),
+    parsed.data.enabled,
+  );
+  revalidatePath("/assistant");
+  return { ok: true, enabled: parsed.data.enabled };
 }

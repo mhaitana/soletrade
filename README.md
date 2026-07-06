@@ -112,10 +112,11 @@ and billing foundations are stable.
 - [x] Phase 1 — Core platform (auth, workspaces, permissions, app shell, module model)
 - [x] Phase 2 — Shared customers (schema, service, UI, integration tests)
 - [x] Phase 3 — Activity feed (event-sourced read side, dashboard + /activity UI)
-- [ ] Phase 4 — Billing foundation (pricing engine, credit ledger, Stripe)
-- [ ] Phases 5–8 — Invoices, Books, Drive, Quotes
-- [ ] Phase 9 — Unified dashboard & cross-module workflows
-- [ ] Phase 10–12 — AI, notifications, hardening
+- [x] Phase 4 — Billing foundation (pricing engine, credit ledger, Stripe)
+- [x] Phases 5–8 — Invoices, Books, Drive, Quotes
+- [x] Phase 9 — Unified dashboard & cross-module workflows
+- [x] Phase 10 — AI assistant (read-only, workspace-scoped, persisted conversations)
+- [x] Phase 11 — Hardening + Files/Receipts + in-app notifications + AI write-tools
 
 Local Supabase + the integration test harness are wired (see "Local database &
 integration tests" above).
