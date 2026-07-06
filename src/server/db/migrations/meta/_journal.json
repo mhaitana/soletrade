@@ -85,6 +85,13 @@
       "when": 1783292612008,
       "tag": "0011_cold_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783306942988,
+      "tag": "0012_damp_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

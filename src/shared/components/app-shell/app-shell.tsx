@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Settings,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -52,6 +53,7 @@ function buildNav(installedModules: ModuleKey[]): NavItem[] {
     { href: "/customers", label: "Customers", icon: Users },
     { href: "/files", label: "Files", icon: FileText },
     { href: "/activity", label: "Activity", icon: Activity },
+    { href: "/audit", label: "Audit log", icon: ShieldCheck },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/settings", label: "Settings", icon: Settings },
   ];

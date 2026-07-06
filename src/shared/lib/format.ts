@@ -21,3 +21,18 @@ export function formatRelativeTime(date: Date, now: Date = new Date()): string {
   // Beyond a week, render an absolute date so the timeline stays unambiguous.
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+
+/**
+ * Format a byte count as a compact human string (1023 B, 12.3 KB, 4.5 MB, …).
+ * Binary units (KB = 1024 bytes) — the convention file managers use. The
+ * `tabular-nums` CSS class on the surrounding element keeps the digits aligned.
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb >= 100 ? Math.round(kb) : kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb >= 100 ? Math.round(mb) : mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb >= 100 ? Math.round(gb) : gb.toFixed(1)} GB`;
+}

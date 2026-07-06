@@ -75,6 +75,18 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
   OPENAI_MODEL: z.string().default("gpt-4o"),
+
+  // Rate limiting (Phase 11a). When both Upstash REST creds are set, the rate
+  // limiter uses @upstash/ratelimit (shared across serverless replicas). When
+  // unset, it falls back to the in-memory fixed-window counter (dev/test only —
+  // per-instance, unsafe across replicas).
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
+  // Supabase Storage bucket for the Files platform (Phase 11b). The bucket must
+  // exist in your Supabase project; the server uses the service-role key so RLS
+  // is defense-in-depth (workspace scoping is enforced in code, not at Storage).
+  SUPABASE_STORAGE_BUCKET: z.string().default("files"),
 });
 
 export type Env = z.infer<typeof envSchema>;

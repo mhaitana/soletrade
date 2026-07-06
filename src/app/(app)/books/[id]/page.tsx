@@ -7,6 +7,7 @@ import { formatDate } from "@/shared/utils/format-date";
 import { categoryLabel } from "@/shared/constants/books-categories";
 import { loadTransaction } from "../actions";
 import { BookDetailActions } from "../book-detail-actions";
+import { ReceiptLink } from "./receipt-link";
 import type { BookType } from "@/server/db/schema/enums";
 
 export const metadata = { title: "Transaction" };
@@ -84,6 +85,15 @@ export default async function TransactionDetailPage({
         <div className="rounded-md border border-border p-4">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
           <p className="mt-1 text-sm whitespace-pre-wrap">{tx.notes}</p>
+        </div>
+      ) : null}
+
+      {tx.receiptFileId ? (
+        <div className="rounded-md border border-border p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Receipt</p>
+          <div className="mt-2">
+            <ReceiptLink fileId={tx.receiptFileId} />
+          </div>
         </div>
       ) : null}
     </div>

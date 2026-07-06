@@ -33,7 +33,7 @@ export async function createInvoicePaymentIntentAction(
 
   const h = await headers();
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
-  if (!rateLimit(`pi:${ip}`, { max: 10, windowMs: 60_000 })) {
+  if (!(await rateLimit(`pi:${ip}`, { max: 10, windowMs: 60_000 }))) {
     return { ok: false, error: "Too many attempts. Please try again shortly." };
   }
 

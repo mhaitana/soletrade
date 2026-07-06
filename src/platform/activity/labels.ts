@@ -26,6 +26,7 @@ export const ACTIVITY_LABELS: Record<string, ActivityLabel> = {
   CustomerDeleted: { label: "deleted a customer", tone: "danger" },
   MemberInvited: { label: "invited a member", tone: "info" },
   MemberAdded: { label: "added a member", tone: "positive" },
+  MemberRoleChanged: { label: "changed a member's role", tone: "warning" },
   QuoteSent: { label: "sent a quote", tone: "info" },
   QuoteViewed: { label: "viewed a quote", tone: "neutral" },
   QuoteAccepted: { label: "accepted a quote", tone: "positive" },

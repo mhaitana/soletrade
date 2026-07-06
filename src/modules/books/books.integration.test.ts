@@ -330,4 +330,38 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     const refused = await deleteTransaction(ws2!, createdTxIds[0]!, otherActor);
     expect(refused).toBe(false);
   });
+
+  it("persists receiptFileId and fires ReceiptUploaded on create-with-receipt", async () => {
+    const receiptFileId = branded<"FileId">("00000000-0000-4000-8000-0000000000e3");
+    let seen = false;
+    const off = onEvent("ReceiptUploaded", (e) => {
+      if (e.workspaceId === ws1 && e.entityId === receiptFileId) seen = true;
+    });
+    try {
+      const id = await createTransaction(
+        ws1!,
+        {
+          type: "expense",
+          amountCents: 2500,
+          date: new Date("2026-03-05"),
+          description: "Lunch with client",
+          category: "other_expense",
+          receiptFileId,
+        },
+        actor,
+      );
+      createdTxIds.push(id);
+
+      const tx = await getTransaction(ws1!, id);
+      expect(tx!.receiptFileId).toBe(receiptFileId);
+      expect(seen).toBe(true);
+
+      // Update can clear the receipt link (null patch).
+      await updateTransaction(ws1!, id, { receiptFileId: null }, actor);
+      const cleared = await getTransaction(ws1!, id);
+      expect(cleared!.receiptFileId).toBeNull();
+    } finally {
+      off();
+    }
+  });
 });

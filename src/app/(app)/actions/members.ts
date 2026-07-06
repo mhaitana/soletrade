@@ -9,6 +9,7 @@ import {
   listMembers,
   listPendingInvitations,
   removeMember,
+  updateMemberRole,
 } from "@/platform/members";
 import type { WorkspaceRole } from "@/server/db/schema/enums";
 import { branded } from "@/shared/types/ids";
@@ -61,6 +62,34 @@ const removeSchema = z.object({ userId: z.string().uuid() });
 
 export type RemoveMemberResult = { ok: true } | { ok: false; error: string };
 
+const changeRoleSchema = z.object({
+  userId: z.string().uuid(),
+  role: z.enum(INVITABLE_ROLES),
+});
+
+export type ChangeRoleResult = { ok: true } | { ok: false; error: string };
+
+export async function updateMemberRoleAction(input: unknown): Promise<ChangeRoleResult> {
+  const parsed = changeRoleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  const ctx = await requireWorkspaceContext();
+  if (!authorize(ctx.role, "manage:member").ok) return forbid();
+
+  try {
+    await updateMemberRole(
+      ctx.workspaceId,
+      branded<"UserId">(parsed.data.userId),
+      parsed.data.role,
+      ctx.user.id,
+    );
+    revalidatePath("/settings/members");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to change role." };
+  }
+}
+
 export async function removeMemberAction(input: unknown): Promise<RemoveMemberResult> {
   const parsed = removeSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid user." };
@@ -91,6 +120,10 @@ export type MembersPageData = {
   }[];
   canInvite: boolean;
   canManage: boolean;
+  /** Signed-in user's id — so the UI can disable self role-edit. */
+  currentUserId: string;
+  /** Workspace owner's id — so the UI can show the owner row as non-changeable. */
+  ownerId: string | null;
 };
 
 /** Server-only data loader for the members page (not a mutation). */
@@ -102,9 +135,14 @@ export async function loadMembersPage(): Promise<MembersPageData> {
   ]);
   const canInvite = authorize(ctx.role, "invite:member").ok;
   const canManage = authorize(ctx.role, "manage:member").ok;
+  // The owner is the member whose role === "owner" (one per workspace). The
+  // members list already filters to active rows, so this is reliable.
+  const owner = members.find((m) => m.role === "owner");
   return {
     canInvite,
     canManage,
+    currentUserId: ctx.user.id,
+    ownerId: owner?.userId ?? null,
     members: members.map((m) => ({
       userId: m.userId,
       role: m.role,

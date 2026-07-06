@@ -36,6 +36,7 @@ const createSchema = z
     category: z.string().trim().min(1, "Category is required."),
     customerId: z.string().uuid().nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
+    receiptFileId: z.string().uuid().nullable().optional(),
   })
   .refine((v) => isBookCategory(v.type, v.category), {
     message: "Pick a category for this transaction type.",
@@ -69,6 +70,7 @@ export async function createTransactionAction(input: unknown): Promise<CreateTra
     category: d.category,
     customerId: d.customerId ? branded<"CustomerId">(d.customerId) : null,
     notes: d.notes ?? null,
+    receiptFileId: d.receiptFileId ? branded<"FileId">(d.receiptFileId) : null,
   };
 
   try {
@@ -92,6 +94,7 @@ const updateSchema = z
     category: z.string().trim().min(1, "Category is required."),
     customerId: z.string().uuid().nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
+    receiptFileId: z.string().uuid().nullable().optional(),
   })
   .refine((v) => isBookCategory(v.type, v.category), {
     message: "Pick a category for this transaction type.",
@@ -128,6 +131,11 @@ export async function updateTransactionAction(input: unknown): Promise<UpdateTra
         category: rest.category,
         customerId: rest.customerId ? branded<"CustomerId">(rest.customerId) : null,
         notes: rest.notes ?? null,
+        receiptFileId: rest.receiptFileId
+          ? branded<"FileId">(rest.receiptFileId)
+          : rest.receiptFileId === null
+            ? null
+            : undefined,
       },
       ctx.user.id,
     );

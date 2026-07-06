@@ -13,9 +13,11 @@ import {
   type CreateTransactionResult,
   type UpdateTransactionResult,
 } from "./actions";
+import { ReceiptUpload } from "./receipt-upload";
 import type { CustomerRow } from "@/platform/customers";
 import type { TransactionRow } from "@/modules/books";
 import type { BookType } from "@/server/db/schema/enums";
+import type { FileId } from "@/shared/types/ids";
 
 type Result = CreateTransactionResult | UpdateTransactionResult;
 
@@ -63,6 +65,8 @@ export function BookForm({
   const [category, setCategory] = useState<string>(initialCategory);
   const [customerId, setCustomerId] = useState<string>(tx?.customerId ?? "");
   const [notes, setNotes] = useState<string>(tx?.notes ?? "");
+  // Receipt link (Phase 11b). Null = no receipt; a FileId = uploaded + linked.
+  const [receiptFileId, setReceiptFileId] = useState<FileId | null>(tx?.receiptFileId ?? null);
 
   const categories = categoriesForType(type);
 
@@ -87,6 +91,7 @@ export function BookForm({
       category,
       customerId: customerId || null,
       notes: notes || null,
+      receiptFileId,
     };
 
     startTransition(async () => {
@@ -224,6 +229,12 @@ export function BookForm({
           className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
+
+      <ReceiptUpload
+        initialFileId={tx?.receiptFileId ?? null}
+        initialFileName={tx?.receiptFileId ? "Receipt" : null}
+        onChange={setReceiptFileId}
+      />
 
       {error ? (
         <p className="text-sm text-destructive" role="alert">

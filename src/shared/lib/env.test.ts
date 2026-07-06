@@ -11,6 +11,10 @@ describe("env validation (shared/lib/env)", () => {
     // Phase 10 — model ids default so a newer Claude/GPT release is opt-in via env.
     expect(env.ANTHROPIC_MODEL).toBe("claude-sonnet-5");
     expect(env.OPENAI_MODEL).toBe("gpt-4o");
+    // Phase 11 — Files platform bucket default.
+    expect(env.SUPABASE_STORAGE_BUCKET).toBe("files");
+    // Upstash rate-limit creds are optional (unset in tests → in-memory fallback).
+    expect(env.UPSTASH_REDIS_REST_URL).toBeUndefined();
   });
 
   it("rejects an invalid AI_PROVIDER", () => {

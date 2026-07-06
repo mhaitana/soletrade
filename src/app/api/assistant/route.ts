@@ -80,12 +80,12 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  // 2. Rate-limit per IP and per user (in-memory, per-instance).
+  // 2. Rate-limit per IP and per user (Upstash when configured, else in-memory).
   const ip = await clientIp();
-  if (!rateLimit(`ai:${ip}`, { max: 20, windowMs: 60_000 })) {
+  if (!(await rateLimit(`ai:${ip}`, { max: 20, windowMs: 60_000 }))) {
     return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
-  if (!rateLimit(`ai:user:${ctx.user.id}`, { max: 30, windowMs: 60_000 })) {
+  if (!(await rateLimit(`ai:user:${ctx.user.id}`, { max: 30, windowMs: 60_000 }))) {
     return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 

@@ -11,6 +11,7 @@ import type {
   BookTransactionId,
   CustomerId,
   DriveEarningId,
+  FileId,
   InvoiceId,
   UserId,
   WorkspaceId,
@@ -53,6 +54,12 @@ export interface TransactionInput {
    * `book_transactions.source_earning_id` (no FK constraint).
    */
   sourceEarningId?: DriveEarningId | null;
+  /**
+   * Optional link to a receipt file (Phase 11b). Stored on
+   * `book_transactions.receipt_file_id` (no FK constraint — keeps Books decoupled from
+   * the files table at the DB level). Null for transactions without a receipt.
+   */
+  receiptFileId?: FileId | null;
 }
 
 export type TransactionPatch = Partial<TransactionInput>;
@@ -73,6 +80,8 @@ export interface TransactionRow {
   sourceInvoiceId: InvoiceId | null;
   /** The Drive earning that generated this income, or null. */
   sourceEarningId: DriveEarningId | null;
+  /** The receipt file attached to this transaction, or null. */
+  receiptFileId: FileId | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -90,6 +99,7 @@ const selectTransaction = {
   customerId: bookTransactions.customerId,
   sourceInvoiceId: bookTransactions.sourceInvoiceId,
   sourceEarningId: bookTransactions.sourceEarningId,
+  receiptFileId: bookTransactions.receiptFileId,
   notes: bookTransactions.notes,
   createdAt: bookTransactions.createdAt,
   updatedAt: bookTransactions.updatedAt,
@@ -142,6 +152,7 @@ export async function createTransaction(
       customerId: input.customerId ?? null,
       sourceInvoiceId: input.sourceInvoiceId ?? null,
       sourceEarningId: input.sourceEarningId ?? null,
+      receiptFileId: input.receiptFileId ?? null,
       notes: input.notes ?? null,
     })
     .returning({ id: bookTransactions.id });
@@ -161,8 +172,21 @@ export async function createTransaction(
       description: input.description.trim(),
       ...(input.sourceInvoiceId ? { sourceInvoiceId: input.sourceInvoiceId } : {}),
       ...(input.sourceEarningId ? { sourceEarningId: input.sourceEarningId } : {}),
+      ...(input.receiptFileId ? { receiptFileId: input.receiptFileId } : {}),
     },
   });
+  // A receipt attached at create time fires ReceiptUploaded (Phase 11b). The activity
+  // feed records it via the persister; the books module stays decoupled from files.
+  if (input.receiptFileId) {
+    await publishEvent({
+      type: "ReceiptUploaded",
+      workspaceId,
+      actorUserId: actorId,
+      entityType: "file",
+      entityId: input.receiptFileId,
+      metadata: { transactionId: row.id },
+    });
+  }
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -222,6 +246,7 @@ export async function updateTransaction(
   if (patch.category !== undefined) set.category = patch.category;
   if (patch.customerId !== undefined) set.customerId = patch.customerId ?? null;
   if (patch.notes !== undefined) set.notes = patch.notes ?? null;
+  if (patch.receiptFileId !== undefined) set.receiptFileId = patch.receiptFileId ?? null;
 
   const rows = await db
     .update(bookTransactions)

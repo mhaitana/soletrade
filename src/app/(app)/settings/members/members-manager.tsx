@@ -10,12 +10,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import {
   inviteMemberAction,
   removeMemberAction,
+  updateMemberRoleAction,
   type InviteMemberResult,
   type MembersPageData,
 } from "@/app/(app)/actions/members";
 
 const ROLE_OPTIONS = ["admin", "manager", "accountant", "employee", "readonly"] as const;
 const initialState: InviteMemberResult = { ok: false, error: "" };
+
+/** Roles a member can be changed to (excludes owner — ownership transfer is separate). */
+const CHANGEABLE_ROLES = ROLE_OPTIONS;
 
 function roleLabel(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
@@ -44,6 +48,18 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
     setRemoveError(null);
     startTransition(async () => {
       const res = await removeMemberAction({ userId });
+      if (!res.ok) {
+        setRemoveError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function changeRole(userId: string, role: string) {
+    setRemoveError(null);
+    startTransition(async () => {
+      const res = await updateMemberRoleAction({ userId, role });
       if (!res.ok) {
         setRemoveError(res.error);
         return;
@@ -127,32 +143,57 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
             {initial.members.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">No members yet.</p>
             ) : (
-              initial.members.map((m) => (
-                <div key={m.userId} className="flex items-center justify-between gap-3 p-4">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{m.email || "(no email)"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Member since {new Date(m.createdAt).toLocaleDateString()}
-                    </p>
+              initial.members.map((m) => {
+                const isOwner = m.userId === initial.ownerId;
+                const isSelf = m.userId === initial.currentUserId;
+                const canChangeRole =
+                  initial.canManage && !isOwner && !isSelf && m.role !== "owner";
+                return (
+                  <div key={m.userId} className="flex items-center justify-between gap-3 p-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {m.email || "(no email)"}
+                        {isSelf ? <span className="text-muted-foreground"> (you)</span> : null}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Member since {new Date(m.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {canChangeRole ? (
+                        <select
+                          value={m.role}
+                          onChange={(e) => void changeRole(m.userId, e.target.value)}
+                          disabled={isPending}
+                          aria-label={`Change role for ${m.email || m.userId}`}
+                          className="h-9 rounded-md border border-input bg-background px-2 text-sm capitalize ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {CHANGEABLE_ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {roleLabel(r)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Badge variant="secondary" className="capitalize">
+                          {roleLabel(m.role)}
+                        </Badge>
+                      )}
+                      {initial.canManage && !isOwner ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isPending}
+                          onClick={() => void remove(m.userId)}
+                          aria-label={`Remove ${m.email || m.userId}`}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="secondary" className="capitalize">
-                      {roleLabel(m.role)}
-                    </Badge>
-                    {initial.canManage ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isPending}
-                        onClick={() => void remove(m.userId)}
-                        aria-label={`Remove ${m.email || m.userId}`}
-                      >
-                        Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </CardContent>
         </Card>

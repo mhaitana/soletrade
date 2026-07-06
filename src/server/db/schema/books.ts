@@ -3,6 +3,7 @@ import type {
   BookTransactionId,
   CustomerId,
   DriveEarningId,
+  FileId,
   InvoiceId,
   WorkspaceId,
 } from "@/shared/types/ids";
@@ -64,6 +65,12 @@ export const bookTransactions = pgTable(
     sourceEarningId: uuid("source_earning_id").$type<DriveEarningId>(),
     /** Private workspace note (never exposed publicly). */
     notes: text("notes"),
+    /**
+     * Optional link to a receipt file row (Phase 11b). No FK constraint — keeps
+     * Books decoupled from the files table at the DB level, mirroring
+     * `sourceInvoiceId`/`sourceEarningId`. Null for transactions without a receipt.
+     */
+    receiptFileId: uuid("receipt_file_id").$type<FileId>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

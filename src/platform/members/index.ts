@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import {
   users as usersTable,
@@ -185,6 +185,121 @@ export async function removeMember(
     targetType: "member",
     targetId: targetUserId,
     metadata: { targetUserId },
+  });
+}
+
+const CHANGEABLE_ROLES: WorkspaceRole[] = [
+  "admin",
+  "manager",
+  "accountant",
+  "employee",
+  "readonly",
+];
+
+/**
+ * Change an active member's role. Guards:
+ * - `newRole` must be one of the changeable roles (not `owner` — ownership
+ *   transfer is a separate flow).
+ * - The workspace owner's role can't be changed here.
+ * - An actor can't change their own role (self-demotion/promotion is a
+ *   conflict of interest and bypasses the last-admin guard).
+ * - The change can't leave the workspace with zero owner/admin members.
+ *
+ * Audit-logs `member.role.change` with `{ from, to }` and publishes
+ * `MemberRoleChanged` for the activity feed.
+ */
+export async function updateMemberRole(
+  workspaceId: WorkspaceId,
+  targetUserId: UserId,
+  newRole: WorkspaceRole,
+  actorId: UserId,
+): Promise<void> {
+  if (!CHANGEABLE_ROLES.includes(newRole)) {
+    throw new Error("Invalid role. Ownership can't be assigned here.");
+  }
+  if (actorId === targetUserId) {
+    throw new Error("You can't change your own role.");
+  }
+
+  const db = getDb();
+  // Owner check + fetch the target's current role in one round trip.
+  const ws = await db
+    .select({ ownerId: workspaces.ownerId })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  if (ws[0]?.ownerId === targetUserId) {
+    throw new Error("Cannot change the workspace owner's role. Transfer ownership first.");
+  }
+
+  const targetRows = await db
+    .select({ role: workspaceMembers.role })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, targetUserId),
+        isNull(workspaceMembers.deletedAt),
+      ),
+    )
+    .limit(1);
+  const currentRole = targetRows[0]?.role;
+  if (!currentRole) {
+    throw new Error("That person isn't an active member of this workspace.");
+  }
+  if (currentRole === newRole) return; // no-op
+
+  // Last-admin guard: if demoting out of owner/admin, ensure another active
+  // owner/admin remains.
+  if (
+    (currentRole === "owner" || currentRole === "admin") &&
+    newRole !== "owner" &&
+    newRole !== "admin"
+  ) {
+    const others = await db
+      .select({ count: count() })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          isNull(workspaceMembers.deletedAt),
+          inArray(workspaceMembers.role, ["owner", "admin"]),
+        ),
+      );
+    // `others` includes the target themselves, so we need >1 to leave one behind.
+    if ((others[0]?.count ?? 0) <= 1) {
+      throw new Error(
+        "This workspace needs at least one owner or admin. Promote another member first.",
+      );
+    }
+  }
+
+  await db
+    .update(workspaceMembers)
+    .set({ role: newRole, updatedAt: new Date() })
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, targetUserId),
+        isNull(workspaceMembers.deletedAt),
+      ),
+    );
+
+  await publishEvent({
+    type: "MemberRoleChanged",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "member",
+    entityId: targetUserId,
+    metadata: { from: currentRole, to: newRole, targetUserId },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "member.role.change",
+    targetType: "member",
+    targetId: targetUserId,
+    metadata: { from: currentRole, to: newRole },
   });
 }
 
