@@ -234,3 +234,61 @@ export function moduleRefundCents(
   const netCents = MODULE_PRICES[moduleKey][role][interval];
   return prorateRefundCents(netCents, interval, anchorBillingDate, now);
 }
+
+/**
+ * Pro-rated charge in cents for adding a module billed at `netCents` mid-cycle at
+ * `now` (brief §10.5 — immediate proration charge). Mirrors `prorateRefundCents`:
+ * charges for the *remaining* fraction of the current billing period
+ * (`netCents × remainingMs / periodMs`). Returns 0 when there is nothing to charge
+ * (no anchor date, non-positive net, or the period has elapsed). The fraction is
+ * clamped to [0, 1].
+ *
+ * Used to preview the mid-cycle add cost before the Stripe `subscriptionItems.create`
+ * call (which sets `proration_behavior: "always_invoice"` to charge it immediately).
+ */
+export function prorateChargeCents(
+  netCents: number,
+  interval: Interval,
+  anchorBillingDate: Date | null,
+  now: Date,
+): number {
+  if (!anchorBillingDate || netCents <= 0) return 0;
+  const { start, end } = currentBillingPeriod(anchorBillingDate, interval, now);
+  const period = end.getTime() - start.getTime();
+  if (period <= 0) return 0;
+  const remaining = end.getTime() - now.getTime();
+  if (remaining <= 0) return 0; // period elapsed
+  const fraction = Math.min(1, Math.max(0, remaining / period));
+  return Math.round(netCents * fraction);
+}
+
+/**
+ * Pro-rated charge for adding `moduleKey` to a workspace right now, given its current
+ * active module set + billing state (brief §10.5). Resolves the new module's role in
+ * the *resulting* set (`selectAnchor([...activeModules, moduleKey])`): if the new module
+ * becomes the anchor (highest standalone) it is charged standalone, otherwise add-on.
+ * Reads its net price from the catalog and delegates to `prorateChargeCents`. Returns 0
+ * when the module is already active or the billing state is missing (no anchor).
+ *
+ * Also reports the resolved role and whether the new module becomes the anchor, so the
+ * UI can show "adding Drive as an add-on" vs "adding Drive as your anchor app".
+ */
+export function moduleChargeCents(
+  moduleKey: ModuleKey,
+  activeModules: readonly ModuleKey[],
+  interval: Interval,
+  anchorBillingDate: Date | null,
+  now: Date,
+): { proratedCents: number; netCents: number; role: Role; becomesAnchor: boolean } {
+  const resultingSet = activeModules.includes(moduleKey)
+    ? activeModules
+    : [...activeModules, moduleKey];
+  const newAnchor = selectAnchor(resultingSet);
+  const becomesAnchor = newAnchor === moduleKey;
+  const role: Role = becomesAnchor ? "standalone" : "addon";
+  const netCents = MODULE_PRICES[moduleKey][role][interval];
+  const proratedCents = activeModules.includes(moduleKey)
+    ? 0
+    : prorateChargeCents(netCents, interval, anchorBillingDate, now);
+  return { proratedCents, netCents, role, becomesAnchor };
+}

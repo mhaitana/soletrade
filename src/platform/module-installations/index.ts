@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, lte } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { moduleInstallations } from "@/server/db/schema";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
@@ -151,4 +151,103 @@ export async function disableModule(
     targetId: key,
     metadata: { moduleKey: key },
   });
+}
+
+/**
+ * Schedule a module to run until `effectiveAt` then cancel (Wave 1 cancellation engine,
+ * brief §10.6 Branch A "keep-until-end"). Sets `pendingCancellationAt` on the active
+ * installation row WITHOUT disabling it — the module stays billable and accessible
+ * until the `module-cancel-finalize` cron picks it up at `effectiveAt`. Idempotent:
+ * re-scheduling the same module updates the timestamp. Does NOT touch Stripe; the
+ * finalize step deletes the subscription item when the timestamp lapses.
+ */
+export async function scheduleModuleCancellation(
+  workspaceId: WorkspaceId,
+  key: ModuleKey,
+  effectiveAt: Date,
+  actorId?: UserId,
+): Promise<void> {
+  if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
+  const db = getDb();
+  await db
+    .update(moduleInstallations)
+    .set({ pendingCancellationAt: effectiveAt, updatedAt: new Date() })
+    .where(
+      and(
+        eq(moduleInstallations.workspaceId, workspaceId),
+        eq(moduleInstallations.moduleKey, key),
+        isNull(moduleInstallations.cancelledAt),
+      ),
+    );
+  await publishEvent({
+    type: "ModuleCancelled",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "module",
+    entityId: key,
+    metadata: {
+      moduleKey: key,
+      option: "keep_until_end_of_cycle",
+      effectiveAt: effectiveAt.toISOString(),
+    },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "module.cancel.scheduled",
+    targetType: "module",
+    targetId: key,
+    metadata: { moduleKey: key, effectiveAt: effectiveAt.toISOString() },
+  });
+}
+
+/**
+ * Clear a pending end-of-cycle cancellation (e.g. if the user re-enables the module
+ * before the period ends). Nulls `pendingCancellationAt` on the active row.
+ */
+export async function clearPendingModuleCancellation(
+  workspaceId: WorkspaceId,
+  key: ModuleKey,
+): Promise<void> {
+  if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
+  const db = getDb();
+  await db
+    .update(moduleInstallations)
+    .set({ pendingCancellationAt: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(moduleInstallations.workspaceId, workspaceId),
+        eq(moduleInstallations.moduleKey, key),
+        isNull(moduleInstallations.cancelledAt),
+      ),
+    );
+}
+
+/**
+ * Select installation rows whose keep-until-end cancellation has lapsed and not yet been
+ * finalized (`status='active'`, `cancelledAt` null, `pendingCancellationAt <= now`). Used
+ * by the `module-cancel-finalize` cron runner. Returns the stored Stripe item id so the
+ * runner can delete the subscription item without re-reading the row.
+ */
+export async function listPendingCancellationsDue(
+  now: Date,
+): Promise<
+  Array<{ workspaceId: WorkspaceId; moduleKey: ModuleKey; stripeSubscriptionItemId: string | null }>
+> {
+  const db = getDb();
+  return db
+    .select({
+      workspaceId: moduleInstallations.workspaceId,
+      moduleKey: moduleInstallations.moduleKey,
+      stripeSubscriptionItemId: moduleInstallations.stripeSubscriptionItemId,
+    })
+    .from(moduleInstallations)
+    .where(
+      and(
+        eq(moduleInstallations.status, "active"),
+        isNull(moduleInstallations.cancelledAt),
+        isNotNull(moduleInstallations.pendingCancellationAt),
+        lte(moduleInstallations.pendingCancellationAt, now),
+      ),
+    );
 }

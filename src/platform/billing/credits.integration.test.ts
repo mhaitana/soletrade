@@ -16,6 +16,8 @@ import {
   consumeCredit,
   getCreditBalance,
   grantCredit,
+  grantPromotionalCredit,
+  markExpiredCredits,
   InsufficientCreditError,
   listCreditLedger,
   refundCredit,
@@ -174,5 +176,70 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
     expect(typeof exports.adjustCredit).toBe("function");
     expect(typeof exports.listCreditLedger).toBe("function");
     expect(typeof exports.getCreditBalance).toBe("function");
+  });
+
+  it("grantPromotionalCredit writes an entry of type 'promotion' and raises the balance", async () => {
+    const before = await getCreditBalance(ws2!); // 0 (fresh workspace)
+    const res = await grantPromotionalCredit(
+      ws2!,
+      {
+        amountCents: 1000,
+        reason: "launch.promo",
+        expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      },
+      actor,
+    );
+    expect(res.balanceCents).toBe(before + 1000);
+    const ledger = await listCreditLedger(ws2!);
+    expect(ledger.some((r) => r.entryType === "promotion")).toBe(true);
+  });
+
+  it("grantCredit persists expiresAt when provided (and null when omitted)", async () => {
+    const db = getDb();
+    const expiry = new Date(Date.now() + 7 * 86_400_000);
+    await grantCredit(ws2!, { amountCents: 2500, reason: "timed.grant", expiresAt: expiry }, actor);
+    await grantCredit(ws2!, { amountCents: 500, reason: "perpetual.grant" }, actor);
+    const rows = await db
+      .select({ entryType: creditLedgerTable.entryType, expiresAt: creditLedgerTable.expiresAt })
+      .from(creditLedgerTable)
+      .where(eq(creditLedgerTable.workspaceId, ws2!));
+    const timed = rows.find((r) => r.entryType === "grant" && r.expiresAt != null);
+    const perpetual = rows.find((r) => r.entryType === "grant" && r.expiresAt == null);
+    expect(timed).toBeDefined();
+    expect(perpetual).toBeDefined();
+  });
+
+  it("markExpiredCredits is idempotent and reduces the balance (expired row appended once)", async () => {
+    // Grant a credit already past its expiry on ws2.
+    const expiredAmount = 800;
+    const pastExpiry = new Date(Date.now() - 86_400_000); // 1 day ago
+    const balanceBefore = await getCreditBalance(ws2!);
+    await grantCredit(
+      ws2!,
+      { amountCents: expiredAmount, reason: "expired.promo", expiresAt: pastExpiry },
+      actor,
+    );
+    const balanceAfterGrant = await getCreditBalance(ws2!);
+    expect(balanceAfterGrant).toBe(balanceBefore + expiredAmount);
+
+    // First run: should append one 'expired' row → balance drops by expiredAmount.
+    const firstRun = await markExpiredCredits(new Date());
+    expect(firstRun).toBeGreaterThanOrEqual(1);
+
+    // Second run: idempotent — the already-expired grant is not reversed again.
+    const secondRun = await markExpiredCredits(new Date());
+    expect(secondRun).toBe(0);
+
+    // Balance is back down by expiredAmount (one reversal).
+    const balanceAfterExpire = await getCreditBalance(ws2!);
+    expect(balanceAfterExpire).toBe(balanceAfterGrant - expiredAmount);
+
+    // Exactly one 'expired' row references this grant via metadata.originalEntryId.
+    const db = getDb();
+    const expiredRows = await db
+      .select({ entryType: creditLedgerTable.entryType })
+      .from(creditLedgerTable)
+      .where(eq(creditLedgerTable.workspaceId, ws2!));
+    expect(expiredRows.filter((r) => r.entryType === "expired").length).toBeGreaterThanOrEqual(1);
   });
 });

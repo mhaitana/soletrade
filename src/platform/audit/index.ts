@@ -57,6 +57,31 @@ export interface AuditPage {
 }
 
 /**
+ * Record an authorization denial as an `authz.denied` audit row (brief §13 —
+ * "log suspicious permission failures"). `actorUserId` is nullable on
+ * `audit_logs`, so an anonymous / no-session attempt fits naturally; the IP is
+ * the request IP (caller-resolved via `getClientIp`). Best-effort callers wrap
+ * this in `.catch()` so a logging failure never changes the authz outcome.
+ */
+export async function auditAuthzDenial(input: {
+  workspaceId: WorkspaceId;
+  actorUserId?: UserId;
+  permission: string;
+  reason: "insufficient_role" | "no_membership";
+  ip?: string;
+}): Promise<AuditLogId> {
+  return writeAudit({
+    workspaceId: input.workspaceId,
+    actorUserId: input.actorUserId,
+    action: "authz.denied",
+    targetType: "permission",
+    targetId: input.permission,
+    metadata: { permission: input.permission, reason: input.reason },
+    ip: input.ip,
+  });
+}
+
+/**
  * Append an audit entry. Audit is append-only and never soft-deleted. Use for
  * sensitive mutations only (billing, members, module changes, authz failures).
  */

@@ -21,6 +21,13 @@ export const moduleInstallations = pgTable(
     stripeSubscriptionItemId: text("stripe_subscription_item_id"),
     installedAt: timestamp("installed_at").defaultNow().notNull(),
     cancelledAt: timestamp("cancelled_at"),
+    /**
+     * Scheduled end-of-cycle cancellation timestamp (Wave 1 cancellation engine, brief
+     * §10.6 Branch A "keep-until-end"). When set, the module stays active and billable
+     * until this time; the `module-cancel-finalize` cron then deletes the Stripe item +
+     * disables the row. Null for immediate cancellations and active modules.
+     */
+    pendingCancellationAt: timestamp("pending_cancellation_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

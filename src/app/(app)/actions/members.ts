@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import {
   inviteMember,
   listMembers,
@@ -42,7 +43,7 @@ export async function inviteMemberAction(input: unknown): Promise<InviteMemberRe
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "invite:member").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "invite:member")).ok) return forbid();
 
   try {
     const result = await inviteMember(
@@ -74,7 +75,7 @@ export async function updateMemberRoleAction(input: unknown): Promise<ChangeRole
   if (!parsed.success) return { ok: false, error: "Invalid request." };
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:member").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:member")).ok) return forbid();
 
   try {
     await updateMemberRole(
@@ -95,7 +96,7 @@ export async function removeMemberAction(input: unknown): Promise<RemoveMemberRe
   if (!parsed.success) return { ok: false, error: "Invalid user." };
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:member").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:member")).ok) return forbid();
   if (ctx.user.id === parsed.data.userId) {
     return { ok: false, error: "You cannot remove yourself. Ask another admin." };
   }

@@ -1,7 +1,7 @@
 "use server";
 
 import { requireWorkspaceContext } from "@/platform/context";
-import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { listAudit, type AuditListOptions, type AuditPage } from "@/platform/audit";
 
 export type AuditPageData = { access: true; page: AuditPage } | { access: false };
@@ -13,7 +13,7 @@ export type AuditPageData = { access: true; page: AuditPage } | { access: false 
  */
 export async function loadAuditPage(opts: AuditListOptions = {}): Promise<AuditPageData> {
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "view:audit").ok) return { access: false };
+  if (!(await authorizeOrAudit(ctx, "view:audit")).ok) return { access: false };
   const page = await listAudit(ctx.workspaceId, opts);
   return { access: true, page };
 }

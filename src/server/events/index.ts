@@ -39,6 +39,7 @@ export const EVENT_TYPES = [
   "SubscriptionChanged",
   "CreditIssued",
   "RefundIssued",
+  "CreditExpired",
   "MemberInvited",
   "MemberAdded",
   "MemberRoleChanged",

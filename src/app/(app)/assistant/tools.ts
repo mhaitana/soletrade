@@ -2,6 +2,7 @@ import "server-only";
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { authorize, type Permission } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import type { WorkspaceContext } from "@/platform/context";
 import { createCustomer, listCustomers } from "@/platform/customers";
 import { writeAudit } from "@/platform/audit";
@@ -366,7 +367,7 @@ export function buildAssistantTools(
         }),
         execute: async (input) => {
           // Re-check the gate inside execute (defense in depth).
-          if (!authorize(role, "manage:customer").ok) {
+          if (!(await authorizeOrAudit(ctx, "manage:customer")).ok) {
             return { error: "You don't have permission to create customers." };
           }
           const id = await createCustomer(workspaceId, input, user.id);
@@ -414,7 +415,7 @@ export function buildAssistantTools(
             .describe("Line items (at least one)."),
         }),
         execute: async (input) => {
-          if (!authorize(role, "manage:invoice").ok) {
+          if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) {
             return { error: "You don't have permission to create invoices." };
           }
           const id = await createInvoice(
@@ -472,7 +473,7 @@ export function buildAssistantTools(
             .describe("Line items (at least one)."),
         }),
         execute: async (input) => {
-          if (!authorize(role, "manage:quote").ok) {
+          if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) {
             return { error: "You don't have permission to create quotes." };
           }
           const id = await createQuote(
@@ -516,7 +517,7 @@ export function buildAssistantTools(
           notes: z.string().max(2000).optional().describe("Optional notes."),
         }),
         execute: async (input) => {
-          if (!authorize(role, "manage:books").ok) {
+          if (!(await authorizeOrAudit(ctx, "manage:books")).ok) {
             return { error: "You don't have permission to create transactions." };
           }
           const id = await createTransaction(

@@ -5,6 +5,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { formatBytes } from "@/shared/lib/format";
+import { UPLOAD_ACCEPT, isAllowedUploadMime } from "@/shared/constants/file-upload";
 import type { FileId } from "@/shared/types/ids";
 
 /**
@@ -49,6 +50,12 @@ export function ReceiptUpload({
       setError("Receipt is too large (10 MB max).");
       return;
     }
+    // Client-side type gate mirrors the server allowlist — fail fast with a
+    // clear message instead of letting the server return "Unsupported file type".
+    if (!isAllowedUploadMime(file.type)) {
+      setError("Receipts must be an image or PDF.");
+      return;
+    }
     setUploading(true);
     try {
       // 1. Mint a signed upload URL (creates the metadata row).
@@ -57,7 +64,7 @@ export function ReceiptUpload({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
+          mimeType: file.type,
           sizeBytes: file.size,
           entityType: "book_transaction",
         }),
@@ -73,7 +80,7 @@ export function ReceiptUpload({
       // 2. PUT the bytes straight to Storage (never through our server).
       const put = await fetch(uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
+        headers: { "Content-Type": file.type },
         body: file,
       });
       if (!put.ok) {
@@ -135,7 +142,7 @@ export function ReceiptUpload({
           id="receipt"
           name="receipt"
           type="file"
-          accept="image/*,application/pdf"
+          accept={UPLOAD_ACCEPT}
           disabled={uploading}
           onChange={(e) => handleFile(e.target.files?.[0])}
         />

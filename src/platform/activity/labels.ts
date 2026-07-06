@@ -49,6 +49,7 @@ export const ACTIVITY_LABELS: Record<string, ActivityLabel> = {
   SubscriptionChanged: { label: "changed the subscription", tone: "warning" },
   CreditIssued: { label: "issued platform credit", tone: "positive" },
   RefundIssued: { label: "issued a refund", tone: "warning" },
+  CreditExpired: { label: "expired platform credit", tone: "warning" },
 };
 
 const FALLBACK_TONE: ActivityTone = "neutral";

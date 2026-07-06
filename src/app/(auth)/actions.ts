@@ -6,6 +6,14 @@ import { env } from "@/shared/lib/env";
 import { safeNext } from "@/shared/lib/safe-redirect";
 import { branded } from "@/shared/types/ids";
 import { ensureUserMirror } from "@/platform/users";
+import { rateLimit } from "@/server/rate-limit";
+import { getClientIp } from "@/server/security";
+
+/** Throttle message used by every auth action when a rate limit is hit. */
+const THROTTLED = "Too many attempts. Please try again shortly.";
+
+/** Per-IP window for every auth action (60s, matching the public-page pattern). */
+const WINDOW_MS = 60_000;
 
 /**
  * Shared result union for the auth actions. On success the form reads
@@ -52,6 +60,11 @@ function emailRedirectTo(): string {
  * safe same-origin path) or `/dashboard`.
  */
 export async function signInWithPasswordAction(input: unknown): Promise<AuthActionResult> {
+  // IP limit first — catches raw volume / distributed guessing before any work.
+  const ip = await getClientIp();
+  if (!(await rateLimit(`auth:signin:${ip}`, { max: 10, windowMs: WINDOW_MS }))) {
+    return { ok: false, error: THROTTLED };
+  }
   const parsed = signInSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -61,6 +74,11 @@ export async function signInWithPasswordAction(input: unknown): Promise<AuthActi
     };
   }
   const { email, password, next } = parsed.data;
+  // Per-email limit — protects a single account from targeted credential stuffing
+  // across many IPs.
+  if (!(await rateLimit(`auth:signin-email:${email}`, { max: 10, windowMs: WINDOW_MS }))) {
+    return { ok: false, error: THROTTLED };
+  }
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
@@ -77,6 +95,10 @@ export async function signInWithPasswordAction(input: unknown): Promise<AuthActi
  * notice.
  */
 export async function signUpAction(input: unknown): Promise<AuthActionResult> {
+  const ip = await getClientIp();
+  if (!(await rateLimit(`auth:signup:${ip}`, { max: 5, windowMs: WINDOW_MS }))) {
+    return { ok: false, error: THROTTLED };
+  }
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -119,6 +141,10 @@ export async function signUpAction(input: unknown): Promise<AuthActionResult> {
  * the session. No redirect here — the form shows a "check your email" notice.
  */
 export async function signInWithOtpAction(input: unknown): Promise<AuthActionResult> {
+  const ip = await getClientIp();
+  if (!(await rateLimit(`auth:otp:${ip}`, { max: 5, windowMs: WINDOW_MS }))) {
+    return { ok: false, error: THROTTLED };
+  }
   const parsed = otpSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -128,6 +154,9 @@ export async function signInWithOtpAction(input: unknown): Promise<AuthActionRes
     };
   }
   const { email, mode } = parsed.data;
+  if (!(await rateLimit(`auth:otp-email:${email}`, { max: 5, windowMs: WINDOW_MS }))) {
+    return { ok: false, error: THROTTLED };
+  }
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,

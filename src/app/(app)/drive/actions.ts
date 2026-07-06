@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
 import {
   createEarning,
@@ -59,7 +60,7 @@ export async function createEarningAction(input: unknown): Promise<CreateEarning
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:drive").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:drive")).ok) return forbid();
 
   const d = parsed.data;
   const earningInput: EarningInput = {
@@ -106,7 +107,7 @@ export async function updateEarningAction(input: unknown): Promise<UpdateEarning
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:drive").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:drive")).ok) return forbid();
 
   const { earningId, ...rest } = parsed.data;
   try {
@@ -158,7 +159,7 @@ export async function createTripAction(input: unknown): Promise<CreateTripResult
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:drive").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:drive")).ok) return forbid();
 
   const d = parsed.data;
   const tripInput: TripInput = {
@@ -203,7 +204,7 @@ export async function updateTripAction(input: unknown): Promise<UpdateTripResult
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:drive").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:drive")).ok) return forbid();
 
   const { tripId, ...rest } = parsed.data;
   try {
@@ -237,7 +238,7 @@ export async function deleteEarningAction(input: unknown): Promise<DriveActionRe
   const parsed = earningIdSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid earning." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:drive").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:drive")).ok) return forbid();
   try {
     await deleteEarning(
       ctx.workspaceId,
@@ -255,7 +256,7 @@ export async function deleteTripAction(input: unknown): Promise<DriveActionResul
   const parsed = tripIdSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid trip." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:drive").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:drive")).ok) return forbid();
   try {
     await deleteTrip(ctx.workspaceId, branded<"DriveTripId">(parsed.data.tripId), ctx.user.id);
     revalidatePath("/drive");

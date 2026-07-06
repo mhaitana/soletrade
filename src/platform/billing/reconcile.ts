@@ -210,16 +210,28 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
 
   const now = new Date();
   const refundedModuleKeys: ModuleKey[] = [];
+  // Wave 1 cancellation engine (brief §10.6): the cancelOption stamped on the Stripe
+  // subscription metadata by `cancelSubscription` decides whether the webhook issues
+  // per-module credit refunds:
+  //   - undefined (legacy/automatic) or "immediate_credit" → issue per-module credit
+  //     refunds (the pre-Wave-1 behavior).
+  //   - "keep_until_end" → access already ran to period end; no refunds.
+  //   - "immediate_refund" → the card was already refunded before cancel; no ledger refund.
+  const cancelOption = (stripeSub.metadata?.cancelOption as string | undefined) ?? undefined;
+  const issueCreditRefunds =
+    (cancelOption === undefined || cancelOption === "immediate_credit") &&
+    current.billingInterval != null &&
+    current.anchorBillingDate != null;
   // Per-module prorated refund (actorless — webhook). Only when we have the billing state
   // needed to compute the period; legacy rows missing interval/anchor get no refund.
-  if (current.billingInterval && current.anchorBillingDate) {
+  if (issueCreditRefunds) {
     const active = await getInstalledModules(workspaceId);
-    const breakdown = priceSubscription(active, current.billingInterval);
+    const breakdown = priceSubscription(active, current.billingInterval!);
     for (const m of breakdown.modules) {
       const refundCents = prorateRefundCents(
         m.netCents,
-        current.billingInterval,
-        current.anchorBillingDate,
+        current.billingInterval!,
+        current.anchorBillingDate!,
         now,
       );
       if (refundCents > 0) {
@@ -231,10 +243,11 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
             reason: "subscription.cancel.refund",
             moduleKey: m.key,
             metadata: {
-              interval: current.billingInterval,
+              interval: current.billingInterval!,
               role: m.role,
               netCents: m.netCents,
               source: "stripe.subscription.deleted",
+              cancelOption: cancelOption ?? "automatic",
             },
           },
           undefined,

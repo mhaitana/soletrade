@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { tryWorkspaceContext } from "@/platform/context";
-import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { createSignedReadUrl, getFile } from "@/platform/files";
 import { branded } from "@/shared/types/ids";
 
@@ -20,7 +20,7 @@ export async function GET(
   const ctx = await tryWorkspaceContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  if (!authorize(ctx.role, "view:file").ok) {
+  if (!(await authorizeOrAudit(ctx, "view:file")).ok) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 

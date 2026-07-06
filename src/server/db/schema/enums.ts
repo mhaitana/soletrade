@@ -51,6 +51,8 @@ export const creditEntryTypeEnum = pgEnum("credit_entry_type", [
   "consumption",
   "refund",
   "adjustment",
+  "promotion",
+  "expired",
 ]);
 export type CreditEntryType = (typeof creditEntryTypeEnum.enumValues)[number];
 

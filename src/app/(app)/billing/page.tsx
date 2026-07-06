@@ -15,6 +15,8 @@ const entryTypeLabel: Record<string, string> = {
   consumption: "Consumption",
   refund: "Refund",
   adjustment: "Adjustment",
+  promotion: "Promotion",
+  expired: "Expired",
 };
 
 const intervalLabel: Record<string, string> = {

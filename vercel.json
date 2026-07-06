@@ -8,6 +8,14 @@
     {
       "path": "/api/cron/quote-expired",
       "schedule": "23 0 * * *"
+    },
+    {
+      "path": "/api/cron/credit-expired",
+      "schedule": "31 0 * * *"
+    },
+    {
+      "path": "/api/cron/module-cancel-finalize",
+      "schedule": "11 0 * * *"
     }
   ]
 }

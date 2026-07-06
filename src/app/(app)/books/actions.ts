@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
 import { listCustomers, type CustomerRow } from "@/platform/customers";
 import {
@@ -58,7 +59,7 @@ export async function createTransactionAction(input: unknown): Promise<CreateTra
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:books").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:books")).ok) return forbid();
 
   const d = parsed.data;
   const txInput: TransactionInput = {
@@ -115,7 +116,7 @@ export async function updateTransactionAction(input: unknown): Promise<UpdateTra
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:books").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:books")).ok) return forbid();
 
   const { transactionId, ...rest } = parsed.data;
   try {
@@ -156,7 +157,7 @@ export async function deleteTransactionAction(input: unknown): Promise<Transacti
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid transaction." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:books").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:books")).ok) return forbid();
   try {
     await deleteTransaction(
       ctx.workspaceId,

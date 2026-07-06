@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import {
   createCustomer,
   deleteCustomer,
@@ -45,7 +46,7 @@ export async function createCustomerAction(input: unknown): Promise<CreateCustom
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:customer").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:customer")).ok) return forbid();
 
   try {
     const id = await createCustomer(ctx.workspaceId, parsed.data, ctx.user.id);
@@ -85,7 +86,7 @@ export async function updateCustomerAction(input: unknown): Promise<UpdateCustom
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:customer").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:customer")).ok) return forbid();
 
   const { customerId, ...patch } = parsed.data;
   try {
@@ -112,7 +113,7 @@ export async function deleteCustomerAction(input: unknown): Promise<DeleteCustom
   if (!parsed.success) return { ok: false, error: "Invalid customer." };
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:customer").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:customer")).ok) return forbid();
 
   try {
     await deleteCustomer(

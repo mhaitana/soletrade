@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { deleteFile, listFiles, type FileListOptions, type FilePage } from "@/platform/files";
 import { branded } from "@/shared/types/ids";
 
@@ -17,7 +18,7 @@ export type FilesPageData =
  */
 export async function loadFilesPage(opts: FileListOptions = {}): Promise<FilesPageData> {
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "view:file").ok) return { access: false };
+  if (!(await authorizeOrAudit(ctx, "view:file")).ok) return { access: false };
   const [page, canManage] = await Promise.all([
     listFiles(ctx.workspaceId, opts),
     Promise.resolve(authorize(ctx.role, "manage:file").ok),
@@ -33,7 +34,7 @@ export async function deleteFileAction(input: unknown): Promise<DeleteFileResult
   const parsed = deleteSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid file." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:file").ok) {
+  if (!(await authorizeOrAudit(ctx, "manage:file")).ok) {
     return { ok: false, error: "You don't have permission to delete files." };
   }
   try {

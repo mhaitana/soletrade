@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/shared/ui/input";
+import { UPLOAD_ACCEPT, isAllowedUploadMime } from "@/shared/constants/file-upload";
 
 /**
  * Standalone upload control for the `/files` page (Phase 11b). Mint a signed
@@ -24,6 +25,11 @@ export function UploadButton() {
       setError("File is too large (10 MB max).");
       return;
     }
+    // Client-side type gate mirrors the server allowlist.
+    if (!isAllowedUploadMime(file.type)) {
+      setError("Files must be an image or PDF.");
+      return;
+    }
     setUploading(true);
     try {
       const res = await fetch("/api/files/upload-url", {
@@ -31,7 +37,7 @@ export function UploadButton() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
+          mimeType: file.type,
           sizeBytes: file.size,
         }),
       });
@@ -42,7 +48,7 @@ export function UploadButton() {
       const { uploadUrl } = (await res.json()) as { fileId: string; uploadUrl: string };
       const put = await fetch(uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
+        headers: { "Content-Type": file.type },
         body: file,
       });
       if (!put.ok) {
@@ -63,6 +69,7 @@ export function UploadButton() {
         id="file-upload"
         name="file-upload"
         type="file"
+        accept={UPLOAD_ACCEPT}
         disabled={uploading}
         onChange={(e) => handleFile(e.target.files?.[0])}
         className="max-w-xs"

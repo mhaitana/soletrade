@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
 import { listCustomers, type CustomerRow } from "@/platform/customers";
 import {
@@ -58,7 +59,7 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:quote").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
 
   const lineItems: LineItemInput[] = parsed.data.lineItems.map((it) => ({
     description: it.description,
@@ -113,7 +114,7 @@ export async function updateQuoteAction(input: unknown): Promise<UpdateQuoteResu
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:quote").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
 
   const { quoteId, ...rest } = parsed.data;
   const lineItems: LineItemInput[] = rest.lineItems.map((it) => ({
@@ -154,7 +155,7 @@ export async function sendQuoteAction(input: unknown): Promise<QuoteActionResult
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid quote." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:quote").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
   try {
     await sendQuote(ctx.workspaceId, branded<"QuoteId">(parsed.data.quoteId), ctx.user.id);
     revalidatePath("/quotes");
@@ -169,7 +170,7 @@ export async function deleteQuoteAction(input: unknown): Promise<QuoteActionResu
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid quote." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:quote").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
   try {
     await deleteQuote(ctx.workspaceId, branded<"QuoteId">(parsed.data.quoteId), ctx.user.id);
     revalidatePath("/quotes");
@@ -197,7 +198,7 @@ export async function convertQuoteToInvoiceAction(input: unknown): Promise<Conve
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid quote." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:quote").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
 
   try {
     const quoteId = branded<"QuoteId">(parsed.data.quoteId);

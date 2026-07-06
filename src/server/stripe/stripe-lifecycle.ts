@@ -179,6 +179,8 @@ export async function addModuleSubscriptionItem(
     subscription: sub.stripeSubscriptionId,
     price: priceId,
     quantity: 1,
+    // §10.5: charge the mid-cycle proration immediately (next-invoice by default).
+    proration_behavior: "always_invoice",
     metadata: {
       workspaceId: String(workspaceId),
       moduleKey,
@@ -281,21 +283,101 @@ export async function removeModuleSubscriptionItem(
 }
 
 /**
- * Cancel the workspace's Stripe subscription (user-initiated). Immediate cancel with no
- * Stripe proration — our credit ledger issues the per-module prorated refunds when the
- * `customer.subscription.deleted` webhook fires (`markCanceled`). Does NOT touch local
- * state; the webhook reconciles (status → canceled, billingInterval → null, modules
- * cascade-disabled, refunds issued). Throws `BillingNotStartedError` if there is no
- * active subscription to cancel.
+ * Cancel option for the cancel-all path (brief §10.6 Branch B). Stored on the Stripe
+ * subscription's `metadata.cancelOption` so the `customer.subscription.deleted` webhook
+ * (`markCanceled`) knows whether to issue per-module credit refunds.
+ *   - `keep_until_end` → `cancel_at_period_end: true`; webhook fires at period end with
+ *     no refunds (access already ran to term).
+ *   - `immediate_refund` → cancel now; the card was already refunded `refundCents` via
+ *     `refundToCard` before this call; webhook issues NO ledger refund.
+ *   - `immediate_credit` → cancel now; no card refund; webhook issues per-module credit
+ *     refunds (the legacy/automatic path, retained for backward-compat).
  */
-export async function cancelSubscription(workspaceId: WorkspaceId): Promise<void> {
+export type CancelSubscriptionOption = "keep_until_end" | "immediate_credit" | "immediate_refund";
+
+export interface CancelSubscriptionResult {
+  /** Stripe refund id when a card refund was issued, else null. */
+  stripeRefundId: string | null;
+}
+
+/**
+ * Refund `amountCents` to the workspace's original payment method (the latest paid,
+ * not-fully-refunded charge on the Stripe customer). Returns the Stripe refund id, or
+ * null when there is nothing to refund (amount ≤ 0, no customer, or no eligible charge).
+ * Best-effort: a missing charge surfaces as null rather than throwing so the caller can
+ * still proceed with the cancellation. Brief §10.6 "immediate refund" path.
+ *
+ * Uses `stripe.charges.list` (newest-first) rather than the invoice's `charge` field —
+ * this Stripe API version no longer exposes `charge` on the Invoice resource, and the
+ * latest charge is the reliable refund target anyway.
+ */
+export async function refundToCard(
+  workspaceId: WorkspaceId,
+  amountCents: number,
+): Promise<string | null> {
+  if (amountCents <= 0) return null;
+  const sub = await getSubscription(workspaceId);
+  if (!sub || !sub.stripeCustomerId) return null;
+  const stripe = getStripe();
+  const charges = await stripe.charges.list({ customer: sub.stripeCustomerId, limit: 10 });
+  // First paid charge with enough remaining balance to cover the refund.
+  const charge = charges.data.find(
+    (c) => c.paid && !c.refunded && c.amount - c.amount_refunded >= amountCents,
+  );
+  if (!charge) return null;
+  const refund = await stripe.refunds.create({ charge: charge.id, amount: amountCents });
+  return refund.id;
+}
+
+/**
+ * Cancel the workspace's Stripe subscription (user-initiated, Branch B offboarding).
+ * `manage:billing` only. Three options (brief §10.6):
+ *   - `keep_until_end` → `cancel_at_period_end: true` + `metadata.cancelOption`; access
+ *     continues to period end, the webhook fires then with no refunds.
+ *   - `immediate_refund` → refund `refundCents` to the card first, then cancel with
+ *     `metadata.cancelOption = "immediate_refund"`; webhook issues NO ledger refund.
+ *   - `immediate_credit` (default, legacy) → cancel now with no card refund; the
+ *     `customer.subscription.deleted` webhook (`markCanceled`) issues per-module
+ *     prorated credit refunds (the pre-Wave-1 behavior).
+ *
+ * Does NOT touch local state; the webhook reconciles (status → canceled, modules
+ * cascade-disabled, refunds issued per the option). Throws `BillingNotStartedError` if
+ * there is no active subscription to cancel.
+ */
+export async function cancelSubscription(
+  workspaceId: WorkspaceId,
+  option: CancelSubscriptionOption = "immediate_credit",
+  refundCents = 0,
+): Promise<CancelSubscriptionResult> {
   const sub = await getSubscription(workspaceId);
   if (!sub) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
   if (!sub.stripeSubscriptionId || sub.status !== "active") {
     throw new BillingNotStartedError();
   }
   const stripe = getStripe();
+
+  if (option === "keep_until_end") {
+    await stripe.subscriptions.update(sub.stripeSubscriptionId, {
+      cancel_at_period_end: true,
+      metadata: { cancelOption: "keep_until_end" },
+    });
+    return { stripeRefundId: null };
+  }
+
+  // Immediate path: refund the card first (if requested), then cancel.
+  let stripeRefundId: string | null = null;
+  if (option === "immediate_refund") {
+    stripeRefundId = await refundToCard(workspaceId, refundCents);
+    // Stamp the cancelOption so the webhook knows a card refund already issued.
+    await stripe.subscriptions.update(sub.stripeSubscriptionId, {
+      metadata: { cancelOption: "immediate_refund" },
+    });
+  }
+  // immediate_credit: cancel with no metadata → webhook sees cancelOption undefined
+  // and issues per-module credit refunds (legacy behavior). Immediate cancel is the
+  // default (no Stripe proration); `subscriptions.cancel` takes no proration_behavior.
   await stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+  return { stripeRefundId };
 }
 
 /**

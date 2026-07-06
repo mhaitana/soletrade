@@ -13,3 +13,5 @@ export * from "./credits";
 export * from "./subscriptions";
 export * from "./modules";
 export * from "./reconcile";
+// Pure cancellation engine (brief §10.6) — no `server-only`, safe alongside the rest.
+export * from "./cancellation";

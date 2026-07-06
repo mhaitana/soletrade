@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
 import { listCustomers, type CustomerRow } from "@/platform/customers";
 import {
@@ -59,7 +60,7 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:invoice").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
 
   const lineItems: LineItemInput[] = parsed.data.lineItems.map((it) => ({
     description: it.description,
@@ -114,7 +115,7 @@ export async function updateInvoiceAction(input: unknown): Promise<UpdateInvoice
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:invoice").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
 
   const { invoiceId, ...rest } = parsed.data;
   const lineItems: LineItemInput[] = rest.lineItems.map((it) => ({
@@ -154,7 +155,7 @@ export async function sendInvoiceAction(input: unknown): Promise<InvoiceActionRe
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid invoice." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:invoice").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
     await sendInvoice(ctx.workspaceId, branded<"InvoiceId">(parsed.data.invoiceId), ctx.user.id);
     revalidatePath("/invoices");
@@ -169,7 +170,7 @@ export async function markInvoicePaidAction(input: unknown): Promise<InvoiceActi
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid invoice." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:invoice").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
     await markInvoicePaid(
       ctx.workspaceId,
@@ -191,7 +192,7 @@ export async function voidInvoiceAction(input: unknown): Promise<InvoiceActionRe
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid invoice." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:invoice").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
     await voidInvoice(ctx.workspaceId, branded<"InvoiceId">(parsed.data.invoiceId), ctx.user.id);
     revalidatePath("/invoices");
@@ -206,7 +207,7 @@ export async function deleteInvoiceAction(input: unknown): Promise<InvoiceAction
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid invoice." };
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:invoice").ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
     await deleteInvoice(ctx.workspaceId, branded<"InvoiceId">(parsed.data.invoiceId), ctx.user.id);
     revalidatePath("/invoices");

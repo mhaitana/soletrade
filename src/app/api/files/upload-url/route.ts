@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { tryWorkspaceContext } from "@/platform/context";
-import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import { createFileRecord, createSignedUploadUrl } from "@/platform/files";
 import { rateLimit } from "@/server/rate-limit";
+import { isAllowedUploadMime } from "@/shared/constants/file-upload";
 
 /**
  * Phase 11b — mint a signed Supabase Storage upload URL. The client PUTs file
@@ -19,7 +20,7 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10 MB cap on a single receipt.
 
 const bodySchema = z.object({
   fileName: z.string().trim().min(1).max(255),
-  mimeType: z.string().trim().min(1).max(100),
+  mimeType: z.string().trim().min(1).max(100).refine(isAllowedUploadMime, "Unsupported file type."),
   sizeBytes: z.number().int().positive().max(MAX_BYTES),
   entityType: z.string().trim().max(50).optional(),
   entityId: z.string().uuid().optional(),
@@ -29,7 +30,7 @@ export async function POST(request: Request): Promise<Response> {
   const ctx = await tryWorkspaceContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  if (!authorize(ctx.role, "manage:file").ok) {
+  if (!(await authorizeOrAudit(ctx, "manage:file")).ok) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
+import { authorizeOrAudit } from "@/server/security";
 import {
   ensureSubscription,
   getCreditBalance,
@@ -11,14 +12,18 @@ import {
   priceSubscription,
   cancelSubscription,
   switchBillingInterval,
+  getCancellationOptions,
+  type CancellationPreview,
   BillingNotStartedError,
 } from "@/platform/billing";
 import type { CreditLedgerRow } from "@/platform/billing";
 import { getInstalledModules } from "@/platform/module-installations";
+import { getSubscription } from "@/platform/billing/subscriptions";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 import type { BillingInterval } from "@/server/db/schema/enums";
 import { env } from "@/shared/lib/env";
 import { createCheckoutSession } from "@/server/stripe/stripe-lifecycle";
+import { moduleRefundCents } from "@/platform/billing/pricing";
 
 export interface BillingOverviewData {
   /** null = billing not started yet (no Stripe subscription on the row). */
@@ -50,7 +55,7 @@ export interface BillingOverviewData {
  */
 export async function loadBillingOverview(): Promise<BillingOverviewData> {
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "view:billing").ok) {
+  if (!(await authorizeOrAudit(ctx, "view:billing")).ok) {
     throw new Error("You don't have permission to view billing.");
   }
 
@@ -98,7 +103,7 @@ export async function startBillingCheckoutAction(
   input: unknown,
 ): Promise<StartBillingCheckoutResult> {
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:billing").ok) {
+  if (!(await authorizeOrAudit(ctx, "manage:billing")).ok) {
     return { ok: false, error: "You don't have permission to manage billing." };
   }
   const parsed = startBillingInputSchema.safeParse(input);
@@ -122,21 +127,72 @@ export async function startBillingCheckoutAction(
 
 export type CancelSubscriptionResult = { ok: true } | { ok: false; error: string };
 
+const cancelSubscriptionOptionSchema = z.enum(["keep_until_end", "immediate_refund"]);
+
+export type CancelSubscriptionPreviewResult =
+  (CancellationPreview & { ok: true }) | { ok: false; error: string };
+
 /**
- * Cancel the workspace's subscription (user-initiated). `manage:billing` only. Calls
- * `stripe.subscriptions.cancel` (immediate, no Stripe proration); the local row flips to
- * `canceled` and per-module prorated refunds issue when the
- * `customer.subscription.deleted` webhook reconciles (seconds later). Returns ok after
- * the Stripe call — the cancel completes asynchronously via webhook. The /billing page
- * may briefly show "active" until the webhook lands.
+ * Preview the cancel-all options (brief §10.6 Branch B offboarding). Returns the branch
+ * (always offboarding for cancel-all), the period end, and the two options
+ * (keep-until-end / immediate-refund) with the summed pro-rated refund amount. Gated
+ * `manage:billing`.
  */
-export async function cancelSubscriptionAction(): Promise<CancelSubscriptionResult> {
+export async function previewCancelSubscriptionAction(): Promise<CancelSubscriptionPreviewResult> {
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:billing").ok) {
+  if (!(await authorizeOrAudit(ctx, "manage:billing")).ok) {
     return { ok: false, error: "You don't have permission to manage billing." };
   }
+  const sub = await getSubscription(ctx.workspaceId);
+  if (!sub || !sub.stripeSubscriptionId || sub.status !== "active") {
+    return { ok: false, error: "Billing has not started." };
+  }
+  const active = await getInstalledModules(ctx.workspaceId);
+  const options = getCancellationOptions({
+    activeModules: active,
+    moduleKey: undefined, // cancel-all
+    interval: sub.billingInterval,
+    anchorBillingDate: sub.anchorBillingDate,
+    now: new Date(),
+  });
+  return { ok: true, ...options };
+}
+
+/**
+ * Cancel the workspace's subscription (user-initiated, Branch B offboarding). `manage:billing`
+ * only. Two options (brief §10.6):
+ *   - `keep_until_end` → `stripe.subscriptions.update(cancel_at_period_end: true)`; access
+ *     continues to period end; the `customer.subscription.deleted` webhook fires then
+ *     with no refunds.
+ *   - `immediate_refund` → refund the summed pro-rated amount to the card, then cancel
+ *     immediately with `metadata.cancelOption = "immediate_refund"`; the webhook issues
+ *     no ledger refund.
+ *
+ * Returns ok after the Stripe call — the immediate cancel completes asynchronously via
+ * webhook. The /billing page may briefly show "active" until the webhook lands.
+ */
+export async function cancelSubscriptionAction(input: unknown): Promise<CancelSubscriptionResult> {
+  const ctx = await requireWorkspaceContext();
+  if (!(await authorizeOrAudit(ctx, "manage:billing")).ok) {
+    return { ok: false, error: "You don't have permission to manage billing." };
+  }
+  const parsed = cancelSubscriptionOptionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Invalid cancellation option." };
+  }
   try {
-    await cancelSubscription(ctx.workspaceId);
+    const sub = await getSubscription(ctx.workspaceId);
+    if (!sub || !sub.billingInterval || !sub.anchorBillingDate) {
+      return { ok: false, error: "Billing has not started." };
+    }
+    const active = await getInstalledModules(ctx.workspaceId);
+    const refundCents = active.reduce(
+      (sum, key) =>
+        sum +
+        moduleRefundCents(key, active, sub.billingInterval!, sub.anchorBillingDate!, new Date()),
+      0,
+    );
+    await cancelSubscription(ctx.workspaceId, parsed.data, refundCents);
     revalidatePath("/billing");
     return { ok: true };
   } catch (err) {
@@ -164,7 +220,7 @@ export type SwitchIntervalResult =
  */
 export async function switchBillingIntervalAction(input: unknown): Promise<SwitchIntervalResult> {
   const ctx = await requireWorkspaceContext();
-  if (!authorize(ctx.role, "manage:billing").ok) {
+  if (!(await authorizeOrAudit(ctx, "manage:billing")).ok) {
     return { ok: false, error: "You don't have permission to manage billing." };
   }
   const parsed = switchIntervalInputSchema.safeParse(input);

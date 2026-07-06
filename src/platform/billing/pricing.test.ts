@@ -6,8 +6,10 @@ import {
   STACK_DISCOUNT_CENTS,
   currentBillingPeriod,
   formatCents,
+  moduleChargeCents,
   moduleRefundCents,
   priceSubscription,
+  prorateChargeCents,
   prorateRefundCents,
   selectAnchor,
 } from "./pricing";
@@ -265,6 +267,95 @@ describe("proration refund (4c cancellation engine)", () => {
       expect(moduleRefundCents("drive", ["drive"], "monthly", ANCHOR, now)).toBe(350);
       // Drive alongside Books is an add-on → add-on monthly = 450 → half = 225
       expect(moduleRefundCents("drive", ["books", "drive"], "monthly", ANCHOR, now)).toBe(225);
+    });
+  });
+
+  describe("prorateChargeCents", () => {
+    it("returns 0 when anchorBillingDate is null (no active billing)", () => {
+      expect(prorateChargeCents(8100, "annual", null, new Date())).toBe(0);
+    });
+
+    it("returns 0 when netCents is non-positive", () => {
+      const now = new Date(ANCHOR.getTime() + 1_000);
+      expect(prorateChargeCents(0, "monthly", ANCHOR, now)).toBe(0);
+      expect(prorateChargeCents(-100, "monthly", ANCHOR, now)).toBe(0);
+    });
+
+    it("charges the full-period net when added at the period start (fraction → 1)", () => {
+      const now = new Date(ANCHOR.getTime() + 1_000); // 1s in → ~full period
+      expect(prorateChargeCents(900, "monthly", ANCHOR, now)).toBe(900);
+    });
+
+    it("charges half the net at the half-period mark", () => {
+      // 15 of 30 days elapsed → remaining 15/30 = 0.5 → 900 * 0.5 = 450
+      const now = new Date(ANCHOR.getTime() + 15 * 86_400_000);
+      expect(prorateChargeCents(900, "monthly", ANCHOR, now)).toBe(450);
+    });
+
+    it("matches the spec example: $40.50 addon at 50% remaining → $20.25", () => {
+      // $40.50 = 4050 cents (Drive annual addon). Annual period = 365 days.
+      // 50% remaining → 4050 * 0.5 = 2025 ($20.25)
+      const now = new Date(ANCHOR.getTime() + Math.round(365 * 86_400_000 * 0.5));
+      expect(prorateChargeCents(4050, "annual", ANCHOR, now)).toBe(2025);
+    });
+
+    it("rolls into the next billing period (charges its remaining, not 0)", () => {
+      // 31 days in → current period is [30, 60], remaining 29/30 → 900 * 29/30 = 870.
+      // `currentBillingPeriod` floors to the period containing `now`, so a now past
+      // the first period lands in the next one (the charge never collapses to 0).
+      const now = new Date(ANCHOR.getTime() + 31 * 86_400_000);
+      expect(prorateChargeCents(900, "monthly", ANCHOR, now)).toBe(870);
+    });
+  });
+
+  describe("moduleChargeCents", () => {
+    it("charges standalone when the new module becomes the anchor", () => {
+      // Adding Books to {invoices} → Books becomes anchor → standalone monthly 900.
+      // 1s in → full period → 900.
+      const now = new Date(ANCHOR.getTime() + 1_000);
+      const res = moduleChargeCents("books", ["invoices"], "monthly", ANCHOR, now);
+      expect(res.role).toBe("standalone");
+      expect(res.becomesAnchor).toBe(true);
+      expect(res.netCents).toBe(900);
+      expect(res.proratedCents).toBe(900);
+    });
+
+    it("charges add-on when the new module stays beneath the existing anchor", () => {
+      // Adding Invoices to {books} → Invoices is an add-on → add-on monthly 350.
+      const now = new Date(ANCHOR.getTime() + 1_000);
+      const res = moduleChargeCents("invoices", ["books"], "monthly", ANCHOR, now);
+      expect(res.role).toBe("addon");
+      expect(res.becomesAnchor).toBe(false);
+      expect(res.netCents).toBe(350);
+      expect(res.proratedCents).toBe(350);
+    });
+
+    it("prorates the charge for the remaining partial period (50% → half)", () => {
+      // Adding Drive to {books} mid-cycle → add-on monthly 450, half remaining → 225.
+      const now = new Date(ANCHOR.getTime() + 15 * 86_400_000);
+      const res = moduleChargeCents("drive", ["books"], "monthly", ANCHOR, now);
+      expect(res.role).toBe("addon");
+      expect(res.becomesAnchor).toBe(false);
+      expect(res.netCents).toBe(450);
+      expect(res.proratedCents).toBe(225);
+    });
+
+    it("returns 0 proration when the module is already in the active set", () => {
+      const now = new Date(ANCHOR.getTime() + 1_000);
+      const res = moduleChargeCents("books", ["books"], "monthly", ANCHOR, now);
+      expect(res.proratedCents).toBe(0);
+      // role/becomesAnchor still resolved from the resulting set.
+      expect(res.becomesAnchor).toBe(true);
+      expect(res.role).toBe("standalone");
+    });
+
+    it("returns 0 proration when there is no anchor date (no active billing)", () => {
+      const now = new Date();
+      const res = moduleChargeCents("books", [], "monthly", null, now);
+      expect(res.proratedCents).toBe(0);
+      // becomesAnchor is still true (only module in the resulting set), net resolved.
+      expect(res.becomesAnchor).toBe(true);
+      expect(res.netCents).toBe(900);
     });
   });
 });
