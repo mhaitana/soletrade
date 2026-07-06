@@ -31,3 +31,28 @@ export function formatWeekLabel(withinWeek: Date): string {
 export function formatMonthYear(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
+
+/**
+ * Format a date in a specific IANA timezone (Wave 4 — workspace `timezone` setting). Pure.
+ * Stored dates stay UTC; this only affects display. Uses `Intl.DateTimeFormat` with the
+ * workspace's `timeZone` so a 2026-07-06 UTC date renders as "Jul 6, 2026" in
+ * Australia/Sydney but "Jul 5, 2026" in America/Los_Angeles. Falls back to the host locale
+ * + UTC if the timezone is invalid (guarded — an invalid zone would otherwise throw).
+ *
+ * Use this for the most-visible surfaces (dashboard, invoice/quote lists) where the
+ * workspace's timezone should drive the rendered day. `formatDate` (host locale) stays
+ * the default for surfaces where the exact TZ doesn't matter.
+ */
+export function formatDateInTz(d: Date | null, timezone: string): string {
+  if (!d) return "—";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: timezone,
+    }).format(d);
+  } catch {
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+}

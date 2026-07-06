@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import {
   inviteMemberAction,
   removeMemberAction,
+  resendInvitationAction,
+  revokeInvitationAction,
   updateMemberRoleAction,
   type InviteMemberResult,
   type MembersPageData,
@@ -68,6 +70,30 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
     });
   }
 
+  function revoke(invitationId: string) {
+    setRemoveError(null);
+    startTransition(async () => {
+      const res = await revokeInvitationAction({ invitationId });
+      if (!res.ok) {
+        setRemoveError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function resend(invitationId: string) {
+    setRemoveError(null);
+    startTransition(async () => {
+      const res = await resendInvitationAction({ invitationId });
+      if (!res.ok) {
+        setRemoveError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   const inviteError = !inviteState.ok ? inviteState.error : "";
   const inviteFieldErrors = !inviteState.ok ? inviteState.fieldErrors : undefined;
 
@@ -83,8 +109,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
           <CardHeader>
             <CardTitle className="text-base">Invite a member</CardTitle>
             <CardDescription>
-              They&apos;ll receive a single-use invite link valid for 7 days. Email delivery is
-              wired in Phase 18.
+              They&apos;ll receive a single-use invite link by email, valid for 7 days.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -212,9 +237,34 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                       Expires {new Date(inv.expiresAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <Badge variant="outline" className="capitalize">
-                    {roleLabel(inv.role)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="capitalize">
+                      {roleLabel(inv.role)}
+                    </Badge>
+                    {initial.canManage ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isPending}
+                          onClick={() => void resend(inv.id)}
+                          aria-label={`Resend invitation to ${inv.email}`}
+                        >
+                          Resend
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isPending}
+                          onClick={() => void revoke(inv.id)}
+                          aria-label={`Revoke invitation to ${inv.email}`}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          Revoke
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </CardContent>

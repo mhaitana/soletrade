@@ -20,6 +20,7 @@ import {
   previewAddModuleAction,
   previewCancelModuleAction,
   cancelModuleAction,
+  undoCancelModuleAction,
   type AddModulePreview,
   type CancelModulePreviewResult,
   type ModulesPageData,
@@ -143,6 +144,18 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
     });
   }
 
+  function onUndoCancel(key: ModuleKey) {
+    setError(null);
+    startTransition(async () => {
+      const res = await undoCancelModuleAction(key);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   const pendingConfirm = isPending && !!preview;
   const cancelChoices: CancelOptionChoice[] = cancelPreview
     ? cancelPreview.options.map((o) => {
@@ -188,6 +201,8 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
           const enabled = initial.installed.includes(key);
           const Icon = meta.icon;
           const loadingPreview = previewingKey === key || previewingCancelKey === key;
+          const pending = initial.pendingCancellations.find((p) => p.moduleKey === key);
+          const cancelDate = pending ? formatDate(new Date(pending.effectiveAt)) : null;
           return (
             <Card key={key}>
               <CardHeader>
@@ -201,18 +216,39 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
                       <CardDescription>{meta.description}</CardDescription>
                     </div>
                   </div>
-                  {enabled ? <Badge>Enabled</Badge> : <Badge variant="outline">Disabled</Badge>}
+                  {enabled ? (
+                    pending ? (
+                      <Badge variant="outline" className="border-amber-500/40 text-amber-600">
+                        Cancels on {cancelDate}
+                      </Badge>
+                    ) : (
+                      <Badge>Enabled</Badge>
+                    )
+                  ) : (
+                    <Badge variant="outline">Disabled</Badge>
+                  )}
                 </div>
               </CardHeader>
-              <CardContent>
-                <Button
-                  variant={enabled ? "outline" : "default"}
-                  disabled={!initial.canManage || isPending || loadingPreview}
-                  onClick={() => (enabled ? void onDisableClick(key) : void onEnableClick(key))}
-                  aria-label={enabled ? `Disable ${meta.name}` : `Enable ${meta.name}`}
-                >
-                  {loadingPreview ? "Calculating…" : enabled ? "Disable" : "Enable"}
-                </Button>
+              <CardContent className="space-y-2">
+                {enabled && pending ? (
+                  <Button
+                    variant="outline"
+                    disabled={!initial.canManage || isPending || loadingPreview}
+                    onClick={() => void onUndoCancel(key)}
+                    aria-label={`Undo cancellation of ${meta.name}`}
+                  >
+                    {isPending ? "Restoring…" : "Undo cancel"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant={enabled ? "outline" : "default"}
+                    disabled={!initial.canManage || isPending || loadingPreview}
+                    onClick={() => (enabled ? void onDisableClick(key) : void onEnableClick(key))}
+                    aria-label={enabled ? `Disable ${meta.name}` : `Enable ${meta.name}`}
+                  >
+                    {loadingPreview ? "Calculating…" : enabled ? "Disable" : "Enable"}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           );

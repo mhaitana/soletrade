@@ -62,3 +62,16 @@ export async function getUser(id: UserId): Promise<UserMirrorRow | null> {
     .limit(1);
   return rows[0] ?? null;
 }
+
+/**
+ * Update the signed-in user's full name on the `public.users` mirror (Wave 4 — `/settings/account`).
+ * The mirror is the display source of truth (the AppShell + account menu read it), so updating it
+ * here is sufficient for the UI to reflect the new name. Supabase Auth `user_metadata` is not
+ * updated — it isn't read for display. An empty/whitespace name is rejected by the caller's Zod
+ * schema; this trims + stores `null` if somehow empty.
+ */
+export async function updateUserFullName(id: UserId, fullName: string): Promise<void> {
+  const db = getDb();
+  const trimmed = fullName.trim() || null;
+  await db.update(users).set({ fullName: trimmed, updatedAt: new Date() }).where(eq(users.id, id));
+}

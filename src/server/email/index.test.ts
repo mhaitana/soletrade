@@ -86,4 +86,25 @@ describe("sendEmail", () => {
       text: "plain text",
     });
   });
+
+  it("forwards attachments to the client (Wave 4 — PDF attachments)", async () => {
+    let captured: EmailPayload | null = null;
+    const fake: EmailClient = {
+      async send(p: EmailPayload) {
+        captured = p;
+        return { id: "re_ok" };
+      },
+    };
+    setEmailClientForTest(fake);
+    await sendEmail({
+      to: "customer@example.com",
+      subject: "Invoice",
+      html: "<b>html</b>",
+      text: "plain text",
+      attachments: [{ filename: "INV-2026-0001.pdf", content: "JVBERi0=" }],
+    });
+    expect(captured).toMatchObject({
+      attachments: [{ filename: "INV-2026-0001.pdf", content: "JVBERi0=" }],
+    });
+  });
 });

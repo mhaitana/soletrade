@@ -78,7 +78,10 @@ export async function inviteMember(
     actorUserId: inviterId,
     entityType: "member",
     entityId: row.id,
-    metadata: { email: email.toLowerCase(), role },
+    // The token carries the accept link (the notifications platform builds
+    // `${origin}/invite?token=...` from it). The handler also resolves the
+    // workspace name + inviter name from the DB for the email body.
+    metadata: { email: email.toLowerCase(), role, token },
   });
   await writeAudit({
     workspaceId,
@@ -88,8 +91,6 @@ export async function inviteMember(
     targetId: row.id,
     metadata: { email: email.toLowerCase(), role },
   });
-  // Email delivery is wired in Phase 18 (Resend). For now the caller surfaces
-  // the accept link; see `/invite?token=...`.
   return { invitationId: branded<"WorkspaceInvitationId">(row.id), token, expiresAt };
 }
 
@@ -311,6 +312,7 @@ export async function listPendingInvitations(workspaceId: WorkspaceId) {
       id: workspaceInvitations.id,
       email: workspaceInvitations.email,
       role: workspaceInvitations.role,
+      status: workspaceInvitations.status,
       expiresAt: workspaceInvitations.expiresAt,
       createdAt: workspaceInvitations.createdAt,
     })
@@ -323,4 +325,135 @@ export async function listPendingInvitations(workspaceId: WorkspaceId) {
         gt(workspaceInvitations.expiresAt, new Date()), // not expired
       ),
     );
+}
+
+/** A public invitation lookup by token (for the `/invite?token=...` accept page). Returns
+ *  the invitation + workspace name + inviter name, or `null` if the token doesn't match a
+ *  pending, unexpired invitation. Does not leak whether the token exists vs is revoked vs
+ *  expired — the page renders the same "not available" state for all. */
+export interface PublicInvitation {
+  id: WorkspaceInvitationId;
+  workspaceId: WorkspaceId;
+  email: string;
+  role: WorkspaceRole;
+  expiresAt: Date;
+  status: string;
+  /** Whether the invitation's TTL has lapsed (computed server-side so the page doesn't call
+   *  `Date.now()` during render, which the react-hooks/purity lint rule forbids). */
+  expired: boolean;
+  workspaceName: string;
+  inviterName: string | null;
+}
+
+export async function getInvitationByToken(token: string): Promise<PublicInvitation | null> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: workspaceInvitations.id,
+      workspaceId: workspaceInvitations.workspaceId,
+      email: workspaceInvitations.email,
+      role: workspaceInvitations.role,
+      expiresAt: workspaceInvitations.expiresAt,
+      status: workspaceInvitations.status,
+      workspaceName: workspaces.name,
+      inviterName: usersTable.fullName,
+    })
+    .from(workspaceInvitations)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceInvitations.workspaceId))
+    .leftJoin(usersTable, eq(usersTable.id, workspaceInvitations.invitedByUserId))
+    .where(eq(workspaceInvitations.token, token))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    email: row.email,
+    role: row.role,
+    expiresAt: row.expiresAt,
+    status: row.status,
+    expired: row.expiresAt.getTime() < Date.now(),
+    workspaceName: row.workspaceName,
+    inviterName: row.inviterName,
+  };
+}
+
+/** Revoke a pending invitation (Wave 4). Marks the row `status='revoked'` so the accept link
+ *  stops working. Idempotent on already-revoked/accepted rows (no-op). Guarded `manage:member`
+ *  by the caller. */
+export async function revokeInvitation(
+  workspaceId: WorkspaceId,
+  invitationId: WorkspaceInvitationId,
+  actorId: UserId,
+): Promise<void> {
+  const db = getDb();
+  await db
+    .update(workspaceInvitations)
+    .set({ status: "revoked", updatedAt: new Date() })
+    .where(
+      and(
+        eq(workspaceInvitations.id, invitationId),
+        eq(workspaceInvitations.workspaceId, workspaceId),
+        eq(workspaceInvitations.status, "pending"),
+      ),
+    );
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "member.revoke_invite",
+    targetType: "member",
+    targetId: invitationId,
+    metadata: { invitationId },
+  });
+}
+
+/** Resend a pending invitation (Wave 4). Bumps `expiresAt` to now+7d and re-publishes
+ *  `MemberInvited` (so the notifications platform re-sends the email with a fresh link).
+ *  Throws if the invitation isn't pending or doesn't belong to this workspace. The token
+ *  is preserved (the same link keeps working); only the expiry rolls forward. */
+export async function resendInvitation(
+  workspaceId: WorkspaceId,
+  invitationId: WorkspaceInvitationId,
+  actorId: UserId,
+): Promise<{ token: string; expiresAt: Date; email: string; role: WorkspaceRole } | null> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      email: workspaceInvitations.email,
+      role: workspaceInvitations.role,
+      token: workspaceInvitations.token,
+    })
+    .from(workspaceInvitations)
+    .where(
+      and(
+        eq(workspaceInvitations.id, invitationId),
+        eq(workspaceInvitations.workspaceId, workspaceId),
+        eq(workspaceInvitations.status, "pending"),
+      ),
+    )
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+  await db
+    .update(workspaceInvitations)
+    .set({ expiresAt, updatedAt: new Date() })
+    .where(eq(workspaceInvitations.id, invitationId));
+  await publishEvent({
+    type: "MemberInvited",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "member",
+    entityId: invitationId,
+    metadata: { email: row.email, role: row.role, token: row.token },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "member.resend_invite",
+    targetType: "member",
+    targetId: invitationId,
+    metadata: { invitationId, email: row.email },
+  });
+  return { token: row.token, expiresAt, email: row.email, role: row.role };
 }

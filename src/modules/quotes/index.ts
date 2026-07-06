@@ -21,6 +21,7 @@ import {
   customers,
 } from "@/server/db/schema";
 import { getCustomer } from "@/platform/customers";
+import { getWorkspace } from "@/platform/workspaces";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { computeLineItemTotals, lineItemAmountCents } from "@/shared/utils/totals";
@@ -210,24 +211,27 @@ function isUniqueViolation(err: unknown): boolean {
   );
 }
 
-/** Format `QUO-YYYY-NNNN` from a 1-based sequence. */
-function formatQuoteNumber(year: number, seq: number): string {
-  return `QUO-${year}-${String(seq).padStart(4, "0")}`;
+/** Format `{prefix}YYYY-NNNN` from a 1-based sequence. The prefix comes from the workspace row. */
+function formatQuoteNumber(prefix: string, year: number, seq: number): string {
+  return `${prefix}${year}-${String(seq).padStart(4, "0")}`;
 }
 
-/** Next workspace-unique quote number for the given year (count existing + 1). */
+/** Next workspace-unique quote number for the given year (count existing + 1). Uses the
+ *  workspace's configured `quotePrefix` (default "QUO-"). Changing the prefix resets the yearly
+ *  sequence (the count is scoped to `${prefix}${year}-`). */
 async function nextQuoteNumber(
   db: ReturnType<typeof getDb>,
   workspaceId: WorkspaceId,
   year: number,
+  prefix: string,
 ): Promise<string> {
-  const prefix = `QUO-${year}-`;
+  const yearPrefix = `${prefix}${year}-`;
   const rows = await db
     .select({ n: count() })
     .from(quotes)
-    .where(and(eq(quotes.workspaceId, workspaceId), like(quotes.number, `${prefix}%`)));
+    .where(and(eq(quotes.workspaceId, workspaceId), like(quotes.number, `${yearPrefix}%`)));
   const seq = (rows[0]?.n ?? 0) + 1;
-  return formatQuoteNumber(year, seq);
+  return formatQuoteNumber(prefix, year, seq);
 }
 
 /** Verify a customer belongs to the workspace (IDOR guard). Throws if customerId is set but not found. */
@@ -258,13 +262,17 @@ export async function createQuote(
   const totals = computeLineItemTotals(input.lineItems, input.taxRate);
   const year = new Date().getFullYear();
   const db = getDb();
+  // The workspace row carries the configured quote prefix + default currency (migration 0018).
+  const workspace = await getWorkspace(workspaceId);
+  const quotePrefix = workspace?.quotePrefix ?? "QUO-";
+  const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
 
   let attempts = 0;
   let lastErr: unknown;
   while (attempts < 3) {
     attempts += 1;
     try {
-      const number = await nextQuoteNumber(db, workspaceId, year);
+      const number = await nextQuoteNumber(db, workspaceId, year, quotePrefix);
       return await db.transaction(async (tx) => {
         const qRows = await tx
           .insert(quotes)
@@ -275,7 +283,7 @@ export async function createQuote(
             status: "draft",
             issueDate: input.issueDate,
             validUntil: input.validUntil ?? null,
-            currency: input.currency ?? "AUD",
+            currency: input.currency ?? defaultCurrency,
             taxRate: input.taxRate,
             subtotalCents: totals.subtotalCents,
             taxCents: totals.taxCents,

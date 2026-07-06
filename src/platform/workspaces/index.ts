@@ -16,6 +16,9 @@ export interface WorkspaceMembership {
   role: WorkspaceRole;
 }
 
+/** Full workspace row shape (all columns). The shape `getWorkspace` returns. */
+export type WorkspaceRow = NonNullable<Awaited<ReturnType<typeof getWorkspace>>>;
+
 /** Cookie holding the user's currently-active workspace id. */
 export const ACTIVE_WORKSPACE_COOKIE = "soletrade:wid";
 
@@ -89,6 +92,72 @@ export async function getWorkspace(workspaceId: WorkspaceId) {
     .where(and(eq(workspaces.id, workspaceId), isNull(workspaces.deletedAt)))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/** Editable workspace fields (Wave 4 — `/settings/general`). The slug stays immutable v1. */
+export interface WorkspaceUpdateInput {
+  name: string;
+  defaultCurrency: string;
+  invoicePrefix: string;
+  quotePrefix: string;
+  timezone: string;
+}
+
+/**
+ * Update a workspace's editable settings (name + currency + prefixes + timezone). The caller
+ * (a Server Action) is responsible for the `update:workspace` permission gate. Publishes
+ * `WorkspaceUpdated` + audits `workspace.update`. Returns the updated row, or `null` if the
+ * workspace wasn't found / is soft-deleted.
+ */
+export async function updateWorkspace(
+  workspaceId: WorkspaceId,
+  input: WorkspaceUpdateInput,
+  actorId: UserId,
+) {
+  const db = getDb();
+  const rows = await db
+    .update(workspaces)
+    .set({
+      name: input.name,
+      defaultCurrency: input.defaultCurrency,
+      invoicePrefix: input.invoicePrefix,
+      quotePrefix: input.quotePrefix,
+      timezone: input.timezone,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(workspaces.id, workspaceId), isNull(workspaces.deletedAt)))
+    .returning();
+  const updated = rows[0] ?? null;
+  if (!updated) return null;
+  await publishEvent({
+    type: "WorkspaceUpdated",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "workspace",
+    entityId: workspaceId,
+    metadata: {
+      name: input.name,
+      defaultCurrency: input.defaultCurrency,
+      invoicePrefix: input.invoicePrefix,
+      quotePrefix: input.quotePrefix,
+      timezone: input.timezone,
+    },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "workspace.update",
+    targetType: "workspace",
+    targetId: workspaceId,
+    metadata: {
+      name: input.name,
+      defaultCurrency: input.defaultCurrency,
+      invoicePrefix: input.invoicePrefix,
+      quotePrefix: input.quotePrefix,
+      timezone: input.timezone,
+    },
+  });
+  return updated;
 }
 
 /** The user's role in a workspace, or `null` if not an active member. */

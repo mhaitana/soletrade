@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Download } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
@@ -60,7 +60,15 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             )}
           </p>
         </div>
-        {data.canManage ? <QuoteDetailActions quoteId={q.id} status={q.status} /> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/quotes/${q.id}/pdf`}>
+              <Download className="size-4" aria-hidden />
+              PDF
+            </Link>
+          </Button>
+          {data.canManage ? <QuoteDetailActions quoteId={q.id} status={q.status} /> : null}
+        </div>
       </div>
 
       {q.status === "converted" && q.convertedInvoiceId ? (

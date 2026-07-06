@@ -5,7 +5,13 @@ import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
-import { assertModuleEnabled, getInstalledModules } from "@/platform/module-installations";
+import {
+  assertModuleEnabled,
+  clearPendingModuleCancellation,
+  getInstalledModules,
+  getModuleInstallations,
+  resolveActiveModules,
+} from "@/platform/module-installations";
 import { ensureSubscription, getSubscription } from "@/platform/billing/subscriptions";
 import {
   addModuleToSubscription,
@@ -213,13 +219,50 @@ export async function cancelModuleAction(input: unknown): Promise<CancelModuleRe
   }
 }
 
-export type ModulesPageData = { installed: ModuleKey[]; canManage: boolean };
+export type ModulesPageData = {
+  installed: ModuleKey[];
+  /** Modules with a keep-until-end cancellation scheduled — surfaced as "Cancels on {date}" + Undo. */
+  pendingCancellations: { moduleKey: ModuleKey; effectiveAt: string }[];
+  canManage: boolean;
+};
 
 /** Loader for the modules settings page. */
 export async function loadModulesPage(): Promise<ModulesPageData> {
   const ctx = await requireWorkspaceContext();
-  const [installed] = await Promise.all([getInstalledModules(ctx.workspaceId)]);
-  return { installed, canManage: authorize(ctx.role, "manage:module").ok };
+  const rows = await getModuleInstallations(ctx.workspaceId);
+  const installed = resolveActiveModules(rows);
+  const pendingCancellations = rows
+    .filter((r) => r.status === "active" && r.pendingCancellationAt && r.cancelledAt === null)
+    .map((r) => ({ moduleKey: r.moduleKey, effectiveAt: r.pendingCancellationAt!.toISOString() }));
+  return { installed, pendingCancellations, canManage: authorize(ctx.role, "manage:module").ok };
+}
+
+export type UndoCancelModuleResult =
+  { ok: true; moduleKey: ModuleKey } | { ok: false; error: string };
+
+/**
+ * Undo a keep-until-end module cancellation (Wave 4). Clears `pendingCancellationAt` so the
+ * `module-cancel-finalize` cron no longer picks the row up — the module stays billable and
+ * accessible. The Stripe subscription item is NOT deleted until the finalize step, so clearing the
+ * local timestamp is sufficient to revive the module. Gated `manage:module`.
+ */
+export async function undoCancelModuleAction(input: unknown): Promise<UndoCancelModuleResult> {
+  const parsed = moduleKeySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Unknown module." };
+
+  const ctx = await requireWorkspaceContext();
+  if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
+
+  try {
+    await clearPendingModuleCancellation(ctx.workspaceId, parsed.data);
+    revalidatePath("/", "layout");
+    return { ok: true, moduleKey: parsed.data };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to undo cancellation.",
+    };
+  }
 }
 
 // Re-export so module routes can assert enablement (gates module pages/actions).

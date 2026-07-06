@@ -127,6 +127,13 @@
       "when": 1783408400000,
       "tag": "0017_search_trigram_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783337094611,
+      "tag": "0018_violet_vision",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
@@ -58,7 +59,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             )}
           </p>
         </div>
-        {data.canManage ? <InvoiceDetailActions invoiceId={inv.id} status={inv.status} /> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/invoices/${inv.id}/pdf`}>
+              <Download className="size-4" aria-hidden />
+              PDF
+            </Link>
+          </Button>
+          {data.canManage ? <InvoiceDetailActions invoiceId={inv.id} status={inv.status} /> : null}
+        </div>
       </div>
 
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">

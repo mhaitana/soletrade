@@ -3,6 +3,7 @@ import { and, desc, eq, gte, ilike, lte, or, type SQL } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { bookTransactions, customers } from "@/server/db/schema";
 import { getCustomer } from "@/platform/customers";
+import { getWorkspace } from "@/platform/workspaces";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { isBookCategory } from "@/shared/constants/books-categories";
@@ -157,6 +158,9 @@ export async function createTransaction(
   await assertCustomerInWorkspace(workspaceId, input.customerId ?? null);
 
   const db = getDb();
+  // Default currency from the workspace row (migration 0018); fall back to AUD if missing.
+  const workspace = await getWorkspace(workspaceId);
+  const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
   const rows = await db
     .insert(bookTransactions)
     .values({
@@ -164,7 +168,7 @@ export async function createTransaction(
       type: input.type,
       amountCents: input.amountCents,
       gstCents: input.gstCents ?? 0,
-      currency: input.currency ?? "AUD",
+      currency: input.currency ?? defaultCurrency,
       date: input.date,
       description: input.description.trim(),
       category: input.category,

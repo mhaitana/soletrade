@@ -180,3 +180,17 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Respect prefers-reduced-motion (MASTER.md requirement): neutralize tw-animate-css +
+   component transitions for users who request reduced motion. Durations are set to a near-zero
+   value (not 0) so any JS listening for transitionend/animationend still fires. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

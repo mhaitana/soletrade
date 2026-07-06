@@ -12,6 +12,12 @@ export const workspaces = pgTable("workspaces", {
     .$type<UserId>()
     .references(() => users.id),
   defaultCurrency: text("default_currency").default("AUD").notNull(),
+  /** IANA timezone for display, e.g. "Australia/Sydney". Stored dates stay UTC. */
+  timezone: text("timezone").default("Australia/Sydney").notNull(),
+  /** Prefix for new invoice numbers, e.g. "INV-" → "INV-2026-0001". Changing it resets the yearly sequence. */
+  invoicePrefix: text("invoice_prefix").default("INV-").notNull(),
+  /** Prefix for new quote numbers, e.g. "QUO-" → "QUO-2026-0001". */
+  quotePrefix: text("quote_prefix").default("QUO-").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),

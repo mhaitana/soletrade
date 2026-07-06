@@ -18,6 +18,7 @@ export interface ActivityLabel {
 
 export const ACTIVITY_LABELS: Record<string, ActivityLabel> = {
   WorkspaceCreated: { label: "created the workspace", tone: "positive" },
+  WorkspaceUpdated: { label: "updated the workspace settings", tone: "neutral" },
   ModuleEnabled: { label: "enabled a module", tone: "info" },
   ModuleDisabled: { label: "disabled a module", tone: "neutral" },
   ModuleCancelled: { label: "cancelled a module", tone: "warning" },

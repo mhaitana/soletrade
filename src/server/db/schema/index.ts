@@ -3,7 +3,6 @@ export * from "./users";
 export * from "./workspaces";
 export * from "./members";
 export * from "./invitations";
-export * from "./settings";
 export * from "./module-installations";
 export * from "./activity";
 export * from "./audit";
