@@ -40,7 +40,7 @@ const createSchema = z.object({
   currency: z.string().trim().min(3).max(3).optional(),
   taxRate: z.number().int().min(0).max(100),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
-  notes: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 export type CreateQuoteResult =
@@ -96,7 +96,7 @@ const updateSchema = z.object({
   currency: z.string().trim().min(3).max(3).optional(),
   taxRate: z.number().int().min(0).max(100),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
-  notes: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 export type UpdateQuoteResult =

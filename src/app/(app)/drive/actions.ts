@@ -41,7 +41,7 @@ const createEarningSchema = z.object({
   currency: z.string().trim().min(3).max(3).optional(),
   date: z.coerce.date(),
   description: z.string().trim().min(1, "Description is required.").max(280),
-  notes: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 export type CreateEarningResult =
@@ -89,7 +89,7 @@ const updateEarningSchema = z.object({
   currency: z.string().trim().min(3).max(3).optional(),
   date: z.coerce.date(),
   description: z.string().trim().min(1, "Description is required.").max(280),
-  notes: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 export type UpdateEarningResult =
@@ -139,8 +139,8 @@ const createTripSchema = z.object({
   /** User-entered km (e.g. 45.2); the action multiplies ×1000 → meters for storage. */
   distanceKm: z.coerce.number().min(0.1, "Distance must be greater than 0."),
   date: z.coerce.date(),
-  purpose: z.string().trim().max(280).optional(),
-  notes: z.string().trim().max(2000).optional(),
+  purpose: z.string().trim().max(280).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 export type CreateTripResult =
@@ -185,8 +185,8 @@ const updateTripSchema = z.object({
   }),
   distanceKm: z.coerce.number().min(0.1, "Distance must be greater than 0."),
   date: z.coerce.date(),
-  purpose: z.string().trim().max(280).optional(),
-  notes: z.string().trim().max(2000).optional(),
+  purpose: z.string().trim().max(280).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 export type UpdateTripResult =

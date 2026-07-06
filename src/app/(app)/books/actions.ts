@@ -35,7 +35,7 @@ const createSchema = z
     description: z.string().trim().min(1, "Description is required.").max(280),
     category: z.string().trim().min(1, "Category is required."),
     customerId: z.string().uuid().nullable().optional(),
-    notes: z.string().trim().max(2000).optional(),
+    notes: z.string().trim().max(2000).nullable().optional(),
   })
   .refine((v) => isBookCategory(v.type, v.category), {
     message: "Pick a category for this transaction type.",
@@ -91,7 +91,7 @@ const updateSchema = z
     description: z.string().trim().min(1, "Description is required.").max(280),
     category: z.string().trim().min(1, "Category is required."),
     customerId: z.string().uuid().nullable().optional(),
-    notes: z.string().trim().max(2000).optional(),
+    notes: z.string().trim().max(2000).nullable().optional(),
   })
   .refine((v) => isBookCategory(v.type, v.category), {
     message: "Pick a category for this transaction type.",
