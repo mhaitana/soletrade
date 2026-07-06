@@ -73,7 +73,11 @@ export async function markReadAction(notificationId: string): Promise<void> {
   const parsed = markReadSchema.safeParse({ notificationId });
   if (!parsed.success) return; // malformed id — no-op (the store is IDOR-safe regardless)
   const ctx = await requireWorkspaceContext();
-  await markRead(ctx.workspaceId, ctx.user.id, branded<"NotificationId">(parsed.data.notificationId));
+  await markRead(
+    ctx.workspaceId,
+    ctx.user.id,
+    branded<"NotificationId">(parsed.data.notificationId),
+  );
   revalidatePath("/notifications");
 }
 

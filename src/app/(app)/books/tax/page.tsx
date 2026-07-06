@@ -79,7 +79,9 @@ export default async function TaxPage() {
             </p>
             <p
               className={`mt-1 text-2xl font-semibold tabular-nums ${
-                currentNetGstCents >= 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-500"
+                currentNetGstCents >= 0
+                  ? "text-destructive"
+                  : "text-emerald-600 dark:text-emerald-500"
               }`}
             >
               {formatCents(currentNetGstCents, CURRENCY)}
@@ -108,7 +110,9 @@ export default async function TaxPage() {
             </p>
             <p
               className={`text-2xl font-semibold tabular-nums ${
-                projectedNextQuarterCents >= 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-500"
+                projectedNextQuarterCents >= 0
+                  ? "text-destructive"
+                  : "text-emerald-600 dark:text-emerald-500"
               }`}
             >
               {formatCents(projectedNextQuarterCents, CURRENCY)}
@@ -178,7 +182,9 @@ export default async function TaxPage() {
                     </td>
                     <td
                       className={`px-0 py-2 text-right font-medium tabular-nums ${
-                        p.netGstCents >= 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-500"
+                        p.netGstCents >= 0
+                          ? "text-destructive"
+                          : "text-emerald-600 dark:text-emerald-500"
                       }`}
                     >
                       {formatCents(p.netGstCents, CURRENCY)}

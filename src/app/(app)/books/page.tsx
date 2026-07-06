@@ -234,7 +234,9 @@ export default async function BooksPage({
                     </td>
                     <td
                       className={`px-4 py-3 text-right font-medium tabular-nums ${
-                        tx.type === "income" ? "text-emerald-600 dark:text-emerald-500" : "text-foreground"
+                        tx.type === "income"
+                          ? "text-emerald-600 dark:text-emerald-500"
+                          : "text-foreground"
                       }`}
                     >
                       {formatCents(signed, tx.currency)}

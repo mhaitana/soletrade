@@ -189,7 +189,12 @@ export function QuoteAcceptForm({
         </p>
       ) : null}
 
-      <Dialog open={pending !== null} onOpenChange={(o) => { if (!o && !isPending) setPending(null); }}>
+      <Dialog
+        open={pending !== null}
+        onOpenChange={(o) => {
+          if (!o && !isPending) setPending(null);
+        }}
+      >
         <DialogContent>
           {error ? (
             <p className="text-sm text-destructive" role="alert">

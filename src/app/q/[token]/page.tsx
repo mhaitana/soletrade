@@ -128,7 +128,9 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
           {/* Terms & Conditions (Wave 2) — collapsible disclosure above the accept button. */}
           {q.termsConditions ? (
             <details id="terms" className="mt-5 rounded-md border border-border bg-muted/30 p-4">
-              <summary className="cursor-pointer text-sm font-medium">Terms &amp; Conditions</summary>
+              <summary className="cursor-pointer text-sm font-medium">
+                Terms &amp; Conditions
+              </summary>
               <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
                 {q.termsConditions}
               </p>

@@ -218,7 +218,9 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                           variant="outline"
                           size="sm"
                           disabled={isPending}
-                          onClick={() => setRemoveTarget({ userId: m.userId, label: m.email || m.userId })}
+                          onClick={() =>
+                            setRemoveTarget({ userId: m.userId, label: m.email || m.userId })
+                          }
                           aria-label={`Remove ${m.email || m.userId}`}
                         >
                           Remove
