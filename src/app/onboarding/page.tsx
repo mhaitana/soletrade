@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
 import { requireUser } from "@/server/auth/session";
 
 // Auth-scoped page — never statically prerendered.
@@ -11,8 +11,12 @@ export const metadata = { title: "Create your workspace" };
 
 export default async function OnboardingPage() {
   const user = await requireUser();
+  // Brand-new users land here with zero workspaces (via /auth/callback +
+  // requireWorkspaceContext); existing users arrive via the WorkspaceSwitcher's
+  // "Create workspace" link to add another. We no longer redirect the latter —
+  // the page branches its copy instead so both audiences are served.
   const workspaces = await listUserWorkspaces(user.id);
-  if (workspaces.length > 0) redirect("/dashboard");
+  const hasWorkspace = workspaces.length > 0;
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
@@ -20,10 +24,21 @@ export default async function OnboardingPage() {
         <div className="mb-8 flex justify-center">
           <Logo />
         </div>
-        <h1 className="text-center text-2xl font-semibold tracking-tight">Create your workspace</h1>
+        <h1 className="text-center text-2xl font-semibold tracking-tight">
+          {hasWorkspace ? "Create a new workspace" : "Create your workspace"}
+        </h1>
         <p className="mt-2 text-center text-sm text-muted-foreground">
-          A workspace holds your customers, modules, and billing. You can rename it later.
+          {hasWorkspace
+            ? "You'll switch into the new workspace once it's created."
+            : "A workspace holds your customers, modules, and billing. You can rename it later."}
         </p>
+        {hasWorkspace ? (
+          <p className="mt-4 text-center text-sm">
+            <Link href="/dashboard" className="font-medium text-primary underline underline-offset-2">
+              Back to dashboard
+            </Link>
+          </p>
+        ) : null}
         <div className="mt-6">
           <CreateWorkspaceForm />
         </div>
