@@ -120,6 +120,13 @@
       "when": 1783322031846,
       "tag": "0016_colossal_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783408400000,
+      "tag": "0017_search_trigram_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -23,11 +23,12 @@ import { ThemeToggle } from "@/shared/components/theme-toggle";
 import { NotificationBell } from "@/shared/components/notification-bell/notification-bell";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
 import { AccountMenu } from "./account-menu";
+import { SearchTrigger } from "@/shared/components/command-palette/search-trigger";
 import { MODULES, type ModuleKey } from "@/shared/constants/modules";
 import type { LucideIcon } from "lucide-react";
 import type { WorkspaceId } from "@/shared/types/ids";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+export type NavItem = { href: string; label: string; icon: LucideIcon };
 
 export type AppShellProps = {
   workspaces: WorkspaceOption[];
@@ -43,7 +44,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function buildNav(installedModules: ModuleKey[]): NavItem[] {
+export function buildNav(installedModules: ModuleKey[]): NavItem[] {
   const platformNav: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/assistant", label: "Assistant", icon: Bot },
@@ -205,6 +206,8 @@ export function AppShell({
           </Sheet>
 
           <WorkspaceSwitcher workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
+
+          <SearchTrigger installedModules={installedModules} />
 
           <div className="ml-auto flex items-center gap-1">
             <NotificationBell initialUnreadCount={notificationCount} />

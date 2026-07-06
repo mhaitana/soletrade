@@ -824,12 +824,14 @@ export async function deleteExpense(
   return true;
 }
 
-/** List vehicle expenses for a workspace, optionally filtered by vehicle/date range. */
+/** List vehicle expenses for a workspace, optionally filtered by vehicle/search/date range. */
 export async function listExpenses(
   workspaceId: WorkspaceId,
   opts?: {
     vehicleId?: VehicleId;
     type?: VehicleExpenseType;
+    /** Leading-wildcard ILIKE on `description` + `notes` (index-backed via `pg_trgm` — migration 0017). */
+    search?: string;
     dateFrom?: Date;
     dateTo?: Date;
     limit?: number;
@@ -842,6 +844,13 @@ export async function listExpenses(
   if (opts?.type) conditions.push(eq(driverVehicleExpenses.type, opts.type));
   if (opts?.dateFrom) conditions.push(gte(driverVehicleExpenses.date, opts.dateFrom));
   if (opts?.dateTo) conditions.push(lte(driverVehicleExpenses.date, opts.dateTo));
+  const search = opts?.search?.trim();
+  if (search) {
+    const term = `%${search}%`;
+    conditions.push(
+      or(ilike(driverVehicleExpenses.description, term), ilike(driverVehicleExpenses.notes, term)),
+    );
+  }
   return db
     .select(selectExpense)
     .from(driverVehicleExpenses)

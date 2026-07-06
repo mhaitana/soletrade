@@ -23,3 +23,11 @@ export function formatWeekLabel(withinWeek: Date): string {
   d.setUTCDate(d.getUTCDate() - day); // roll back to this week's Monday
   return `Week of ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
+
+/**
+ * Format a date's month + year as a "July 2026" label (Wave 3 — customer timeline month
+ * separators). Pure. Uses the host locale via `toLocaleDateString`.
+ */
+export function formatMonthYear(d: Date): string {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}

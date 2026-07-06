@@ -26,11 +26,20 @@ function actorLabel(row: ActivityRow): string {
   return row.actorFullName || row.actorEmail || "Someone";
 }
 
-/** Build a deep link to the entity referenced by an activity row, if any. */
+/** Build a deep link to the entity referenced by an activity row, if any. Only entity types
+ *  with a real detail route are linked — the rest render as plain text (no dead links). */
 function entityHref(row: ActivityRow): string | null {
   if (!row.entityType || !row.entityId) return null;
-  if (row.entityType === "customer") return `/customers/${row.entityId}/edit`;
-  return null;
+  switch (row.entityType) {
+    case "customer":
+      return `/customers/${row.entityId}`;
+    case "invoice":
+      return `/invoices/${row.entityId}`;
+    case "quote":
+      return `/quotes/${row.entityId}`;
+    default:
+      return null;
+  }
 }
 
 function ActivityItem({ row }: { row: ActivityRow }) {

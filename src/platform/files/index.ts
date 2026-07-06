@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, lt, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, lt, or, type SQL } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { files, users } from "@/server/db/schema";
 import type { FileId, UserId, WorkspaceId } from "@/shared/types/ids";
@@ -58,6 +58,8 @@ export interface FileListOptions {
   entityType?: string;
   /** Restrict to a single entity id (implies same entityType in practice). */
   entityId?: string;
+  /** Leading-wildcard ILIKE on `file_name` (index-backed via `pg_trgm` — migration 0017). */
+  search?: string;
   limit?: number;
   /** Keyset cursor: return rows strictly before this (createdAt, id). */
   before?: FileCursor;
@@ -131,6 +133,8 @@ export async function listFiles(
   const conditions: (SQL | undefined)[] = [eq(files.workspaceId, workspaceId)];
   if (opts.entityType) conditions.push(eq(files.entityType, opts.entityType));
   if (opts.entityId) conditions.push(eq(files.entityId, opts.entityId));
+  const search = opts.search?.trim();
+  if (search) conditions.push(ilike(files.fileName, `%${search}%`));
   if (opts.before) {
     conditions.push(
       or(

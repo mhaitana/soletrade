@@ -62,7 +62,12 @@ export function CustomersTable({
           {customers.map((c) => (
             <li key={c.id} className="flex flex-wrap items-center gap-3 p-4">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{c.name}</p>
+                <Link
+                  href={`/customers/${c.id}`}
+                  className="truncate text-sm font-medium hover:underline"
+                >
+                  {c.name}
+                </Link>
                 <p className="truncate text-xs text-muted-foreground">
                   {[c.email, c.company, c.phone].filter(Boolean).join(" · ") ||
                     "No contact details"}
