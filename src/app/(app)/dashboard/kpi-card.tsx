@@ -77,7 +77,9 @@ export function KpiCard({
           </div>
         ) : (
           <div className="space-y-1">
-            <p className="text-2xl font-semibold tracking-tight tabular-nums">{kpi.value}</p>
+            <p className="text-2xl font-semibold tracking-tight font-mono tabular-nums">
+              {kpi.value}
+            </p>
             {kpi.delta ? <DeltaBadge delta={kpi.delta} periodNoun={periodNoun} /> : null}
           </div>
         )}

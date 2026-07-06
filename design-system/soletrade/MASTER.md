@@ -7,203 +7,130 @@
 ---
 
 **Project:** soletrade labs Suite
-**Generated:** 2026-07-05 16:06:37
-**Category:** Micro SaaS
+**Category:** Business operating system (B2B SaaS — solo traders, freelancers, gig operators)
+**Direction:** Neutral Pro — ink-on-warm-white, flat, hairline, data-dense
 
 ---
 
-## Global Rules
+## Direction rationale
 
-### Color Palette
+The product is a B2B invoicing / books / quotes / gig-earnings tool. The aesthetic is **Vercel/Geist + Square-dashboard**:
+calm, precise, high-information-density, flat. No decorative color, no card shadows, hairline borders only. One
+restrained accent (blue) for links/focus/interactive; emerald is semantic-only (paid/success). Numerics render in
+JetBrains Mono so amounts and document numbers align and read as "data".
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#1E3A5F` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#2563EB` | `--color-secondary` |
-| Accent/CTA | `#059669` | `--color-accent` |
-| Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#0F172A` | `--color-foreground` |
-| Muted | `#F1F3F5` | `--color-muted` |
-| Border | `#E4E7EB` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#1E3A5F` | `--color-ring` |
+## Color Palette
 
-**Color Notes:** Navy professional + paid green
+| Role | Hex (light) | CSS Variable |
+|------|-------------|--------------|
+| Background | `#FAFAF9` (stone-50) | `--color-background` |
+| Foreground (ink) | `#1C1917` (stone-900) | `--color-foreground` |
+| Card / paper | `#FFFFFF` | `--color-card` |
+| Primary (ink) | `#1C1917` | `--color-primary` |
+| On Primary | `#FAFAF9` | `--color-primary-foreground` |
+| Muted surface | `#F5F4F1` (stone-100) | `--color-muted` |
+| Muted text | `#57534E` (stone-600) | `--color-muted-foreground` |
+| Border (hairline) | `#E7E5E4` (stone-200) | `--color-border` |
+| Accent (single) | `#2563EB` (blue-600) | `--color-brand-blue` |
+| Ring / focus | `#2563EB` | `--color-ring` |
+| Success / paid | `#059669` (emerald-600) — **semantic only** | `--color-success` |
+| Warning | `#EA580C` (orange-600) — **semantic only** | `--color-warning` |
+| Destructive | `#DC2626` (red-600) | `--color-destructive` |
 
-### Typography
+**Dark mode** is warm-tinted stone (`#0C0A09` bg, `#E7E5E4` fg, inverted ink primary). Defined in `globals.css :root`/`.dark`.
 
-- **Heading Font:** Poppins
-- **Body Font:** Open Sans
-- **Mood:** modern, professional, clean, corporate, friendly, approachable
-- **Google Fonts:** [Poppins + Open Sans](https://fonts.google.com/share?selection.family=Open+Sans:wght@300;400;500;600;700|Poppins:wght@400;500;600;700)
+**Color rules**
+- One accent. `--color-brand-blue` is the *only* non-semantic accent — links, focus rings, interactive highlights.
+- Emerald/amber/red are **semantic**: paid, warning, destructive/overdue. Never decorative.
+- Status badges use tinted variants (`bg-success/10 text-success`), not saturated fills. Always icon + text, never color alone.
+- No raw hex in components — use tokens. No `bg-white`/`bg-[#...]` on app or public surfaces (use `bg-card`).
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
-```
+## Typography
 
-### Spacing Variables
+- **Sans:** Inter (loaded via `next/font` as `--font-sans`).
+- **Mono:** JetBrains Mono (loaded as `--font-mono`) — used for **numerics**: KPI values, table money/amount columns, document numbers, audit codes, prefix previews.
+- **Body:** Inter 14px base (16px mobile). Line-height 1.5.
+- **Headings:** Inter 600/700 — page title 24px (`text-2xl`), section 16px (`text-base font-semibold`), card title 14px.
+- **Type scale:** 12 14 16 18 24 30.
+- **Numbers:** `font-mono tabular-nums` on amount/quantity cells and KPI values; Inter `tabular-nums` for inline body numbers.
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
-| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
-| `--space-md` | `16px` / `1rem` | Standard padding |
-| `--space-lg` | `24px` / `1.5rem` | Section padding |
-| `--space-xl` | `32px` / `2rem` | Large gaps |
-| `--space-2xl` | `48px` / `3rem` | Section margins |
-| `--space-3xl` | `64px` / `4rem` | Hero padding |
+## Spacing (4/8 rhythm)
 
-### Shadow Depths
+`--space-xs` 4px · `--space-sm` 8px · `--space-md` 16px · `--space-lg` 24px · `--space-xl` 32px · `--space-2xl` 48px · `--space-3xl` 64px.
 
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+## Radius & Elevation
 
----
+- `--radius: 0.5rem` (8px). Scale: sm 0.3 · md 0.4 · lg 1.0 · xl 1.4 · 2xl 1.8 (× `--radius`).
+- **No card shadows.** Cards are `rounded-xl border border-border bg-card` — flat, hairline only.
+- **Overlays only** (Dialog, Sheet, DropdownMenu, Popover) keep a single `shadow-lg` for elevation separation from the flat surface layer.
 
 ## Component Specs
 
 ### Buttons
-
-```css
-/* Primary Button */
-.btn-primary {
-  background: #059669;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #1E3A5F;
-  border: 2px solid #1E3A5F;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
+- **Primary (default):** `bg-primary text-primary-foreground` (ink) · `h-9 px-4` · `rounded-md` · 200ms color transition · hover `bg-primary/90`. No shadow.
+- **Outline:** `border border-border bg-background hover:bg-muted` — hairline, flat.
+- **Destructive:** `bg-destructive text-white` — reserved for delete/void/irreversible.
+- **Ghost / Link:** link variant uses `text-brand-blue underline-offset-4 hover:underline`.
+- One primary CTA per screen; secondary actions visually subordinate.
 
 ### Cards
-
-```css
-.card {
-  background: #F8FAFC;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
+- `rounded-xl border border-border bg-card` — **no shadow**. No lift on hover (layout-shift-avoid).
+- Optional hover: subtle `hover:bg-muted/40` (color only, no transform).
 
 ### Inputs
+- `h-9 rounded-md border border-input bg-transparent` — no shadow.
+- Focus: `border-ring ring-[3px] ring-ring/40` (blue accent ring).
 
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
+### Tables (use `<DataTable>` primitive)
+- Hairline container `rounded-lg border border-border`, header `bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground`, divided rows, `hover:bg-muted/40`.
+- Numeric columns: `text-right font-mono tabular-nums`.
 
-.input:focus {
-  border-color: #1E3A5F;
-  outline: none;
-  box-shadow: 0 0 0 3px #1E3A5F20;
-}
-```
+### Lists (use `<ListRows>` primitive)
+- `rounded-lg border border-border divide-y divide-border` — flat.
 
-### Modals
+### Badges
+- Tinted status variants: `success` (`bg-success/10 text-success border-success/20`), `warning`, `destructive`.
+- `outline` for neutral; `secondary` for draft; `link` uses `text-brand-blue`.
 
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
-
----
+### Modals / Sheets
+- `shadow-lg` (overlays only). Backdrop `rgba(0,0,0,0.5)` + `backdrop-blur-sm`.
 
 ## Style Guidelines
 
-**Style:** Vibrant & Block-based
+**Style:** Minimalism / Neutral Pro (data-dense, flat, hairline)
+**Keywords:** calm, precise, ink-on-paper, high-density, flat, hairline, mono numerics, single accent
+**Effects:** 150–250ms color transitions only. No scale/translate hovers. No card shadows. Generous whitespace between sections; tight density within tables.
 
-**Keywords:** Bold, energetic, playful, block layout, geometric shapes, high color contrast, duotone, modern, energetic
+## Page Pattern (marketing landing)
 
-**Best For:** Startups, creative agencies, gaming, social media, youth-focused, entertainment, consumer
-
-**Key Effects:** Large sections (48px+ gaps), animated patterns, bold hover (color shift), scroll-snap, large type (32px+), 200-300ms
-
-### Page Pattern
-
-**Pattern Name:** App Store Style Landing
-
-- **Conversion Strategy:** Show real screenshots. Include ratings (4.5+ stars). QR code for mobile. Platform-specific CTAs.
-- **CTA Placement:** Download buttons prominent (App Store + Play Store) throughout
-- **Section Order:** 1. Hero with device mockup, 2. Screenshots carousel, 3. Features with icons, 4. Reviews/ratings, 5. Download CTAs
-
----
+**Pattern Name:** Minimal Single Column
+- **Conversion:** Single primary CTA ("Get started"). Large headline. Lots of whitespace. No nav clutter.
+- **Section Order:** 1. Hero headline + one-line description + primary CTA, 2. Module grid (flat hairline cards), 3. (optional) one-line social proof, 4. Footer.
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Static design
-- ❌ No video
-- ❌ Poor mobile
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
+- ❌ **Card shadows** — flat hairline only (overlays excepted).
+- ❌ **Multi-accent color** — one blue accent; emerald/amber/red are semantic only.
+- ❌ **Raw hex / `bg-white` / `bg-[#...]`** on app or public surfaces — use tokens.
+- ❌ **Saturated status badges** — use tinted variants.
+- ❌ **Layout-shifting hovers** (scale/translate) — color/background only.
+- ❌ **Emojis as icons** — Lucide SVG only.
+- ❌ **Missing `cursor-pointer`** on clickable elements.
+- ❌ **Low contrast text** — 4.5:1 minimum (test dark mode separately).
+- ❌ **Instant state changes** — 150–300ms transitions.
+- ❌ **Invisible focus states** — blue `ring-ring/40` ring required.
+- ❌ **Decorative-only motion** — motion must convey state change; respect `prefers-reduced-motion`.
 
 ## Pre-Delivery Checklist
 
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- [ ] No emojis as icons (Lucide SVG).
+- [ ] No card shadows (hairline only).
+- [ ] No raw hex in components (tokens only).
+- [ ] Single accent + semantic colors only.
+- [ ] Numerics in JetBrains Mono where specified.
+- [ ] Focus rings visible (blue, 2–3px).
+- [ ] Contrast 4.5:1 in both light and dark.
+- [ ] `prefers-reduced-motion` respected.
+- [ ] Responsive at 375 / 768 / 1024 / 1440.
+- [ ] No content hidden behind fixed navbars; safe-area padding on mobile bottom nav.
+- [ ] No horizontal scroll on mobile.

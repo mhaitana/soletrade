@@ -14,10 +14,14 @@ const badgeVariants = cva(
           "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
         destructive:
           "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
+        success:
+          "bg-success/10 text-success border border-success/20 [a&]:hover:bg-success/15 dark:bg-success/15 dark:text-success dark:border-success/25",
+        warning:
+          "bg-warning/10 text-warning border border-warning/20 [a&]:hover:bg-warning/15 dark:bg-warning/15 dark:text-warning dark:border-warning/25",
         outline:
           "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+        link: "text-brand-blue underline-offset-4 [a&]:hover:underline",
       },
     },
     defaultVariants: {

@@ -3,7 +3,7 @@ import { Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { cn } from "@/shared/lib/utils";
+import { SegmentedControl } from "@/shared/ui/segmented-control";
 import { PERIODS, parsePeriod, type Period } from "@/shared/utils/periods";
 import { MODULES, MODULE_KEYS } from "@/shared/constants/modules";
 import { ActivityFeed } from "../activity/activity-feed";
@@ -127,24 +127,16 @@ export default async function DashboardPage({
             Your business at a glance — {period === "all" ? "all time" : `this ${period}`}.
           </p>
         </div>
-        {/* Period selector — filter links; active period highlighted. */}
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Dashboard period">
-          {PERIODS.map((p) => (
-            <Link
-              key={p.key}
-              href={`/dashboard?period=${p.key}`}
-              aria-current={p.key === period ? "page" : undefined}
-              className={cn(
-                "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                p.key === period
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
-              )}
-            >
-              {p.label}
-            </Link>
-          ))}
-        </div>
+        {/* Period selector — SegmentedControl; active period highlighted. */}
+        <SegmentedControl
+          label="Dashboard period"
+          items={PERIODS.map((p) => ({
+            key: p.key,
+            label: p.label,
+            href: `/dashboard?period=${p.key}`,
+            active: p.key === period,
+          }))}
+        />
       </div>
 
       {/* KPI row */}

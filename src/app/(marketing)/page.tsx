@@ -11,10 +11,10 @@ const modules = [
 
 export default function MarketingPage() {
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-16 md:px-8 md:py-24">
+    <div className="mx-auto w-full max-w-3xl px-4 py-20 md:px-8 md:py-32">
       <section className="flex flex-col items-center text-center">
         <p className="text-sm font-medium text-brand-blue">The business operating system</p>
-        <h1 className="mt-3 max-w-2xl text-balance text-4xl font-bold tracking-tight md:text-5xl">
+        <h1 className="mt-4 max-w-2xl text-balance text-4xl font-semibold tracking-tight md:text-5xl">
           One workspace for invoices, books, quotes, and gig earnings.
         </h1>
         <p className="mt-5 max-w-xl text-balance text-muted-foreground">
@@ -34,16 +34,16 @@ export default function MarketingPage() {
         </div>
       </section>
 
-      <section className="mt-16 grid gap-4 sm:grid-cols-2">
+      <section className="mt-20 grid gap-3 sm:grid-cols-2">
         {modules.map((m) => {
           const Icon = m.icon;
           return (
             <div
               key={m.name}
-              className="rounded-lg border border-border bg-card p-6 shadow-sm transition-colors hover:border-primary/40"
+              className="rounded-lg border border-border bg-card p-6 transition-colors hover:bg-muted/40"
             >
-              <Icon className="size-6 text-primary" aria-hidden />
-              <h2 className="mt-4 text-lg font-semibold">{m.name}</h2>
+              <Icon className="size-5 text-foreground" aria-hidden />
+              <h2 className="mt-4 text-base font-semibold">{m.name}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{m.desc}</p>
             </div>
           );

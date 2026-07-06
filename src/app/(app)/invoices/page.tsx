@@ -3,6 +3,8 @@ import { Plus, Search } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
+import { SegmentedControl } from "@/shared/ui/segmented-control";
+import { DataTable, type Column } from "@/shared/ui/data-table";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
@@ -22,12 +24,12 @@ const STATUS_FILTERS: { key: "all" | InvoiceStatus; label: string }[] = [
 
 const STATUS_BADGE: Record<
   InvoiceStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+  { label: string; variant: "secondary" | "outline" | "success" | "destructive" }
 > = {
   draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Sent", variant: "default" },
-  viewed: { label: "Sent", variant: "default" },
-  paid: { label: "Paid", variant: "outline" },
+  sent: { label: "Sent", variant: "outline" },
+  viewed: { label: "Sent", variant: "outline" },
+  paid: { label: "Paid", variant: "success" },
   void: { label: "Void", variant: "destructive" },
   overdue: { label: "Overdue", variant: "destructive" },
 };
@@ -69,32 +71,20 @@ export default async function InvoicesPage({
         ) : null}
       </div>
 
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="Filter invoices by status"
-      >
-        {STATUS_FILTERS.map((f) => {
+      <SegmentedControl
+        label="Filter invoices by status"
+        items={STATUS_FILTERS.map((f) => {
           const active = (f.key === "all" && !status) || f.key === status;
+          const search = data.search ? `&search=${encodeURIComponent(data.search)}` : "";
           const href =
             f.key === "all"
               ? data.search
                 ? `/invoices?search=${encodeURIComponent(data.search)}`
                 : "/invoices"
-              : `/invoices?status=${f.key}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`;
-          return (
-            <Button
-              key={f.key}
-              asChild
-              variant={active ? "default" : "outline"}
-              size="sm"
-              aria-current={active ? "page" : undefined}
-            >
-              <Link href={href}>{f.label}</Link>
-            </Button>
-          );
+              : `/invoices?status=${f.key}${search}`;
+          return { key: f.key, label: f.label, href, active };
         })}
-      </div>
+      />
 
       <form action="/invoices" method="get" className="flex flex-wrap gap-2" role="search">
         {status ? <input type="hidden" name="status" value={status} /> : null}
@@ -124,71 +114,64 @@ export default async function InvoicesPage({
           </p>
           {data.canManage && !data.search && !status ? (
             <p className="mt-1 text-sm">
-              <Link href="/invoices/new" className="text-primary hover:underline">
+              <Link href="/invoices/new" className="text-brand-blue hover:underline">
                 Create your first invoice
               </Link>
             </p>
           ) : null}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th scope="col" className="px-4 py-2.5 font-medium">
-                  Number
-                </th>
-                <th scope="col" className="px-4 py-2.5 font-medium">
-                  Customer
-                </th>
-                <th scope="col" className="px-4 py-2.5 font-medium">
-                  Issued
-                </th>
-                <th scope="col" className="px-4 py-2.5 font-medium">
-                  Due
-                </th>
-                <th scope="col" className="px-4 py-2.5 font-medium">
-                  Status
-                </th>
-                <th scope="col" className="px-4 py-2.5 text-right font-medium">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {data.invoices.map((inv) => {
-                const badge = STATUS_BADGE[inv.status];
-                return (
-                  <tr key={inv.id} className="transition-colors hover:bg-muted/40">
-                    <td className="px-4 py-3 font-mono text-xs">
-                      <Link
-                        href={`/invoices/${inv.id}`}
-                        className="font-medium text-foreground hover:underline"
-                      >
-                        {inv.number}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      {inv.customerName ? (
-                        <span className="text-foreground">{inv.customerName}</span>
-                      ) : (
-                        <span className="text-muted-foreground">Walk-in</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(inv.issueDate)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(inv.dueDate)}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={badge.variant}>{badge.label}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums">
-                      {formatCents(inv.totalCents, inv.currency)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={data.invoices}
+          rowKey={(inv) => inv.id}
+          columns={
+            [
+              {
+                header: "Number",
+                className: "font-mono text-xs",
+                cell: (inv) => (
+                  <Link
+                    href={`/invoices/${inv.id}`}
+                    className="font-medium text-foreground hover:underline"
+                  >
+                    {inv.number}
+                  </Link>
+                ),
+              },
+              {
+                header: "Customer",
+                cell: (inv) =>
+                  inv.customerName ? (
+                    <span className="text-foreground">{inv.customerName}</span>
+                  ) : (
+                    <span className="text-muted-foreground">Walk-in</span>
+                  ),
+              },
+              {
+                header: "Issued",
+                className: "text-muted-foreground",
+                cell: (inv) => formatDate(inv.issueDate),
+              },
+              {
+                header: "Due",
+                className: "text-muted-foreground",
+                cell: (inv) => formatDate(inv.dueDate),
+              },
+              {
+                header: "Status",
+                cell: (inv) => {
+                  const badge = STATUS_BADGE[inv.status];
+                  return <Badge variant={badge.variant}>{badge.label}</Badge>;
+                },
+              },
+              {
+                header: "Total",
+                numeric: true,
+                cell: (inv) => formatCents(inv.totalCents, inv.currency),
+              },
+            ] satisfies Column<(typeof data.invoices)[number]>[]
+          }
+        />
       )}
     </div>
   );
