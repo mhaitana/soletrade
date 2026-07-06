@@ -71,7 +71,9 @@ describe("invoiceOverdueEmail", () => {
 
   it("mentions the due date when set", () => {
     const { text } = invoiceOverdueEmail(meta({ dueDate: new Date("2026-08-01") }), APP_URL);
-    expect(text).toMatch(/was due .+Aug.+2026/);
+    // `.*` (not `.+`) so this matches both en-AU "1 Aug 2026" and en-US "Aug 1, 2026" —
+    // formatDate uses the host locale, so the test must be day/month-order agnostic.
+    expect(text).toMatch(/was due .*Aug.*2026/);
   });
 });
 
@@ -149,7 +151,8 @@ describe("quoteSentEmail", () => {
 
   it("mentions the valid-until date when set", () => {
     const { text } = quoteSentEmail(quoteMeta({ validUntil: new Date("2026-08-15") }), APP_URL);
-    expect(text).toMatch(/valid until .+Aug.+2026/);
+    // `.*` (not `.+`) — formatDate uses the host locale, so accept either day/month order.
+    expect(text).toMatch(/valid until .*Aug.*2026/);
   });
 });
 
