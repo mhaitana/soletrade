@@ -89,6 +89,23 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             ))}
           </div>
 
+          {/* Sections (Wave 2) — content blocks in position order, between line items and totals. */}
+          {q.sections.length > 0 ? (
+            <div className="mt-5 space-y-4 border-t border-border pt-5">
+              {q.sections.map((s, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex items-baseline gap-2">
+                    <h3 className="text-sm font-medium">{s.title}</h3>
+                    {s.optional ? (
+                      <span className="text-xs text-muted-foreground">(optional)</span>
+                    ) : null}
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">{s.body}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           {/* Totals */}
           <dl className="mt-5 space-y-1.5 border-t border-border pt-5 text-sm">
             <div className="flex justify-between">
@@ -105,8 +122,20 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             </div>
           </dl>
 
+          {/* Terms & Conditions (Wave 2) — collapsible disclosure above the accept button. */}
+          {q.termsConditions ? (
+            <details className="mt-5 rounded-md border border-border bg-muted/30 p-4">
+              <summary className="cursor-pointer text-sm font-medium">
+                Terms &amp; Conditions
+              </summary>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                {q.termsConditions}
+              </p>
+            </details>
+          ) : null}
+
           {/* Accept/Decline block — only while the customer can still act. */}
-          {awaiting ? <QuoteAcceptForm token={token} /> : null}
+          {awaiting ? <QuoteAcceptForm token={token} termsConditions={q.termsConditions} /> : null}
 
           {q.status === "accepted" ? (
             <div

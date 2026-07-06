@@ -1,11 +1,26 @@
 import "server-only";
 import { and, desc, eq, gte, ilike, lte, or, type SQL } from "drizzle-orm";
 import { getDb } from "@/server/db";
-import { driveEarnings, driveTrips } from "@/server/db/schema";
+import {
+  driveEarnings,
+  driveTrips,
+  driverVehicleExpenses,
+  driverProfiles,
+  vehicles,
+} from "@/server/db/schema";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { isDrivePlatform } from "@/shared/constants/drive-platforms";
-import type { DriveEarningId, DriveTripId, UserId, WorkspaceId } from "@/shared/types/ids";
+import type { VehicleExpenseType } from "@/server/db/schema/enums";
+import type {
+  DriveEarningId,
+  DriveExpenseId,
+  DriveTripId,
+  FileId,
+  UserId,
+  VehicleId,
+  WorkspaceId,
+} from "@/shared/types/ids";
 
 /**
  * Drive module service (Phase 7). Workspace-scoped CRUD for gig-economy earnings + mileage
@@ -462,5 +477,465 @@ export {
   type EarningSummaryInput,
   type TripSummaryInput,
   type MonthlyDrivePoint,
+  type WeeklyDrivePoint,
+  type VehicleExpenseSummaryInput,
   formatKm,
 } from "./calc";
+
+// ───────────────────────────── Vehicles (Wave 2) ─────────────────────────────
+
+export interface VehicleInput {
+  name: string;
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  odometerKm?: number | null;
+  active?: boolean;
+}
+
+export type VehiclePatch = Partial<VehicleInput>;
+
+export interface VehicleRow {
+  id: VehicleId;
+  workspaceId: WorkspaceId;
+  name: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  odometerKm: number | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const selectVehicle = {
+  id: vehicles.id,
+  workspaceId: vehicles.workspaceId,
+  name: vehicles.name,
+  make: vehicles.make,
+  model: vehicles.model,
+  year: vehicles.year,
+  odometerKm: vehicles.odometerKm,
+  active: vehicles.active,
+  createdAt: vehicles.createdAt,
+  updatedAt: vehicles.updatedAt,
+} as const;
+
+/** Create a vehicle. */
+export async function createVehicle(
+  workspaceId: WorkspaceId,
+  input: VehicleInput,
+  actorId: UserId,
+): Promise<VehicleId> {
+  if (!input.name.trim()) throw new Error("Vehicle name is required.");
+  const db = getDb();
+  const rows = await db
+    .insert(vehicles)
+    .values({
+      workspaceId,
+      name: input.name.trim(),
+      make: input.make ?? null,
+      model: input.model ?? null,
+      year: input.year ?? null,
+      odometerKm: input.odometerKm ?? null,
+      active: input.active ?? true,
+    })
+    .returning({ id: vehicles.id });
+  const row = rows[0];
+  if (!row) throw new Error("Failed to create vehicle.");
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "drive.vehicle.create",
+    targetType: "vehicle",
+    targetId: row.id,
+    metadata: { name: input.name.trim() },
+  });
+  return row.id;
+}
+
+/** Update a vehicle (workspace-isolated). Throws if not found. */
+export async function updateVehicle(
+  workspaceId: WorkspaceId,
+  vehicleId: VehicleId,
+  patch: VehiclePatch,
+  actorId: UserId,
+): Promise<void> {
+  const db = getDb();
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.name !== undefined) set.name = patch.name.trim();
+  if (patch.make !== undefined) set.make = patch.make ?? null;
+  if (patch.model !== undefined) set.model = patch.model ?? null;
+  if (patch.year !== undefined) set.year = patch.year ?? null;
+  if (patch.odometerKm !== undefined) set.odometerKm = patch.odometerKm ?? null;
+  if (patch.active !== undefined) set.active = patch.active;
+  const rows = await db
+    .update(vehicles)
+    .set(set)
+    .where(and(eq(vehicles.id, vehicleId), eq(vehicles.workspaceId, workspaceId)))
+    .returning({ id: vehicles.id });
+  if (!rows[0]) throw new Error("Vehicle not found.");
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "drive.vehicle.update",
+    targetType: "vehicle",
+    targetId: vehicleId,
+    metadata: { fields: Object.keys(patch) },
+  });
+}
+
+/** Hard-delete a vehicle (cascade-deletes its expenses). Returns false if not found. */
+export async function deleteVehicle(
+  workspaceId: WorkspaceId,
+  vehicleId: VehicleId,
+  actorId: UserId,
+): Promise<boolean> {
+  const db = getDb();
+  const rows = await db
+    .delete(vehicles)
+    .where(and(eq(vehicles.id, vehicleId), eq(vehicles.workspaceId, workspaceId)))
+    .returning({ id: vehicles.id, name: vehicles.name });
+  const row = rows[0];
+  if (!row) return false;
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "drive.vehicle.delete",
+    targetType: "vehicle",
+    targetId: vehicleId,
+    metadata: { name: row.name },
+  });
+  return true;
+}
+
+/** List vehicles for a workspace (active first, then newest). */
+export async function listVehicles(workspaceId: WorkspaceId): Promise<VehicleRow[]> {
+  const db = getDb();
+  return db
+    .select(selectVehicle)
+    .from(vehicles)
+    .where(eq(vehicles.workspaceId, workspaceId))
+    .orderBy(desc(vehicles.active), desc(vehicles.createdAt));
+}
+
+/** Fetch a single vehicle, workspace-scoped (IDOR-safe). */
+export async function getVehicle(
+  workspaceId: WorkspaceId,
+  vehicleId: VehicleId,
+): Promise<VehicleRow | null> {
+  const db = getDb();
+  const rows = await db
+    .select(selectVehicle)
+    .from(vehicles)
+    .where(and(eq(vehicles.id, vehicleId), eq(vehicles.workspaceId, workspaceId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// ─────────────────────── Vehicle expenses (Wave 2) ────────────────────────────
+
+export interface ExpenseInput {
+  vehicleId: VehicleId;
+  type: VehicleExpenseType;
+  amountCents: number;
+  currency?: string;
+  date: Date;
+  description: string;
+  odometerKm?: number | null;
+  notes?: string | null;
+  receiptFileId?: FileId | null;
+}
+
+export type ExpensePatch = Partial<Omit<ExpenseInput, "vehicleId">>;
+
+export interface ExpenseRow {
+  id: DriveExpenseId;
+  workspaceId: WorkspaceId;
+  vehicleId: VehicleId;
+  type: VehicleExpenseType;
+  amountCents: number;
+  currency: string;
+  date: Date;
+  description: string;
+  odometerKm: number | null;
+  notes: string | null;
+  receiptFileId: FileId | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const selectExpense = {
+  id: driverVehicleExpenses.id,
+  workspaceId: driverVehicleExpenses.workspaceId,
+  vehicleId: driverVehicleExpenses.vehicleId,
+  type: driverVehicleExpenses.type,
+  amountCents: driverVehicleExpenses.amountCents,
+  currency: driverVehicleExpenses.currency,
+  date: driverVehicleExpenses.date,
+  description: driverVehicleExpenses.description,
+  odometerKm: driverVehicleExpenses.odometerKm,
+  notes: driverVehicleExpenses.notes,
+  receiptFileId: driverVehicleExpenses.receiptFileId,
+  createdAt: driverVehicleExpenses.createdAt,
+  updatedAt: driverVehicleExpenses.updatedAt,
+} as const;
+
+/** Verify a vehicle belongs to the workspace (IDOR guard). Throws if not found. */
+async function assertVehicleInWorkspace(
+  workspaceId: WorkspaceId,
+  vehicleId: VehicleId,
+): Promise<void> {
+  const v = await getVehicle(workspaceId, vehicleId);
+  if (!v) throw new Error("Vehicle not found in this workspace.");
+}
+
+/**
+ * Create a vehicle expense. Validates the vehicle is in the workspace, publishes
+ * `VehicleExpenseLogged` (→ Books expense integration, idempotent on `sourceExpenseId`),
+ * and audits.
+ */
+export async function createExpense(
+  workspaceId: WorkspaceId,
+  input: ExpenseInput,
+  actorId: UserId,
+): Promise<DriveExpenseId> {
+  if (input.amountCents <= 0) throw new Error("Amount must be greater than 0.");
+  await assertVehicleInWorkspace(workspaceId, input.vehicleId);
+
+  const db = getDb();
+  const rows = await db
+    .insert(driverVehicleExpenses)
+    .values({
+      workspaceId,
+      vehicleId: input.vehicleId,
+      type: input.type,
+      amountCents: input.amountCents,
+      currency: input.currency ?? "AUD",
+      date: input.date,
+      description: input.description.trim(),
+      odometerKm: input.odometerKm ?? null,
+      notes: input.notes ?? null,
+      receiptFileId: input.receiptFileId ?? null,
+    })
+    .returning({ id: driverVehicleExpenses.id });
+  const row = rows[0];
+  if (!row) throw new Error("Failed to create vehicle expense.");
+
+  await publishEvent({
+    type: "VehicleExpenseLogged",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "drive_expense",
+    entityId: row.id,
+    metadata: {
+      expenseId: row.id,
+      vehicleId: input.vehicleId,
+      type: input.type,
+      amountCents: input.amountCents,
+      currency: input.currency ?? "AUD",
+      date: input.date,
+      description: input.description.trim(),
+    },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "drive.expense.create",
+    targetType: "drive_expense",
+    targetId: row.id,
+    metadata: { vehicleId: input.vehicleId, type: input.type, amountCents: input.amountCents },
+  });
+  return row.id;
+}
+
+/** Update a vehicle expense (workspace-isolated). Throws if not found. No event (silent edit). */
+export async function updateExpense(
+  workspaceId: WorkspaceId,
+  expenseId: DriveExpenseId,
+  patch: ExpensePatch,
+  actorId: UserId,
+): Promise<void> {
+  if (patch.amountCents !== undefined && patch.amountCents <= 0) {
+    throw new Error("Amount must be greater than 0.");
+  }
+  const db = getDb();
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.type !== undefined) set.type = patch.type;
+  if (patch.amountCents !== undefined) set.amountCents = patch.amountCents;
+  if (patch.currency !== undefined) set.currency = patch.currency;
+  if (patch.date !== undefined) set.date = patch.date;
+  if (patch.description !== undefined) set.description = patch.description.trim();
+  if (patch.odometerKm !== undefined) set.odometerKm = patch.odometerKm ?? null;
+  if (patch.notes !== undefined) set.notes = patch.notes ?? null;
+  if (patch.receiptFileId !== undefined) set.receiptFileId = patch.receiptFileId ?? null;
+
+  const rows = await db
+    .update(driverVehicleExpenses)
+    .set(set)
+    .where(
+      and(
+        eq(driverVehicleExpenses.id, expenseId),
+        eq(driverVehicleExpenses.workspaceId, workspaceId),
+      ),
+    )
+    .returning({ id: driverVehicleExpenses.id });
+  if (!rows[0]) throw new Error("Vehicle expense not found.");
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "drive.expense.update",
+    targetType: "drive_expense",
+    targetId: expenseId,
+    metadata: { fields: Object.keys(patch) },
+  });
+}
+
+/** Hard-delete a vehicle expense (workspace-isolated). Returns false if not found. */
+export async function deleteExpense(
+  workspaceId: WorkspaceId,
+  expenseId: DriveExpenseId,
+  actorId: UserId,
+): Promise<boolean> {
+  const db = getDb();
+  const rows = await db
+    .delete(driverVehicleExpenses)
+    .where(
+      and(
+        eq(driverVehicleExpenses.id, expenseId),
+        eq(driverVehicleExpenses.workspaceId, workspaceId),
+      ),
+    )
+    .returning({
+      id: driverVehicleExpenses.id,
+      type: driverVehicleExpenses.type,
+      amountCents: driverVehicleExpenses.amountCents,
+    });
+  const row = rows[0];
+  if (!row) return false;
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "drive.expense.delete",
+    targetType: "drive_expense",
+    targetId: expenseId,
+    metadata: { type: row.type, amountCents: row.amountCents },
+  });
+  return true;
+}
+
+/** List vehicle expenses for a workspace, optionally filtered by vehicle/date range. */
+export async function listExpenses(
+  workspaceId: WorkspaceId,
+  opts?: {
+    vehicleId?: VehicleId;
+    type?: VehicleExpenseType;
+    dateFrom?: Date;
+    dateTo?: Date;
+    limit?: number;
+  },
+): Promise<ExpenseRow[]> {
+  const db = getDb();
+  const limit = Math.min(opts?.limit ?? 100, 2000);
+  const conditions: (SQL | undefined)[] = [eq(driverVehicleExpenses.workspaceId, workspaceId)];
+  if (opts?.vehicleId) conditions.push(eq(driverVehicleExpenses.vehicleId, opts.vehicleId));
+  if (opts?.type) conditions.push(eq(driverVehicleExpenses.type, opts.type));
+  if (opts?.dateFrom) conditions.push(gte(driverVehicleExpenses.date, opts.dateFrom));
+  if (opts?.dateTo) conditions.push(lte(driverVehicleExpenses.date, opts.dateTo));
+  return db
+    .select(selectExpense)
+    .from(driverVehicleExpenses)
+    .where(and(...conditions))
+    .orderBy(desc(driverVehicleExpenses.date), desc(driverVehicleExpenses.createdAt))
+    .limit(limit);
+}
+
+/** Fetch a single vehicle expense, workspace-scoped (IDOR-safe). */
+export async function getExpense(
+  workspaceId: WorkspaceId,
+  expenseId: DriveExpenseId,
+): Promise<ExpenseRow | null> {
+  const db = getDb();
+  const rows = await db
+    .select(selectExpense)
+    .from(driverVehicleExpenses)
+    .where(
+      and(
+        eq(driverVehicleExpenses.id, expenseId),
+        eq(driverVehicleExpenses.workspaceId, workspaceId),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// ──────────────────────── Drive settings (Wave 2) ────────────────────────────
+
+export interface DriveSettingsRow {
+  mileageRateCentsPerKm: number;
+  defaultVehicleId: VehicleId | null;
+}
+
+/**
+ * Get the workspace's drive settings (mileage rate + default vehicle). Returns sensible
+ * defaults (ATO 85c/km, no default vehicle) when no row exists yet — callers don't need to
+ * distinguish "unset" from "set to defaults".
+ */
+export async function getDriveSettings(workspaceId: WorkspaceId): Promise<DriveSettingsRow> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      mileageRateCentsPerKm: driverProfiles.mileageRateCentsPerKm,
+      defaultVehicleId: driverProfiles.defaultVehicleId,
+    })
+    .from(driverProfiles)
+    .where(eq(driverProfiles.workspaceId, workspaceId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return { mileageRateCentsPerKm: 85, defaultVehicleId: null };
+  return {
+    mileageRateCentsPerKm: row.mileageRateCentsPerKm,
+    defaultVehicleId: row.defaultVehicleId ?? null,
+  };
+}
+
+/** Upsert the workspace's drive settings (creates the single row if absent). */
+export async function upsertDriveSettings(
+  workspaceId: WorkspaceId,
+  input: { mileageRateCentsPerKm?: number; defaultVehicleId?: VehicleId | null },
+  actorId: UserId,
+): Promise<void> {
+  if (input.mileageRateCentsPerKm !== undefined && input.mileageRateCentsPerKm < 0) {
+    throw new Error("Mileage rate must not be negative.");
+  }
+  const db = getDb();
+  const existing = await db
+    .select({ id: driverProfiles.id })
+    .from(driverProfiles)
+    .where(eq(driverProfiles.workspaceId, workspaceId))
+    .limit(1);
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (input.mileageRateCentsPerKm !== undefined)
+    set.mileageRateCentsPerKm = input.mileageRateCentsPerKm;
+  if (input.defaultVehicleId !== undefined) set.defaultVehicleId = input.defaultVehicleId ?? null;
+  if (existing[0]) {
+    await db.update(driverProfiles).set(set).where(eq(driverProfiles.id, existing[0].id));
+  } else {
+    await db.insert(driverProfiles).values({
+      workspaceId,
+      mileageRateCentsPerKm: input.mileageRateCentsPerKm ?? 85,
+      defaultVehicleId: input.defaultVehicleId ?? null,
+    });
+  }
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: "drive.settings.update",
+    targetType: "driver_profile",
+    targetId: existing[0]?.id,
+    metadata: {
+      mileageRateCentsPerKm: input.mileageRateCentsPerKm,
+      defaultVehicleId: input.defaultVehicleId ?? null,
+    },
+  });
+}

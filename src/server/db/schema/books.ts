@@ -3,6 +3,7 @@ import type {
   BookTransactionId,
   CustomerId,
   DriveEarningId,
+  DriveExpenseId,
   FileId,
   InvoiceId,
   WorkspaceId,
@@ -37,6 +38,13 @@ export const bookTransactions = pgTable(
     type: bookTypeEnum("type").notNull(),
     /** Integer cents. Income adds, expense subtracts — sign is implied by `type`. */
     amountCents: integer("amount_cents").notNull(),
+    /**
+     * GST portion of this transaction in integer cents (Wave 2). 0 for non-GST
+     * transactions. For income this is GST collected from the customer; for expenses
+     * this is GST paid (claimable as an input tax credit). The BAS summary computes
+     * `netGst = sum(income.gstCents) - sum(expense.gstCents)` per quarter on the fly.
+     */
+    gstCents: integer("gst_cents").notNull().default(0),
     currency: text("currency").notNull().default("AUD"),
     /** User-chosen transaction date (when the income/expense occurred). */
     date: timestamp("date").notNull(),
@@ -63,6 +71,15 @@ export const bookTransactions = pgTable(
      * manually-recorded transactions and invoice-linked rows.
      */
     sourceEarningId: uuid("source_earning_id").$type<DriveEarningId>(),
+    /**
+     * Optional link to the Drive vehicle expense that generated this expense row (Wave 2
+     * event-bus integration — VehicleExpenseLogged → Books expense). No FK constraint —
+     * keeps Books decoupled from the driver_vehicle_expenses table at the DB level,
+     * mirroring `sourceInvoiceId`/`sourceEarningId`. Indexed for the idempotency
+     * check-then-insert in the Books integration subscriber. Null for manually-recorded
+     * transactions and income rows.
+     */
+    sourceExpenseId: uuid("source_expense_id").$type<DriveExpenseId>(),
     /** Private workspace note (never exposed publicly). */
     notes: text("notes"),
     /**
@@ -84,5 +101,9 @@ export const bookTransactions = pgTable(
     index("book_transactions_workspace_source_invoice_idx").on(t.workspaceId, t.sourceInvoiceId),
     // Idempotency lookup for the DriveEarningsLogged → Books income subscriber (7).
     index("book_transactions_workspace_source_earning_idx").on(t.workspaceId, t.sourceEarningId),
+    // Idempotency lookup for the VehicleExpenseLogged → Books expense subscriber (Wave 2).
+    index("book_transactions_workspace_source_expense_idx").on(t.workspaceId, t.sourceExpenseId),
+    // Reverse lookup: which transactions reference this file (receipts page, Wave 2).
+    index("book_transactions_workspace_receipt_file_idx").on(t.workspaceId, t.receiptFileId),
   ],
 );

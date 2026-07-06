@@ -37,9 +37,11 @@ import {
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!HAS_DB)("ai conversations integration (requires DATABASE_URL)", () => {
-  // Distinct UUIDs from every other integration test file (they hardcode user ids too).
-  const actor = branded<"UserId">("00000000-0000-4000-8000-0000000000c1");
-  const otherActor = branded<"UserId">("00000000-0000-4000-8000-0000000000c2");
+  // Distinct UUIDs from every other integration test file (they hardcode user ids too) —
+  // the `c3`/`c4` suffix avoids the `c1`/`c2` collision with cancellation.integration.test.ts
+  // that surfaced as a flaky users_pkey race when the two files ran concurrently.
+  const actor = branded<"UserId">("00000000-0000-4000-8000-0000000000c3");
+  const otherActor = branded<"UserId">("00000000-0000-4000-8000-0000000000c4");
   let ws1: WorkspaceId;
   let ws2: WorkspaceId;
   const createdConversationIds: AiConversationId[] = [];

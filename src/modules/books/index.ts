@@ -11,6 +11,7 @@ import type {
   BookTransactionId,
   CustomerId,
   DriveEarningId,
+  DriveExpenseId,
   FileId,
   InvoiceId,
   UserId,
@@ -43,6 +44,11 @@ export interface TransactionInput {
   customerId?: CustomerId | null;
   notes?: string | null;
   /**
+   * GST portion of this transaction in cents (Wave 2). 0 for non-GST transactions. Income
+   * GST is collected from the customer; expense GST is paid (claimable). Defaults to 0.
+   */
+  gstCents?: number;
+  /**
    * Optional link to the invoice that generated this income (Phase 6c). Set by the
    * `InvoicePaid` subscriber; null for manually-recorded transactions. Stored on
    * `book_transactions.source_invoice_id` (no FK constraint).
@@ -54,6 +60,12 @@ export interface TransactionInput {
    * `book_transactions.source_earning_id` (no FK constraint).
    */
   sourceEarningId?: DriveEarningId | null;
+  /**
+   * Optional link to the Drive vehicle expense that generated this expense row (Wave 2).
+   * Set by the `VehicleExpenseLogged` subscriber; null otherwise. Stored on
+   * `book_transactions.source_expense_id` (no FK constraint).
+   */
+  sourceExpenseId?: DriveExpenseId | null;
   /**
    * Optional link to a receipt file (Phase 11b). Stored on
    * `book_transactions.receipt_file_id` (no FK constraint — keeps Books decoupled from
@@ -69,6 +81,8 @@ export interface TransactionRow {
   workspaceId: WorkspaceId;
   type: BookType;
   amountCents: number;
+  /** GST portion of this transaction in cents (0 for non-GST rows). */
+  gstCents: number;
   currency: string;
   date: Date;
   description: string;
@@ -80,6 +94,8 @@ export interface TransactionRow {
   sourceInvoiceId: InvoiceId | null;
   /** The Drive earning that generated this income, or null. */
   sourceEarningId: DriveEarningId | null;
+  /** The Drive vehicle expense that generated this expense, or null. */
+  sourceExpenseId: DriveExpenseId | null;
   /** The receipt file attached to this transaction, or null. */
   receiptFileId: FileId | null;
   notes: string | null;
@@ -92,6 +108,7 @@ const selectTransaction = {
   workspaceId: bookTransactions.workspaceId,
   type: bookTransactions.type,
   amountCents: bookTransactions.amountCents,
+  gstCents: bookTransactions.gstCents,
   currency: bookTransactions.currency,
   date: bookTransactions.date,
   description: bookTransactions.description,
@@ -99,6 +116,7 @@ const selectTransaction = {
   customerId: bookTransactions.customerId,
   sourceInvoiceId: bookTransactions.sourceInvoiceId,
   sourceEarningId: bookTransactions.sourceEarningId,
+  sourceExpenseId: bookTransactions.sourceExpenseId,
   receiptFileId: bookTransactions.receiptFileId,
   notes: bookTransactions.notes,
   createdAt: bookTransactions.createdAt,
@@ -145,6 +163,7 @@ export async function createTransaction(
       workspaceId,
       type: input.type,
       amountCents: input.amountCents,
+      gstCents: input.gstCents ?? 0,
       currency: input.currency ?? "AUD",
       date: input.date,
       description: input.description.trim(),
@@ -152,6 +171,7 @@ export async function createTransaction(
       customerId: input.customerId ?? null,
       sourceInvoiceId: input.sourceInvoiceId ?? null,
       sourceEarningId: input.sourceEarningId ?? null,
+      sourceExpenseId: input.sourceExpenseId ?? null,
       receiptFileId: input.receiptFileId ?? null,
       notes: input.notes ?? null,
     })
@@ -240,6 +260,7 @@ export async function updateTransaction(
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.type !== undefined) set.type = patch.type;
   if (patch.amountCents !== undefined) set.amountCents = patch.amountCents;
+  if (patch.gstCents !== undefined) set.gstCents = patch.gstCents;
   if (patch.currency !== undefined) set.currency = patch.currency;
   if (patch.date !== undefined) set.date = patch.date;
   if (patch.description !== undefined) set.description = patch.description.trim();

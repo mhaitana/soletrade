@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { summarizeTransactions, type TransactionSummaryInput } from "./calc";
+import {
+  fiscalQuarter,
+  summarizeGst,
+  summarizeTransactions,
+  type GstSummaryInput,
+  type TransactionSummaryInput,
+} from "./calc";
 
 /** Helper: build an input row with a sensible default date. */
 function row(
@@ -96,5 +102,123 @@ describe("summarizeTransactions", () => {
     expect(s.incomeCents).toBe(1000);
     expect(s.expenseCents).toBe(2000);
     expect(s.netCents).toBe(-1000);
+  });
+
+  it("accumulates gstCents into the GST summary (income collected, expense paid)", () => {
+    const s = summarizeTransactions([
+      row({ type: "income", amountCents: 11000, category: "sales", gstCents: 1000 }),
+      row({ type: "expense", amountCents: 2200, category: "rent", gstCents: 200 }),
+      row({ type: "income", amountCents: 5500, category: "services", gstCents: 500 }),
+    ]);
+    expect(s.gstCollectedCents).toBe(1500); // 1000 + 500
+    expect(s.gstPaidCents).toBe(200);
+    expect(s.netGstCents).toBe(1300);
+  });
+
+  it("defaults gstCents to 0 when not supplied (backward compatible)", () => {
+    const s = summarizeTransactions([
+      row({ type: "income", amountCents: 1000, category: "sales" }),
+    ]);
+    expect(s.gstCollectedCents).toBe(0);
+    expect(s.gstPaidCents).toBe(0);
+    expect(s.netGstCents).toBe(0);
+  });
+});
+
+describe("fiscalQuarter (Australian FY starts July)", () => {
+  it("Q1 = Jul–Sep, fiscalYear = year the FY started", () => {
+    expect(fiscalQuarter(new Date("2026-07-01"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 1,
+      label: "2026-Q1",
+    });
+    expect(fiscalQuarter(new Date("2026-09-30"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 1,
+      label: "2026-Q1",
+    });
+  });
+
+  it("Q2 = Oct–Dec", () => {
+    expect(fiscalQuarter(new Date("2026-10-15"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 2,
+      label: "2026-Q2",
+    });
+    expect(fiscalQuarter(new Date("2026-12-31"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 2,
+      label: "2026-Q2",
+    });
+  });
+
+  it("Q3 = Jan–Mar (rolls fiscalYear back to prior year)", () => {
+    expect(fiscalQuarter(new Date("2027-01-10"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 3,
+      label: "2026-Q3",
+    });
+    expect(fiscalQuarter(new Date("2027-03-31"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 3,
+      label: "2026-Q3",
+    });
+  });
+
+  it("Q4 = Apr–Jun", () => {
+    expect(fiscalQuarter(new Date("2027-04-01"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 4,
+      label: "2026-Q4",
+    });
+    expect(fiscalQuarter(new Date("2027-06-30"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 4,
+      label: "2026-Q4",
+    });
+  });
+});
+
+describe("summarizeGst", () => {
+  function grow(partial: Omit<GstSummaryInput, "date"> & { date?: Date }): GstSummaryInput {
+    return { date: new Date("2026-08-15T12:00:00Z"), ...partial };
+  }
+
+  it("returns zeros + empty byQuarter for empty input", () => {
+    const s = summarizeGst([]);
+    expect(s.gstCollectedCents).toBe(0);
+    expect(s.gstPaidCents).toBe(0);
+    expect(s.netGstCents).toBe(0);
+    expect(s.byQuarter).toEqual([]);
+  });
+
+  it("splits collected (income) vs paid (expense) and nets them", () => {
+    const s = summarizeGst([
+      grow({ type: "income", gstCents: 1000, date: new Date("2026-08-01") }),
+      grow({ type: "expense", gstCents: 300, date: new Date("2026-08-01") }),
+    ]);
+    expect(s.gstCollectedCents).toBe(1000);
+    expect(s.gstPaidCents).toBe(300);
+    expect(s.netGstCents).toBe(700);
+  });
+
+  it("groups by financial-year quarter and sorts ascending", () => {
+    const s = summarizeGst([
+      // Q3 FY2026 (Jan 2027)
+      grow({ type: "income", gstCents: 500, date: new Date("2027-02-01") }),
+      // Q1 FY2026 (Aug 2026)
+      grow({ type: "income", gstCents: 1000, date: new Date("2026-08-01") }),
+      // Q4 FY2026 (May 2027)
+      grow({ type: "expense", gstCents: 200, date: new Date("2027-05-01") }),
+    ]);
+    expect(s.byQuarter.map((q) => q.label)).toEqual(["2026-Q1", "2026-Q3", "2026-Q4"]);
+    expect(s.byQuarter[0]!.netGstCents).toBe(1000);
+    expect(s.byQuarter[1]!.netGstCents).toBe(500);
+    expect(s.byQuarter[2]!.netGstCents).toBe(-200);
+  });
+
+  it("abs's gstCents so a stray negative doesn't inflate totals", () => {
+    const s = summarizeGst([grow({ type: "income", gstCents: -1000 })]);
+    expect(s.gstCollectedCents).toBe(1000);
   });
 });

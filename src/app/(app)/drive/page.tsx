@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Download } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
@@ -11,6 +11,13 @@ import { formatKm } from "@/modules/drive/calc";
 import { PERIODS, parsePeriod, type Period } from "@/shared/utils/periods";
 import { loadDrivePage, type DriveView } from "./actions";
 import { DriveSummary } from "./drive-summary";
+import { SwipeQuickLog } from "./swipe-quick-log";
+
+const EXPORT_TYPES: { key: "earnings" | "trips" | "expenses"; label: string }[] = [
+  { key: "earnings", label: "Earnings CSV" },
+  { key: "trips", label: "Mileage CSV" },
+  { key: "expenses", label: "Expenses CSV" },
+];
 
 export const metadata = { title: "Drive" };
 
@@ -85,15 +92,45 @@ export default async function DrivePage({
           <h1 className="text-2xl font-semibold tracking-tight">Drive</h1>
           <p className="text-sm text-muted-foreground">Log gig earnings and mileage.</p>
         </div>
-        {data.canManage ? (
-          <Button asChild>
-            <Link href={`/drive/new?type=${data.view === "trips" ? "trip" : "earning"}`}>
-              <Plus className="size-4" aria-hidden />
-              {data.view === "trips" ? "New trip" : "New earning"}
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {data.canManage ? (
+            <>
+              <div
+                className="flex flex-wrap items-center gap-1.5"
+                role="group"
+                aria-label="Export Drive data as CSV"
+              >
+                {EXPORT_TYPES.map((t) => (
+                  <Button asChild key={t.key} variant="outline" size="sm">
+                    <a href={`/api/drive/export?type=${t.key}&period=${data.period}`} download>
+                      <Download className="size-3.5" aria-hidden />
+                      {t.label}
+                    </a>
+                  </Button>
+                ))}
+              </div>
+              <Button asChild>
+                <Link href={`/drive/new?type=${data.view === "trips" ? "trip" : "earning"}`}>
+                  <Plus className="size-4" aria-hidden />
+                  {data.view === "trips" ? "New trip" : "New earning"}
+                </Link>
+              </Button>
+            </>
+          ) : null}
+        </div>
       </div>
+
+      <nav className="flex flex-wrap items-center gap-4 text-sm" aria-label="Drive sections">
+        <Link href="/drive/vehicles" className="text-muted-foreground hover:underline">
+          Vehicles
+        </Link>
+        <Link href="/drive/expenses" className="text-muted-foreground hover:underline">
+          Expenses
+        </Link>
+        <Link href="/drive/settings" className="text-muted-foreground hover:underline">
+          Settings
+        </Link>
+      </nav>
 
       <div className="flex flex-wrap items-center gap-4" aria-label="Filters">
         <div
@@ -196,6 +233,8 @@ export default async function DrivePage({
       </form>
 
       <DriveSummary summary={data.summary} currency="AUD" period={data.period} />
+
+      {data.canManage ? <SwipeQuickLog /> : null}
 
       {list.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">

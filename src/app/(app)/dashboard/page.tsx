@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard" };
 
 const PERIOD_NOUN: Record<Exclude<Period, "all">, string> = {
+  week: "last week",
   month: "last month",
   quarter: "last quarter",
   year: "last year",

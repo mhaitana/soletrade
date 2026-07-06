@@ -24,14 +24,27 @@ import {
   acceptQuote,
   createQuote,
   declineQuote,
+  getAcceptance,
   getQuote,
   getQuoteByPublicToken,
   markExpiredQuotes,
   markQuoteConverted,
   markQuoteViewed,
   sendQuote,
+  type AcceptanceMeta,
+  type DeclineMeta,
 } from "./index";
 import { createInvoice, getInvoice } from "@/modules/invoices";
+
+/** Canned acceptance metadata for tests (Wave 2 — acceptQuote now requires it). */
+const ACCEPT_META: AcceptanceMeta = {
+  accepterName: "Jane Buyer",
+  accepterEmail: "jane@globex.com",
+  signature: "Jane Buyer",
+  ipAddress: "203.0.113.7",
+  userAgent: "TestUA/1.0",
+};
+const DECLINE_META: DeclineMeta = { ipAddress: "203.0.113.7", userAgent: "TestUA/1.0" };
 
 /**
  * Integration tests for the Quotes public-page + lifecycle transitions (accept / decline /
@@ -176,7 +189,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
 
   it("acceptQuote flips sent → accepted + fires QuoteAccepted", async () => {
     const { id, token } = await sendFreshQuote();
-    const ok = await acceptQuote(token);
+    const ok = await acceptQuote(token, ACCEPT_META);
     expect(ok).toBe(true);
     const q = await getQuote(ws!, id);
     expect(q!.status).toBe("accepted");
@@ -189,20 +202,29 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
       currency: "AUD",
       customerName: "Globex Corp",
       customerEmail: "buyer@globex.com",
+      accepterName: "Jane Buyer",
+      ipAddress: "203.0.113.7",
     });
+    // Wave 2 — acceptance row written with the accepter evidence.
+    const acc = await getAcceptance(ws!, id);
+    expect(acc).not.toBeNull();
+    expect(acc!.accepterName).toBe("Jane Buyer");
+    expect(acc!.ipAddress).toBe("203.0.113.7");
+    expect(acc!.userAgent).toBe("TestUA/1.0");
+    expect(acc!.signature).toBe("Jane Buyer");
   });
 
   it("acceptQuote from a viewed quote also works (sent|viewed → accepted)", async () => {
     const { id, token } = await sendFreshQuote();
     await markQuoteViewed(token); // → viewed
-    const ok = await acceptQuote(token);
+    const ok = await acceptQuote(token, ACCEPT_META);
     expect(ok).toBe(true);
     expect((await getQuote(ws!, id))!.status).toBe("accepted");
   });
 
   it("declineQuote flips sent → declined + fires QuoteDeclined (terminal)", async () => {
     const { id, token } = await sendFreshQuote();
-    const ok = await declineQuote(token);
+    const ok = await declineQuote(token, DECLINE_META);
     expect(ok).toBe(true);
     const q = await getQuote(ws!, id);
     expect(q!.status).toBe("declined");
@@ -210,7 +232,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
     expect(capturedOf("QuoteDeclined", id)).toHaveLength(1);
 
     // Declined is terminal — a subsequent accept is a no-op.
-    const reAccept = await acceptQuote(token);
+    const reAccept = await acceptQuote(token, ACCEPT_META);
     expect(reAccept).toBe(false);
     expect((await getQuote(ws!, id))!.status).toBe("declined");
 
@@ -220,7 +242,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
 
   it("markQuoteConverted flips accepted → converted + stores convertedInvoiceId + fires event", async () => {
     const { id } = await sendFreshQuote();
-    await acceptQuote((await getQuote(ws!, id))!.publicToken!);
+    await acceptQuote((await getQuote(ws!, id))!.publicToken!, ACCEPT_META);
 
     // The convert action layer orchestrates createInvoice + markQuoteConverted; here we
     // exercise the service primitives directly (mirrors what the action does).
@@ -290,7 +312,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
     const noExpiry = await sendFreshQuote({ validUntil: null });
     // Accepted + past validUntil → should NOT expire (accepted quotes don't expire).
     const accepted = await sendFreshQuote({ validUntil: past });
-    await acceptQuote(accepted.token);
+    await acceptQuote(accepted.token, ACCEPT_META);
 
     const beforeExpired = capturedOf("QuoteExpired").length;
     const now = new Date("2026-07-10T00:00:00Z");
@@ -314,7 +336,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
     const { id, token } = await sendFreshQuote({ validUntil: past });
     await markExpiredQuotes(new Date("2026-07-10T00:00:00Z"));
     expect((await getQuote(ws!, id))!.status).toBe("expired");
-    const ok = await acceptQuote(token);
+    const ok = await acceptQuote(token, ACCEPT_META);
     expect(ok).toBe(false);
     expect((await getQuote(ws!, id))!.status).toBe("expired");
   });

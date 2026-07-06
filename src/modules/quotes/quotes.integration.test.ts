@@ -320,3 +320,106 @@ describe.skipIf(!HAS_DB)("quotes walk-in + numbering (requires DATABASE_URL)", (
     expect(n).toBeGreaterThanOrEqual(3); // walk-in + A + B
   });
 });
+
+describe.skipIf(!HAS_DB)("quotes sections + terms & conditions (requires DATABASE_URL)", () => {
+  const actor = branded<"UserId">("00000000-0000-8000-8000-0000000000e4");
+  let ws: WorkspaceId;
+
+  beforeAll(async () => {
+    const db = getDb();
+    await db
+      .insert(usersTable)
+      .values([
+        { id: actor, email: "quotes-sections@soletrade-test.local", fullName: "Quotes Sections" },
+      ]);
+    ws = await createWorkspace(actor, "Quotes Sections", `quotes-sections-${Date.now()}`);
+  });
+
+  afterAll(async () => {
+    const db = getDb();
+    const workspaceIds = [ws!].filter(Boolean) as WorkspaceId[];
+    if (workspaceIds.length === 0) return;
+    // quote_sections + quote_acceptances cascade from quotes (FK ON DELETE CASCADE).
+    await db.delete(quotesTable).where(inArray(quotesTable.workspaceId, workspaceIds));
+    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
+    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
+    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
+    await db.delete(usersTable).where(eq(usersTable.id, actor));
+  });
+
+  it("persists sections (in position order) + terms & conditions on create", async () => {
+    const id = await createQuote(
+      ws!,
+      {
+        issueDate: new Date("2026-07-01"),
+        taxRate: 0,
+        lineItems: [{ description: "Service", quantity: 1, unitPriceCents: 10000 }],
+        termsConditions: "Full payment due on acceptance. 50% deposit non-refundable.",
+        sections: [
+          { title: "Scope", body: "Design + build of the landing page." },
+          { title: "Optional: Hosting", body: "Monthly managed hosting.", optional: true },
+          { title: "Timeline", body: "2 weeks from kickoff." },
+        ],
+      },
+      actor,
+    );
+    const q = await getQuote(ws!, id);
+    expect(q!.termsConditions).toBe("Full payment due on acceptance. 50% deposit non-refundable.");
+    expect(q!.sections).toHaveLength(3);
+    // Sections come back ordered by position, preserving the input order.
+    expect(q!.sections.map((s) => s.title)).toEqual(["Scope", "Optional: Hosting", "Timeline"]);
+    expect(q!.sections[0]!.position).toBe(0);
+    expect(q!.sections[1]!.position).toBe(1);
+    expect(q!.sections[1]!.optional).toBe(true);
+    expect(q!.sections[0]!.optional).toBe(false);
+    expect(q!.sections[2]!.optional).toBe(false);
+  });
+
+  it("replaces sections on update (omit = untouched, [] = clear)", async () => {
+    const id = await createQuote(
+      ws!,
+      {
+        issueDate: new Date("2026-07-02"),
+        taxRate: 0,
+        lineItems: [{ description: "X", quantity: 1, unitPriceCents: 100 }],
+        sections: [{ title: "First", body: "v1" }],
+      },
+      actor,
+    );
+
+    // Update with new sections → replaced.
+    await updateQuote(
+      ws!,
+      id,
+      {
+        sections: [
+          { title: "Replaced A", body: "new" },
+          { title: "Replaced B", body: "new" },
+        ],
+      },
+      actor,
+    );
+    const q = await getQuote(ws!, id);
+    expect(q!.sections.map((s) => s.title)).toEqual(["Replaced A", "Replaced B"]);
+
+    // Clear with [].
+    await updateQuote(ws!, id, { sections: [] }, actor);
+    const cleared = await getQuote(ws!, id);
+    expect(cleared!.sections).toEqual([]);
+  });
+
+  it("defaults termsConditions to null when none provided", async () => {
+    const id = await createQuote(
+      ws!,
+      {
+        issueDate: new Date("2026-07-03"),
+        taxRate: 0,
+        lineItems: [{ description: "No T&Cs", quantity: 1, unitPriceCents: 100 }],
+      },
+      actor,
+    );
+    const q = await getQuote(ws!, id);
+    expect(q!.termsConditions).toBeNull();
+    expect(q!.sections).toEqual([]);
+  });
+});

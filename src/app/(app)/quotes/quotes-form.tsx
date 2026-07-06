@@ -26,6 +26,13 @@ interface LineItemState {
   unitPriceDollars: string;
 }
 
+interface SectionState {
+  key: string;
+  title: string;
+  body: string;
+  optional: boolean;
+}
+
 function dollarsToCents(s: string): number {
   const n = Number(s);
   if (!Number.isFinite(n) || n < 0) return 0;
@@ -81,6 +88,19 @@ export function QuoteForm({
       : [{ key: crypto.randomUUID(), description: "", quantity: "1", unitPriceDollars: "" }],
   );
 
+  const [sections, setSections] = useState<SectionState[]>(
+    quote
+      ? quote.sections.map((s) => ({
+          key: crypto.randomUUID(),
+          title: s.title,
+          body: s.body,
+          optional: s.optional,
+        }))
+      : [],
+  );
+
+  const [termsConditions, setTermsConditions] = useState<string>(quote?.termsConditions ?? "");
+
   // Live totals preview from the current line items + tax rate.
   const totals = computeLineItemTotals(
     toLineItemInput(items).map((it) => ({
@@ -103,6 +123,19 @@ export function QuoteForm({
     setItems((prev) => (prev.length > 1 ? prev.filter((it) => it.key !== key) : prev));
   }
 
+  function updateSection(key: string, patch: Partial<SectionState>) {
+    setSections((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
+  }
+  function addSection() {
+    setSections((prev) => [
+      ...prev,
+      { key: crypto.randomUUID(), title: "", body: "", optional: false },
+    ]);
+  }
+  function removeSection(key: string) {
+    setSections((prev) => prev.filter((s) => s.key !== key));
+  }
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
@@ -122,6 +155,16 @@ export function QuoteForm({
       return;
     }
 
+    const sectionInputs = sections.map((s) => ({
+      title: s.title.trim(),
+      body: s.body,
+      optional: s.optional,
+    }));
+    if (sectionInputs.some((s) => s.title === "")) {
+      setError("Every section needs a title.");
+      return;
+    }
+
     const input = {
       customerId: customerId || null,
       issueDate: new Date(issueDate),
@@ -129,7 +172,9 @@ export function QuoteForm({
       currency: "AUD" as string,
       taxRate: Number(taxRate) || 0,
       notes: notes || null,
+      termsConditions: termsConditions || null,
       lineItems: lineItemInputs,
+      sections: sectionInputs,
     };
 
     startTransition(async () => {
@@ -280,6 +325,66 @@ export function QuoteForm({
         </div>
       </div>
 
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">Sections</h2>
+          <Button type="button" variant="outline" size="sm" onClick={addSection}>
+            <Plus className="size-4" aria-hidden />
+            Add section
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Optional content blocks shown to the customer between the line items and totals (e.g.
+          scope of work, terms). Mark a section optional if the customer can opt in at accept time.
+        </p>
+        {fieldErr("sections") ? (
+          <p className="text-sm text-destructive" role="alert">
+            {fieldErr("sections")}
+          </p>
+        ) : null}
+        <div className="space-y-2">
+          {sections.map((s, i) => (
+            <div key={s.key} className="space-y-2 rounded-md border border-border p-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  aria-label={`Section ${i + 1} title`}
+                  placeholder="Section title"
+                  value={s.title}
+                  onChange={(e) => updateSection(s.key, { title: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove section ${i + 1}`}
+                  onClick={() => removeSection(s.key)}
+                >
+                  <Trash2 className="size-4 text-destructive" aria-hidden />
+                </Button>
+              </div>
+              <textarea
+                aria-label={`Section ${i + 1} body`}
+                rows={4}
+                maxLength={10000}
+                placeholder="Section body (shown to the customer as written)."
+                value={s.body}
+                onChange={(e) => updateSection(s.key, { body: e.target.value })}
+                className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={s.optional}
+                  onChange={(e) => updateSection(s.key, { optional: e.target.checked })}
+                  className="size-4 rounded border-input"
+                />
+                Optional (customer can opt in at accept time)
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="space-y-1.5">
         <Label htmlFor="notes">Notes</Label>
         <textarea
@@ -291,6 +396,20 @@ export function QuoteForm({
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Internal notes (not shown to the customer)."
           className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="termsConditions">Terms &amp; Conditions</Label>
+        <textarea
+          id="termsConditions"
+          name="termsConditions"
+          rows={5}
+          maxLength={50000}
+          value={termsConditions}
+          onChange={(e) => setTermsConditions(e.target.value)}
+          placeholder="Terms shown to the customer above the accept button. Leave blank for none."
+          className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
 

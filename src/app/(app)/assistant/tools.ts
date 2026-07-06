@@ -10,6 +10,7 @@ import { listActivity } from "@/platform/activity";
 import { createInvoice, listInvoices, summarizeInvoices } from "@/modules/invoices";
 import { createQuote, listQuotes, summarizeQuotes } from "@/modules/quotes";
 import { createTransaction, listTransactions, summarizeTransactions } from "@/modules/books";
+import { extractReceipt } from "@/modules/books/receipt-extraction";
 import { listEarnings } from "@/modules/drive";
 import type { ModuleKey } from "@/shared/constants/modules";
 import { periodRange } from "@/shared/utils/periods";
@@ -534,6 +535,34 @@ export function buildAssistantTools(
             user.id,
           );
           return { id };
+        },
+      });
+    }
+
+    // 12. extractReceipt — module-gated (Books). Needs manage:books. The first write
+    // tool that may consume a credit: the service handles the
+    // `RECEIPT_EXTRACTION_COST_CENTS` opt-in (default 0 = free). Returns the extracted
+    // summary so the model can present it for human review before the user applies it
+    // in the /books/receipts queue.
+    if (hasModule("books") && can("manage:books")) {
+      tools.extractReceipt = tool({
+        description:
+          "Run AI receipt extraction on an uploaded receipt file. The service downloads the file bytes, sends them to the vision model, and stores the structured result (merchant, totalCents, taxCents, currency, category, confidence, lineItems) in the receipt review queue. The user reviews and applies it from /books/receipts. Use after the user confirms. Required: fileId (uuid of an already-uploaded receipt). Returns the extraction id + the extracted summary, or an error if the file isn't found or credit is insufficient.",
+        inputSchema: z.object({
+          fileId: z.string().uuid().describe("The uploaded receipt file id (uuid)."),
+        }),
+        execute: async (input) => {
+          if (!(await authorizeOrAudit(ctx, "manage:books")).ok) {
+            return { error: "You don't have permission to extract receipts." };
+          }
+          try {
+            const id = await extractReceipt(workspaceId, branded<"FileId">(input.fileId), user.id);
+            return { id };
+          } catch (err) {
+            return {
+              error: err instanceof Error ? err.message : "Failed to extract receipt.",
+            };
+          }
         },
       });
     }

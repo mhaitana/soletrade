@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Check, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -15,22 +17,127 @@ import { acceptQuoteAction, declineQuoteAction } from "./actions";
 
 type Pending = "accept" | "decline" | null;
 
-export function QuoteAcceptForm({ token }: { token: string }) {
+export function QuoteAcceptForm({
+  token,
+  termsConditions,
+}: {
+  token: string;
+  termsConditions: string | null;
+}) {
   const [isPending, startTransition] = useTransition();
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string>("");
   const [done, setDone] = useState<"accepted" | "declined" | null>(null);
 
+  // Accept-form fields.
+  const [accepterName, setAccepterName] = useState<string>("");
+  const [accepterEmail, setAccepterEmail] = useState<string>("");
+  const [agreedTerms, setAgreedTerms] = useState<boolean>(false);
+  const [nameError, setNameError] = useState<string>("");
+  const [termsError, setTermsError] = useState<string>("");
+
+  // Signature pad — minimal dependency-free canvas. Declared directly in the component (not via
+  // a hook return) so the React Compiler doesn't flag ref access during render.
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
+  const lastRef = useRef<{ x: number; y: number } | null>(null);
+  const [hasStrokes, setHasStrokes] = useState(false);
+
+  function pointerPos(e: React.PointerEvent<HTMLCanvasElement>) {
+    const c = canvasRef.current;
+    if (!c) return { x: 0, y: 0 };
+    const rect = c.getBoundingClientRect();
+    // Scale pointer coords to the canvas's internal resolution (accounts for CSS size ≠
+    // canvas attribute size). In practice width/height attrs match the rendered size, so the
+    // scale is 1:1 — this just keeps it robust.
+    const sx = c.width / rect.width;
+    const sy = c.height / rect.height;
+    return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    const c = canvasRef.current;
+    if (!c) return;
+    c.setPointerCapture(e.pointerId);
+    drawingRef.current = true;
+    lastRef.current = pointerPos(e);
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawingRef.current) return;
+    const c = canvasRef.current;
+    if (!c || !lastRef.current) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const p = pointerPos(e);
+    ctx.beginPath();
+    ctx.moveTo(lastRef.current.x, lastRef.current.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#0f172a";
+    ctx.stroke();
+    lastRef.current = p;
+    if (!hasStrokes) setHasStrokes(true);
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    drawingRef.current = false;
+    lastRef.current = null;
+    const c = canvasRef.current;
+    if (c) {
+      try {
+        c.releasePointerCapture(e.pointerId);
+      } catch {
+        // pointer may already be released — ignore
+      }
+    }
+  }
+
+  function clearSignature() {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, c.width, c.height);
+    setHasStrokes(false);
+  }
+
+  /** Returns a data-URL, or null when the canvas is empty. */
+  function serializeSignature(): string | null {
+    const c = canvasRef.current;
+    if (!c || !hasStrokes) return null;
+    return c.toDataURL("image/png");
+  }
+
   function run(kind: "accept" | "decline") {
-    setPending(null);
     setError("");
+    if (kind === "accept") {
+      // Client-side guards (server doesn't enforce agreement — just captures the row).
+      if (accepterName.trim() === "") {
+        setNameError("Please enter your name.");
+        return;
+      }
+      if (termsConditions && !agreedTerms) {
+        setTermsError("You must agree to the Terms & Conditions to accept.");
+        return;
+      }
+    }
+
     startTransition(async () => {
       const res =
         kind === "accept"
-          ? await acceptQuoteAction({ token })
+          ? await acceptQuoteAction({
+              token,
+              accepterName: accepterName.trim(),
+              accepterEmail: accepterEmail.trim() || undefined,
+              signature: kind === "accept" ? (serializeSignature() ?? undefined) : undefined,
+            })
           : await declineQuoteAction({ token });
       if (!res.ok) {
         setError(res.error);
+        setPending(null);
         return;
       }
       setDone(kind === "accept" ? "accepted" : "declined");
@@ -85,28 +192,124 @@ export function QuoteAcceptForm({ token }: { token: string }) {
 
       <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {pending === "accept" ? "Accept this quote?" : "Decline this quote?"}
-            </DialogTitle>
-            <DialogDescription>
-              {pending === "accept"
-                ? "Confirming you accept the terms and total shown. The business will be notified and can convert this quote to an invoice."
-                : "Confirming you decline this quote. The business will be notified."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
-              Cancel
-            </Button>
-            <Button
-              variant={pending === "decline" ? "destructive" : "default"}
-              onClick={() => pending && run(pending)}
-              disabled={isPending}
-            >
-              {isPending ? "Working…" : pending === "accept" ? "Confirm accept" : "Confirm decline"}
-            </Button>
-          </DialogFooter>
+          {pending === "accept" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Accept this quote?</DialogTitle>
+                <DialogDescription>
+                  Enter your name below to confirm you accept the terms and total shown. The
+                  business will be notified and can convert this quote to an invoice.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="accepterName">Your name</Label>
+                  <Input
+                    id="accepterName"
+                    value={accepterName}
+                    onChange={(e) => {
+                      setAccepterName(e.target.value);
+                      setNameError("");
+                    }}
+                    maxLength={200}
+                    placeholder="Full name"
+                    aria-invalid={Boolean(nameError)}
+                  />
+                  {nameError ? <p className="text-sm text-destructive">{nameError}</p> : null}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="accepterEmail">Email (optional)</Label>
+                  <Input
+                    id="accepterEmail"
+                    type="email"
+                    value={accepterEmail}
+                    onChange={(e) => setAccepterEmail(e.target.value)}
+                    maxLength={200}
+                    placeholder="you@example.com"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Signature</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Draw your signature below, or leave it blank — your typed name is acceptable
+                    evidence.
+                  </p>
+                  <canvas
+                    ref={canvasRef}
+                    width={480}
+                    height={140}
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    onPointerLeave={onPointerUp}
+                    className="w-full touch-none rounded-md border border-input bg-white"
+                    aria-label="Signature pad"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSignature}
+                    disabled={!hasStrokes}
+                  >
+                    Clear signature
+                  </Button>
+                </div>
+
+                {termsConditions ? (
+                  <div className="space-y-1">
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={agreedTerms}
+                        onChange={(e) => {
+                          setAgreedTerms(e.target.checked);
+                          setTermsError("");
+                        }}
+                        className="mt-0.5 size-4 rounded border-input"
+                      />
+                      <span>
+                        I agree to the{" "}
+                        <a href="#terms" className="font-medium underline underline-offset-2">
+                          Terms &amp; Conditions
+                        </a>
+                      </span>
+                    </label>
+                    {termsError ? <p className="text-sm text-destructive">{termsError}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
+                  Cancel
+                </Button>
+                <Button onClick={() => run("accept")} disabled={isPending}>
+                  {isPending ? "Accepting…" : "Confirm accept"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Decline this quote?</DialogTitle>
+                <DialogDescription>
+                  Confirming you decline this quote. The business will be notified.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={() => run("decline")} disabled={isPending}>
+                  {isPending ? "Working…" : "Confirm decline"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>

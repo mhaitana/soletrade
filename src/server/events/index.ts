@@ -36,6 +36,7 @@ export const EVENT_TYPES = [
   "ReceiptProcessed",
   "MileageLogged",
   "DriveEarningsLogged",
+  "VehicleExpenseLogged",
   "SubscriptionChanged",
   "CreditIssued",
   "RefundIssued",

@@ -75,6 +75,13 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
   OPENAI_MODEL: z.string().default("gpt-4o"),
+  /**
+   * Per-extraction credit cost in integer cents (Wave 2). 0 = free (dev default). When > 0,
+   * `extractReceipt` consumes this many credits before calling the model; insufficient credit
+   * throws and the extraction is rejected with a clear error. Production can set this to
+   * meter receipt processing against the workspace's credit balance.
+   */
+  RECEIPT_EXTRACTION_COST_CENTS: z.coerce.number().int().min(0).default(0),
 
   // Rate limiting (Phase 11a). When both Upstash REST creds are set, the rate
   // limiter uses @upstash/ratelimit (shared across serverless replicas). When

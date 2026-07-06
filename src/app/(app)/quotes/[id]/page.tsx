@@ -132,6 +132,22 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         </table>
       </div>
 
+      {q.sections.length > 0 ? (
+        <div className="space-y-4 rounded-lg border border-border p-4">
+          {q.sections.map((s) => (
+            <div key={s.id} className="space-y-1">
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-sm font-medium">{s.title}</h3>
+                {s.optional ? (
+                  <span className="text-xs text-muted-foreground">(optional)</span>
+                ) : null}
+              </div>
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{s.body}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="ml-auto w-full max-w-xs space-y-2">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Subtotal</span>
@@ -151,6 +167,79 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         <div className="rounded-md border border-border p-4">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
           <p className="mt-1 text-sm whitespace-pre-wrap">{q.notes}</p>
+        </div>
+      ) : null}
+
+      {q.termsConditions ? (
+        <div className="rounded-md border border-border p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Terms &amp; Conditions
+          </p>
+          <p className="mt-1 text-sm whitespace-pre-wrap">{q.termsConditions}</p>
+        </div>
+      ) : null}
+
+      {q.status === "accepted" && data.acceptance ? (
+        <AcceptanceCard acceptance={data.acceptance} />
+      ) : null}
+    </div>
+  );
+}
+
+/** Render the captured acceptance evidence (Wave 2). Signature may be a data-URL or plain text. */
+function AcceptanceCard({
+  acceptance,
+}: {
+  acceptance: {
+    accepterName: string;
+    accepterEmail: string | null;
+    ipAddress: string;
+    userAgent: string;
+    signature: string | null;
+    acceptedAt: Date;
+  };
+}) {
+  const isDataUrl = acceptance.signature?.startsWith("data:");
+  return (
+    <div className="rounded-md border border-emerald-200 bg-emerald-50/50 p-4">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">Acceptance</p>
+      <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+        <div className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">Accepted by</dt>
+          <dd className="font-medium">{acceptance.accepterName}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">Email</dt>
+          <dd>{acceptance.accepterEmail || "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">IP address</dt>
+          <dd className="font-mono text-xs">{acceptance.ipAddress}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">User agent</dt>
+          <dd className="truncate font-mono text-xs" title={acceptance.userAgent}>
+            {acceptance.userAgent}
+          </dd>
+        </div>
+        <div className="flex justify-between gap-2 sm:col-span-2">
+          <dt className="text-muted-foreground">Accepted at</dt>
+          <dd>{formatDate(acceptance.acceptedAt)}</dd>
+        </div>
+      </dl>
+      {acceptance.signature ? (
+        <div className="mt-3">
+          <p className="text-xs text-muted-foreground">Signature</p>
+          {isDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- canvas data-URL, no Next Image needed
+            <img
+              src={acceptance.signature}
+              alt={`Signature of ${acceptance.accepterName}`}
+              className="mt-1 max-h-24 rounded border border-border bg-white"
+            />
+          ) : (
+            <p className="mt-1 font-medium">{acceptance.signature}</p>
+          )}
         </div>
       ) : null}
     </div>

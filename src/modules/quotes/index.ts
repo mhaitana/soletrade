@@ -13,7 +13,13 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { getDb } from "@/server/db";
-import { quotes, quoteLineItems, customers } from "@/server/db/schema";
+import {
+  quotes,
+  quoteLineItems,
+  quoteSections,
+  quoteAcceptances,
+  customers,
+} from "@/server/db/schema";
 import { getCustomer } from "@/platform/customers";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
@@ -22,8 +28,10 @@ import type { QuoteStatus } from "@/server/db/schema/enums";
 import type {
   CustomerId,
   InvoiceId,
+  QuoteAcceptanceId,
   QuoteId,
   QuoteLineItemId,
+  QuoteSectionId,
   UserId,
   WorkspaceId,
 } from "@/shared/types/ids";
@@ -55,6 +63,14 @@ export interface LineItemInput {
   unitPriceCents: number;
 }
 
+/** A free-form content section on a quote (Wave 2). */
+export interface SectionInput {
+  title: string;
+  body: string;
+  /** True = the customer can opt into this section at accept time. */
+  optional?: boolean;
+}
+
 export interface QuoteInput {
   customerId?: CustomerId | null;
   issueDate: Date;
@@ -63,7 +79,11 @@ export interface QuoteInput {
   /** Integer percent (10 = 10% GST). */
   taxRate: number;
   notes?: string | null;
+  /** Terms & Conditions shown on the public page above the accept button (Wave 2). */
+  termsConditions?: string | null;
   lineItems: LineItemInput[];
+  /** Optional content sections, rendered in `position` order (Wave 2). */
+  sections?: SectionInput[];
 }
 
 export type QuotePatch = Partial<QuoteInput>;
@@ -83,6 +103,8 @@ export interface QuoteRow {
   taxCents: number;
   totalCents: number;
   notes: string | null;
+  /** Terms & Conditions (Wave 2). Null = no T&Cs. */
+  termsConditions: string | null;
   publicToken: string | null;
   sentAt: Date | null;
   acceptedAt: Date | null;
@@ -103,8 +125,20 @@ export interface QuoteLineItemRow {
   position: number;
 }
 
+/** A content section row (Wave 2). */
+export interface QuoteSectionRow {
+  id: QuoteSectionId;
+  quoteId: QuoteId;
+  title: string;
+  body: string;
+  position: number;
+  optional: boolean;
+}
+
 export interface QuoteWithItems extends QuoteRow {
   lineItems: QuoteLineItemRow[];
+  /** Sections ordered by `position` (Wave 2). Empty when the quote has none. */
+  sections: QuoteSectionRow[];
 }
 
 const selectQuote = {
@@ -121,6 +155,7 @@ const selectQuote = {
   taxCents: quotes.taxCents,
   totalCents: quotes.totalCents,
   notes: quotes.notes,
+  termsConditions: quotes.termsConditions,
   publicToken: quotes.publicToken,
   sentAt: quotes.sentAt,
   acceptedAt: quotes.acceptedAt,
@@ -139,6 +174,15 @@ const selectLineItem = {
   unitPriceCents: quoteLineItems.unitPriceCents,
   amountCents: quoteLineItems.amountCents,
   position: quoteLineItems.position,
+} as const;
+
+const selectSection = {
+  id: quoteSections.id,
+  quoteId: quoteSections.quoteId,
+  title: quoteSections.title,
+  body: quoteSections.body,
+  position: quoteSections.position,
+  optional: quoteSections.optional,
 } as const;
 
 /** Resolved shape of a `select(selectLineItem)` row (numeric → string). */
@@ -237,6 +281,7 @@ export async function createQuote(
             taxCents: totals.taxCents,
             totalCents: totals.totalCents,
             notes: input.notes ?? null,
+            termsConditions: input.termsConditions ?? null,
           })
           .returning({ id: quotes.id });
         const q = qRows[0];
@@ -256,6 +301,19 @@ export async function createQuote(
           );
         }
 
+        if (input.sections && input.sections.length > 0) {
+          await tx.insert(quoteSections).values(
+            input.sections.map((s, i) => ({
+              quoteId: q.id,
+              workspaceId,
+              title: s.title,
+              body: s.body,
+              position: i,
+              optional: s.optional ?? false,
+            })),
+          );
+        }
+
         await writeAudit({
           workspaceId,
           actorUserId: actorId,
@@ -266,6 +324,7 @@ export async function createQuote(
             number,
             totalCents: totals.totalCents,
             lineItemCount: input.lineItems.length,
+            sectionCount: input.sections?.length ?? 0,
           },
         });
         return q.id;
@@ -282,8 +341,9 @@ export async function createQuote(
 }
 
 /**
- * Update a draft quote (line items are replaced; totals recomputed). Throws if the quote
- * is not a draft or doesn't belong to the workspace.
+ * Update a draft quote (line items + sections are replaced; totals recomputed). Throws if the
+ * quote is not a draft or doesn't belong to the workspace. Sections are replaced-on-update
+ * (mirrors line items); pass `sections: []` to clear them, omit to leave them untouched.
  */
 export async function updateQuote(
   workspaceId: WorkspaceId,
@@ -333,6 +393,7 @@ export async function updateQuote(
     if (patch.currency !== undefined) set.currency = patch.currency;
     if (newTaxRate !== undefined) set.taxRate = newTaxRate;
     if (patch.notes !== undefined) set.notes = patch.notes ?? null;
+    if (patch.termsConditions !== undefined) set.termsConditions = patch.termsConditions ?? null;
     if (totals) {
       set.subtotalCents = totals.subtotalCents;
       set.taxCents = totals.taxCents;
@@ -353,6 +414,22 @@ export async function updateQuote(
             unitPriceCents: it.unitPriceCents,
             amountCents: lineItemAmountCents(it.quantity, it.unitPriceCents),
             position: i,
+          })),
+        );
+      }
+    }
+
+    if (patch.sections !== undefined) {
+      await tx.delete(quoteSections).where(eq(quoteSections.quoteId, quoteId));
+      if (patch.sections.length > 0) {
+        await tx.insert(quoteSections).values(
+          patch.sections.map((s, i) => ({
+            quoteId,
+            workspaceId,
+            title: s.title,
+            body: s.body,
+            position: i,
+            optional: s.optional ?? false,
           })),
         );
       }
@@ -420,17 +497,32 @@ export async function getQuote(
   const q = qRows[0];
   if (!q) return null;
 
-  const itemRows = await db
-    .select(selectLineItem)
-    .from(quoteLineItems)
-    .where(eq(quoteLineItems.quoteId, quoteId))
-    .orderBy(quoteLineItems.position);
+  const [itemRows, sectionRows] = await Promise.all([
+    db
+      .select(selectLineItem)
+      .from(quoteLineItems)
+      .where(eq(quoteLineItems.quoteId, quoteId))
+      .orderBy(quoteLineItems.position),
+    db
+      .select(selectSection)
+      .from(quoteSections)
+      .where(eq(quoteSections.quoteId, quoteId))
+      .orderBy(quoteSections.position),
+  ]);
 
   const { customerName, ...rest } = q;
   return {
     ...rest,
     customerName: customerName ?? null,
     lineItems: itemRows.map(mapLineItem),
+    sections: sectionRows.map((s) => ({
+      id: s.id,
+      quoteId: s.quoteId,
+      title: s.title,
+      body: s.body,
+      position: s.position,
+      optional: s.optional,
+    })),
   };
 }
 
@@ -639,6 +731,14 @@ export interface PublicQuoteView {
     unitPriceCents: number;
     amountCents: number;
   }[];
+  /** Optional content sections (Wave 2), ordered by position. Customer-visible. */
+  sections: {
+    title: string;
+    body: string;
+    optional: boolean;
+  }[];
+  /** Terms & Conditions (Wave 2). Null = no T&Cs to show. */
+  termsConditions: string | null;
   sentAt: Date | null;
   acceptedAt: Date | null;
   declinedAt: Date | null;
@@ -672,11 +772,18 @@ export async function getQuoteByPublicToken(token: string): Promise<PublicQuoteV
     return null;
   }
 
-  const itemRows = await db
-    .select(selectLineItem)
-    .from(quoteLineItems)
-    .where(eq(quoteLineItems.quoteId, q.id))
-    .orderBy(quoteLineItems.position);
+  const [itemRows, sectionRows] = await Promise.all([
+    db
+      .select(selectLineItem)
+      .from(quoteLineItems)
+      .where(eq(quoteLineItems.quoteId, q.id))
+      .orderBy(quoteLineItems.position),
+    db
+      .select(selectSection)
+      .from(quoteSections)
+      .where(eq(quoteSections.quoteId, q.id))
+      .orderBy(quoteSections.position),
+  ]);
 
   return {
     number: q.number,
@@ -695,6 +802,12 @@ export async function getQuoteByPublicToken(token: string): Promise<PublicQuoteV
       unitPriceCents: it.unitPriceCents,
       amountCents: it.amountCents,
     })),
+    sections: sectionRows.map((s) => ({
+      title: s.title,
+      body: s.body,
+      optional: s.optional,
+    })),
+    termsConditions: q.termsConditions ?? null,
     sentAt: q.sentAt,
     acceptedAt: q.acceptedAt,
     declinedAt: q.declinedAt,
@@ -739,12 +852,31 @@ export async function markQuoteViewed(token: string): Promise<boolean> {
 }
 
 /**
- * Customer accepts a quote (public action): `sent|viewed → accepted`, sets `acceptedAt`.
- * Publishes `QuoteAccepted` enriched with merchant-notification metadata so the
- * notifications platform can email workspace members. Returns false if the quote isn't
- * in an allowed state or not found — idempotent via the atomic `transition`.
+ * Acceptance metadata captured at accept time (Wave 2). `accepterName` is required (the
+ * customer types their name); the rest is captured from the request by the public action
+ * and threaded in. `signature` is a typed name or a canvas-captured data-URL — acceptance
+ * evidence, not a cryptographic signature.
  */
-export async function acceptQuote(token: string): Promise<boolean> {
+export interface AcceptanceMeta {
+  accepterName: string;
+  accepterEmail?: string | null;
+  signature?: string | null;
+  ipAddress: string;
+  userAgent: string;
+}
+
+/**
+ * Customer accepts a quote (public action): `sent|viewed → accepted`, sets `acceptedAt`,
+ * and writes a `quote_acceptances` row capturing who accepted + from where (Wave 2 — the
+ * legally-meaningful evidence the spec calls for; the prior implementation stored only
+ * `acceptedAt`). Publishes `QuoteAccepted` enriched with merchant-notification metadata
+ * (including `accepterName` + `ipAddress`) so the notifications platform can email workspace
+ * members. Returns false if the quote isn't in an allowed state or not found — idempotent
+ * via the atomic `transition` (a duplicate accept writes no second acceptance row because
+ * the transition matches zero rows).
+ */
+export async function acceptQuote(token: string, metaInput: AcceptanceMeta): Promise<boolean> {
+  if (!metaInput.accepterName.trim()) throw new Error("Accepter name is required.");
   const db = getDb();
   const found = await db
     .select({ id: quotes.id, workspaceId: quotes.workspaceId })
@@ -754,17 +886,36 @@ export async function acceptQuote(token: string): Promise<boolean> {
   const row = found[0];
   if (!row) return false;
 
+  const acceptedAt = new Date();
   const result = await transition(row.workspaceId, row.id, "accepted", ["sent", "viewed"], {
-    acceptedAt: new Date(),
+    acceptedAt,
   });
   if (!result) return false;
+
+  // Record the acceptance (one row per accept event — full audit trail). Written after the
+  // transition succeeds; a duplicate accept can't reach here (transition matched zero rows).
+  await db.insert(quoteAcceptances).values({
+    quoteId: row.id,
+    workspaceId: row.workspaceId,
+    accepterName: metaInput.accepterName.trim(),
+    accepterEmail: metaInput.accepterEmail ?? null,
+    ipAddress: metaInput.ipAddress,
+    userAgent: metaInput.userAgent,
+    signature: metaInput.signature ?? null,
+    acceptedAt,
+  });
+
   const meta = await fetchQuoteMerchantMeta(row.workspaceId, row.id);
   await publishEvent({
     type: "QuoteAccepted",
     workspaceId: row.workspaceId,
     entityType: "quote",
     entityId: row.id,
-    metadata: meta ?? { number: result.number },
+    metadata: {
+      ...(meta ?? { number: result.number }),
+      accepterName: metaInput.accepterName,
+      ipAddress: metaInput.ipAddress,
+    },
   });
   await writeAudit({
     workspaceId: row.workspaceId,
@@ -772,18 +923,30 @@ export async function acceptQuote(token: string): Promise<boolean> {
     action: "quote.accept",
     targetType: "quote",
     targetId: row.id,
-    metadata: { number: result.number, source: "public_page" },
+    metadata: {
+      number: result.number,
+      source: "public_page",
+      accepterName: metaInput.accepterName,
+      ipAddress: metaInput.ipAddress,
+    },
   });
   return true;
 }
 
+/** Decline metadata captured at decline time (Wave 2). No `decline_declines` table — IP/UA
+ *  are stored in the event metadata + audit only (declines are less legally significant). */
+export interface DeclineMeta {
+  ipAddress: string;
+  userAgent: string;
+  reason?: string | null;
+}
+
 /**
  * Customer declines a quote (public action): `sent|viewed → declined`, sets `declinedAt`.
- * Publishes `QuoteDeclined` enriched with merchant-notification metadata. Returns false if
- * the quote isn't in an allowed state or not found — idempotent. No reason text captured
- * this phase (simple decline per the user decision).
+ * Publishes `QuoteDeclined` enriched with merchant-notification metadata + IP/UA. Returns
+ * false if the quote isn't in an allowed state or not found — idempotent.
  */
-export async function declineQuote(token: string): Promise<boolean> {
+export async function declineQuote(token: string, metaInput: DeclineMeta): Promise<boolean> {
   const db = getDb();
   const found = await db
     .select({ id: quotes.id, workspaceId: quotes.workspaceId })
@@ -803,7 +966,7 @@ export async function declineQuote(token: string): Promise<boolean> {
     workspaceId: row.workspaceId,
     entityType: "quote",
     entityId: row.id,
-    metadata: meta ?? { number: result.number },
+    metadata: { ...(meta ?? { number: result.number }), ipAddress: metaInput.ipAddress },
   });
   await writeAudit({
     workspaceId: row.workspaceId,
@@ -811,9 +974,58 @@ export async function declineQuote(token: string): Promise<boolean> {
     action: "quote.decline",
     targetType: "quote",
     targetId: row.id,
-    metadata: { number: result.number, source: "public_page" },
+    metadata: {
+      number: result.number,
+      source: "public_page",
+      ipAddress: metaInput.ipAddress,
+      userAgent: metaInput.userAgent,
+      reason: metaInput.reason ?? null,
+    },
   });
   return true;
+}
+
+/** An acceptance record (Wave 2) — the merchant detail page renders this when `status === accepted`. */
+export interface QuoteAcceptanceRow {
+  id: QuoteAcceptanceId;
+  quoteId: QuoteId;
+  accepterName: string;
+  accepterEmail: string | null;
+  ipAddress: string;
+  userAgent: string;
+  signature: string | null;
+  acceptedAt: Date;
+}
+
+/**
+ * Fetch the most recent acceptance for a quote (Wave 2 — merchant detail page). Workspace-
+ * scoped (IDOR-safe). Returns null if the quote has no acceptance row (not accepted, or
+ * accepted before Wave 2). Re-acceptances create a new row each time; this returns the
+ * latest by `acceptedAt` so the merchant sees the current acceptance evidence.
+ */
+export async function getAcceptance(
+  workspaceId: WorkspaceId,
+  quoteId: QuoteId,
+): Promise<QuoteAcceptanceRow | null> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: quoteAcceptances.id,
+      quoteId: quoteAcceptances.quoteId,
+      accepterName: quoteAcceptances.accepterName,
+      accepterEmail: quoteAcceptances.accepterEmail,
+      ipAddress: quoteAcceptances.ipAddress,
+      userAgent: quoteAcceptances.userAgent,
+      signature: quoteAcceptances.signature,
+      acceptedAt: quoteAcceptances.acceptedAt,
+    })
+    .from(quoteAcceptances)
+    .where(
+      and(eq(quoteAcceptances.quoteId, quoteId), eq(quoteAcceptances.workspaceId, workspaceId)),
+    )
+    .orderBy(desc(quoteAcceptances.acceptedAt))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /**

@@ -226,6 +226,26 @@ export async function createSignedReadUrl(storagePath: string, ttlSeconds = 60):
 }
 
 /**
+ * Download a file's bytes server-side (Wave 2 — receipt extraction). Unlike the signed-URL
+ * helpers (which hand the client a URL to fetch), this pulls bytes through the app server so
+ * they can be fed to the vision model. Uses the service-role admin client (bypasses RLS);
+ * the caller is responsible for workspace-scoping (the `storagePath` is namespaced by
+ * workspace so a cross-workspace path can't be constructed without the workspace id).
+ */
+export async function downloadFileBytes(
+  storagePath: string,
+): Promise<{ bytes: Uint8Array; mimeType: string | null }> {
+  const client = getStorageAdminClient();
+  const { data, error } = await client.storage.from(storageBucket()).download(storagePath);
+  if (error || !data) {
+    throw new Error(`Failed to download file: ${error?.message ?? "unknown"}`);
+  }
+  // Supabase returns a Blob in browser-ish runtimes; in Node it's a Blob with `.arrayBuffer()`.
+  const arrayBuffer = await data.arrayBuffer();
+  return { bytes: new Uint8Array(arrayBuffer), mimeType: data.type || null };
+}
+
+/**
  * Delete a file: remove the Storage object then the metadata row. Workspace-
  * scoped (refuses a file that belongs to another workspace). Writes an audit
  * row and publishes `ReceiptUploaded`'s counterpart is not needed — deletion

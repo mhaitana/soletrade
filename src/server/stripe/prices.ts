@@ -41,7 +41,7 @@ export function priceEnvKey(moduleKey: ModuleKey, role: Role, interval: Interval
  */
 export function getModulePriceId(moduleKey: ModuleKey, role: Role, interval: Interval): string {
   const key = priceEnvKey(moduleKey, role, interval);
-  const id = (env as Record<string, string | undefined>)[key];
+  const id = (env as unknown as Record<string, string | undefined>)[key];
   if (!id) {
     throw new Error(
       `${key} is not configured. Run \`pnpm stripe:setup\` and paste the printed price IDs into .env.local.`,
@@ -74,7 +74,7 @@ export function buildPriceIdToModuleMap(): Map<string, PriceIdMapping> {
   for (const moduleKey of MODULE_KEYS) {
     for (const role of ["standalone", "addon"] as const) {
       for (const interval of ["monthly", "annual"] as const) {
-        const id = (env as Record<string, string | undefined>)[
+        const id = (env as unknown as Record<string, string | undefined>)[
           priceEnvKey(moduleKey, role, interval)
         ];
         if (id) map.set(id, { moduleKey, role });

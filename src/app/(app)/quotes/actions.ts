@@ -10,14 +10,17 @@ import { listCustomers, type CustomerRow } from "@/platform/customers";
 import {
   createQuote,
   deleteQuote,
+  getAcceptance,
   getQuote,
   listQuotes,
   sendQuote,
   updateQuote,
   markQuoteConverted,
+  type QuoteAcceptanceRow,
   type QuoteRow,
   type QuoteWithItems,
   type LineItemInput,
+  type SectionInput,
 } from "@/modules/quotes";
 import { createInvoice, getInvoice } from "@/modules/invoices";
 import type { QuoteStatus } from "@/server/db/schema/enums";
@@ -34,6 +37,12 @@ const lineItemSchema = z.object({
   unitPriceCents: z.number().int().min(0, "Unit price can't be negative."),
 });
 
+const sectionSchema = z.object({
+  title: z.string().trim().min(1, "Section title is required.").max(200),
+  body: z.string().max(10000),
+  optional: z.boolean().optional(),
+});
+
 const createSchema = z.object({
   customerId: z.string().uuid().nullable().optional(),
   issueDate: z.coerce.date(),
@@ -42,6 +51,8 @@ const createSchema = z.object({
   taxRate: z.number().int().min(0).max(100),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   notes: z.string().trim().max(2000).nullable().optional(),
+  sections: z.array(sectionSchema).optional(),
+  termsConditions: z.string().max(50000).nullable().optional(),
 });
 
 export type CreateQuoteResult =
@@ -67,6 +78,12 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
     unitPriceCents: it.unitPriceCents,
   }));
 
+  const sections: SectionInput[] | undefined = parsed.data.sections?.map((s) => ({
+    title: s.title,
+    body: s.body,
+    optional: s.optional,
+  }));
+
   try {
     const id = await createQuote(
       ctx.workspaceId,
@@ -77,7 +94,9 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
         currency: parsed.data.currency ?? "AUD",
         taxRate: parsed.data.taxRate,
         notes: parsed.data.notes ?? null,
+        termsConditions: parsed.data.termsConditions ?? null,
         lineItems,
+        sections,
       },
       ctx.user.id,
     );
@@ -98,6 +117,8 @@ const updateSchema = z.object({
   taxRate: z.number().int().min(0).max(100),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   notes: z.string().trim().max(2000).nullable().optional(),
+  sections: z.array(sectionSchema).optional(),
+  termsConditions: z.string().max(50000).nullable().optional(),
 });
 
 export type UpdateQuoteResult =
@@ -123,6 +144,12 @@ export async function updateQuoteAction(input: unknown): Promise<UpdateQuoteResu
     unitPriceCents: it.unitPriceCents,
   }));
 
+  const sections: SectionInput[] | undefined = rest.sections?.map((s) => ({
+    title: s.title,
+    body: s.body,
+    optional: s.optional,
+  }));
+
   try {
     await updateQuote(
       ctx.workspaceId,
@@ -134,7 +161,9 @@ export async function updateQuoteAction(input: unknown): Promise<UpdateQuoteResu
         currency: rest.currency ?? "AUD",
         taxRate: rest.taxRate,
         notes: rest.notes ?? null,
+        termsConditions: rest.termsConditions ?? null,
         lineItems,
+        sections,
       },
       ctx.user.id,
     );
@@ -288,17 +317,28 @@ export async function loadQuotesPage(params?: {
 }
 
 export type QuoteDetailData =
-  { installed: true; quote: QuoteWithItems | null; canManage: boolean } | { installed: false };
+  | {
+      installed: true;
+      quote: QuoteWithItems | null;
+      /** Latest acceptance row, fetched only when the quote is accepted (Wave 2). */
+      acceptance: QuoteAcceptanceRow | null;
+      canManage: boolean;
+    }
+  | { installed: false };
 
 export async function loadQuote(quoteId: string): Promise<QuoteDetailData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "quotes"))) return { installed: false };
 
-  const [quote, canManage] = await Promise.all([
-    getQuote(ctx.workspaceId, branded<"QuoteId">(quoteId)),
-    Promise.resolve(authorize(ctx.role, "manage:quote").ok),
-  ]);
-  return { installed: true, quote, canManage };
+  const quote = await getQuote(ctx.workspaceId, branded<"QuoteId">(quoteId));
+  const canManage = authorize(ctx.role, "manage:quote").ok;
+  // Fetch the acceptance row only for accepted quotes (read-only — view:quote suffices;
+  // the loader runs after the view:quotes gate at the page level). Saves a query otherwise.
+  const acceptance =
+    quote && quote.status === "accepted"
+      ? await getAcceptance(ctx.workspaceId, branded<"QuoteId">(quoteId))
+      : null;
+  return { installed: true, quote, acceptance, canManage };
 }
 
 export type QuoteEditData =

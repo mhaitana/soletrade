@@ -105,3 +105,76 @@ describe("formatKm", () => {
     expect(formatKm(-45200)).toBe("45.2 km");
   });
 });
+
+describe("summarizeDrive — Wave 2 (weekly + deduction + profit)", () => {
+  it("defaults deduction/expenses/profit to 0 when no opts supplied (backward compatible)", () => {
+    const s = summarizeDrive([earning({ amountCents: 1000, platform: "uber" })], []);
+    expect(s.mileageDeductionCents).toBe(0);
+    expect(s.totalExpensesCents).toBe(0);
+    // profit = earnings - 0 - 0 = earnings
+    expect(s.profitCents).toBe(1000);
+  });
+
+  it("weekly is empty when there are no earnings or trips", () => {
+    const s = summarizeDrive([], []);
+    expect(s.weekly).toEqual([]);
+  });
+
+  it("groups earnings into ISO-Monday-anchored weekly points", () => {
+    // 2026-07-08 is a Wednesday (week Monday = 2026-07-06); 2026-07-12 is Sunday (same week).
+    const s = summarizeDrive(
+      [
+        earning({ amountCents: 1000, platform: "uber", date: new Date("2026-07-08T12:00:00Z") }),
+        earning({ amountCents: 2000, platform: "uber", date: new Date("2026-07-12T12:00:00Z") }),
+        earning({ amountCents: 500, platform: "uber", date: new Date("2026-07-06T00:00:00Z") }),
+      ],
+      [],
+    );
+    // All three land in the same week (Mon 2026-07-06).
+    expect(s.weekly).toHaveLength(1);
+    expect(s.weekly[0]!.week).toBe("2026-07-06");
+    expect(s.weekly[0]!.earningsCents).toBe(3500);
+  });
+
+  it("sorts weekly points ascending by week key", () => {
+    const s = summarizeDrive(
+      [
+        earning({ amountCents: 1000, platform: "uber", date: new Date("2026-07-08T12:00:00Z") }),
+        earning({ amountCents: 500, platform: "uber", date: new Date("2026-06-25T12:00:00Z") }),
+      ],
+      [],
+    );
+    expect(s.weekly.map((w) => w.week)).toEqual(["2026-06-22", "2026-07-06"]);
+  });
+
+  it("computes mileageDeductionCents = round(totalDistanceKm * rate)", () => {
+    // 45200 m = 45.2 km; rate 85 c/km → round(45.2 * 85) = round(3842) = 3842.
+    const s = summarizeDrive([], [trip({ distanceMeters: 45200, platform: "uber" })], {
+      settings: { mileageRateCentsPerKm: 85 },
+    });
+    expect(s.mileageDeductionCents).toBe(3842);
+  });
+
+  it("mileageDeductionCents is 0 when no rate is supplied", () => {
+    const s = summarizeDrive([], [trip({ distanceMeters: 45200, platform: "uber" })]);
+    expect(s.mileageDeductionCents).toBe(0);
+  });
+
+  it("sums vehicle expenses from opts.expenses", () => {
+    const s = summarizeDrive([], [], {
+      expenses: [{ amountCents: 5000 }, { amountCents: 3000 }, { amountCents: -200 }],
+    });
+    // Math.abs applied defensively → 5000 + 3000 + 200 = 8200.
+    expect(s.totalExpensesCents).toBe(8200);
+  });
+
+  it("profitCents = earnings - expenses - mileageDeduction (can go negative)", () => {
+    const s = summarizeDrive(
+      [earning({ amountCents: 10000, platform: "uber" })],
+      [trip({ distanceMeters: 200000, platform: "uber" })], // 200 km * 85 = 17000 deduction
+      { settings: { mileageRateCentsPerKm: 85 }, expenses: [{ amountCents: 3000 }] },
+    );
+    // 10000 - 3000 - 17000 = -10000
+    expect(s.profitCents).toBe(-10000);
+  });
+});

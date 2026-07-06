@@ -11,9 +11,11 @@ import {
   createTrip,
   deleteEarning,
   deleteTrip,
+  getDriveSettings,
   getEarning,
   getTrip,
   listEarnings,
+  listExpenses,
   listTrips,
   updateEarning,
   updateTrip,
@@ -22,7 +24,7 @@ import {
   type TripInput,
   type TripRow,
 } from "@/modules/drive";
-import { summarizeDrive, type DriveSummary } from "@/modules/drive/calc";
+import { summarizeDrive, type DriveSummary, type WeeklyDrivePoint } from "@/modules/drive/calc";
 import { type Period, parsePeriod, periodRange } from "@/shared/utils/periods";
 import { isDrivePlatform } from "@/shared/constants/drive-platforms";
 import { branded } from "@/shared/types/ids";
@@ -284,6 +286,10 @@ export type DrivePageData =
       search: string;
       period: Period;
       summary: DriveSummary;
+      /** Per-week earnings + distance (Wave 2) — used by the weekly sparkline. */
+      weekly: WeeklyDrivePoint[];
+      /** Workspace mileage rate (Wave 2) — the page surfaces it so users see the deduction basis. */
+      mileageRateCentsPerKm: number;
     }
   | { installed: false };
 
@@ -305,35 +311,44 @@ export async function loadDrivePage(params?: {
   // 4 fetches: list (capped 100) + summary (capped 2000) per entity type. The summary spans
   // both earnings + trips, so both summary fetches run regardless of `view`. The inactive
   // view's 100-list is not rendered but is cheap (mirrors Books' two-fetch pattern doubled).
-  const [earnings, earningsSummaryRows, trips, tripsSummaryRows, canManage] = await Promise.all([
-    listEarnings(ctx.workspaceId, {
-      platform,
-      search: search || undefined,
-      dateFrom: range.start ?? undefined,
-      dateTo: range.end,
-      limit: 100,
-    }),
-    listEarnings(ctx.workspaceId, {
-      platform,
-      dateFrom: range.start ?? undefined,
-      dateTo: range.end,
-      limit: 2000,
-    }),
-    listTrips(ctx.workspaceId, {
-      platform,
-      search: search || undefined,
-      dateFrom: range.start ?? undefined,
-      dateTo: range.end,
-      limit: 100,
-    }),
-    listTrips(ctx.workspaceId, {
-      platform,
-      dateFrom: range.start ?? undefined,
-      dateTo: range.end,
-      limit: 2000,
-    }),
-    Promise.resolve(authorize(ctx.role, "manage:drive").ok),
-  ]);
+  // Wave 2 adds a 5th + 6th fetch: drive settings (mileage rate) + period expenses, so the
+  // summary can compute the mileage deduction, total expenses, and net profit.
+  const [earnings, earningsSummaryRows, trips, tripsSummaryRows, settings, expenseRows, canManage] =
+    await Promise.all([
+      listEarnings(ctx.workspaceId, {
+        platform,
+        search: search || undefined,
+        dateFrom: range.start ?? undefined,
+        dateTo: range.end,
+        limit: 100,
+      }),
+      listEarnings(ctx.workspaceId, {
+        platform,
+        dateFrom: range.start ?? undefined,
+        dateTo: range.end,
+        limit: 2000,
+      }),
+      listTrips(ctx.workspaceId, {
+        platform,
+        search: search || undefined,
+        dateFrom: range.start ?? undefined,
+        dateTo: range.end,
+        limit: 100,
+      }),
+      listTrips(ctx.workspaceId, {
+        platform,
+        dateFrom: range.start ?? undefined,
+        dateTo: range.end,
+        limit: 2000,
+      }),
+      getDriveSettings(ctx.workspaceId),
+      listExpenses(ctx.workspaceId, {
+        dateFrom: range.start ?? undefined,
+        dateTo: range.end,
+        limit: 2000,
+      }),
+      Promise.resolve(authorize(ctx.role, "manage:drive").ok),
+    ]);
 
   const summary = summarizeDrive(
     earningsSummaryRows.map((e) => ({
@@ -346,6 +361,10 @@ export async function loadDrivePage(params?: {
       date: t.date,
       platform: t.platform,
     })),
+    {
+      settings: { mileageRateCentsPerKm: settings.mileageRateCentsPerKm },
+      expenses: expenseRows.map((x) => ({ amountCents: x.amountCents })),
+    },
   );
 
   return {
@@ -358,6 +377,8 @@ export async function loadDrivePage(params?: {
     search,
     period,
     summary,
+    weekly: summary.weekly,
+    mileageRateCentsPerKm: settings.mileageRateCentsPerKm,
   };
 }
 

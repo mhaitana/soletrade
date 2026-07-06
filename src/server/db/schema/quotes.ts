@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   numeric,
@@ -12,8 +13,10 @@ import { sql } from "drizzle-orm";
 import type {
   CustomerId,
   InvoiceId,
+  QuoteAcceptanceId,
   QuoteId,
   QuoteLineItemId,
+  QuoteSectionId,
   WorkspaceId,
 } from "@/shared/types/ids";
 import { workspaces } from "./workspaces";
@@ -66,6 +69,11 @@ export const quotes = pgTable(
     totalCents: integer("total_cents").notNull().default(0),
     /** Private note visible only to the workspace, not the customer. */
     notes: text("notes"),
+    /**
+     * Optional Terms & Conditions shown to the customer on the public quote page and
+     * gated behind an "I agree" checkbox in the accept dialog (Wave 2). Null = no T&Cs.
+     */
+    termsConditions: text("terms_conditions"),
     /** Unguessable per-document token for the public /q/[token] page. Set on send. */
     publicToken: text("public_token"),
     sentAt: timestamp("sent_at"),
@@ -122,4 +130,71 @@ export const quoteLineItems = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [index("quote_line_items_quote_idx").on(t.quoteId, t.position)],
+);
+
+/**
+ * Optional content sections for a quote (Wave 2). Free-form titled blocks (scope of
+ * work, exclusions, payment schedule, warranty, etc.) rendered on the public page in
+ * `position` order, between the line items and the totals. `optional` marks sections the
+ * customer can opt into (e.g. an add-on) — surfaced as a checkbox in the accept dialog.
+ * Cascade-deleted with the parent quote, mirroring `quoteLineItems`.
+ */
+export const quoteSections = pgTable(
+  "quote_sections",
+  {
+    id: uuid("id").primaryKey().$type<QuoteSectionId>().defaultRandom(),
+    quoteId: uuid("quote_id")
+      .notNull()
+      .$type<QuoteId>()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .$type<WorkspaceId>()
+      .references(() => workspaces.id),
+    title: text("title").notNull(),
+    /** Section body — plain text / light markdown, rendered as-is on the public page. */
+    body: text("body").notNull(),
+    /** Display order within the quote. */
+    position: integer("position").notNull().default(0),
+    /** True = the customer can opt into this section at accept time (add-on style). */
+    optional: boolean("optional").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("quote_sections_quote_idx").on(t.quoteId, t.position)],
+);
+
+/**
+ * Acceptance record for a quote (Wave 2). Captures who accepted, when, from where —
+ * the legally-meaningful evidence the spec calls for (the prior implementation stored only
+ * `acceptedAt`). One row per acceptance event (re-accept after a decline creates a new
+ * row — a full audit trail). Cascade-deleted with the parent quote. `signature` is a
+ * typed name or a canvas-captured data-URL — acceptance evidence, not a cryptographic
+ * signature (mirrors how e-sign tools capture intent).
+ */
+export const quoteAcceptances = pgTable(
+  "quote_acceptances",
+  {
+    id: uuid("id").primaryKey().$type<QuoteAcceptanceId>().defaultRandom(),
+    quoteId: uuid("quote_id")
+      .notNull()
+      .$type<QuoteId>()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .$type<WorkspaceId>()
+      .references(() => workspaces.id),
+    /** Name entered by the accepter (required). */
+    accepterName: text("accepter_name").notNull(),
+    accepterEmail: text("accepter_email"),
+    /** Client IP at accept time (captured from headers in the public action). */
+    ipAddress: text("ip_address").notNull(),
+    /** User-Agent at accept time. */
+    userAgent: text("user_agent").notNull(),
+    /** Typed name or canvas signature data-URL. */
+    signature: text("signature"),
+    acceptedAt: timestamp("accepted_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("quote_acceptances_quote_idx").on(t.quoteId)],
 );

@@ -254,6 +254,10 @@ export type QuoteMerchantMeta = {
   currency: string;
   customerName: string | null;
   customerEmail: string | null;
+  /** Who accepted (Wave 2). Null on `QuoteDeclined` / pre-Wave-2 events. */
+  accepterName?: string | null;
+  /** Acceptor IP (Wave 2). Null on `QuoteDeclined` / pre-Wave-2 events. */
+  ipAddress?: string | null;
 };
 
 /** Coerce a raw event-bus metadata record into a typed `QuoteMerchantMeta`. Returns null
@@ -270,6 +274,8 @@ export function coerceQuoteMerchantMeta(
     currency: typeof record.currency === "string" ? record.currency : "",
     customerName: typeof record.customerName === "string" ? record.customerName : null,
     customerEmail: typeof record.customerEmail === "string" ? record.customerEmail : null,
+    accepterName: typeof record.accepterName === "string" ? record.accepterName : null,
+    ipAddress: typeof record.ipAddress === "string" ? record.ipAddress : null,
   };
 }
 

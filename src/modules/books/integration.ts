@@ -11,6 +11,7 @@ import {
   branded,
   type CustomerId,
   type DriveEarningId,
+  type DriveExpenseId,
   type InvoiceId,
   type UserId,
   type WorkspaceId,
@@ -23,7 +24,7 @@ import {
  * `@/platform/*`, `@/server/*`, and `@/shared/*` only. It does **NOT** import `@/modules/invoices`
  * or `@/modules/drive` — the entire contract arrives via `event.metadata` + `event.entityId`.
  *
- * Two subscribers (the second added in Phase 7):
+ * Three subscribers (the second added in Phase 7, the third in Wave 2):
  *
  * 1. **`InvoicePaid` → Books income** (Phase 6c). Records an income row (category `invoice`)
  *    for the paid amount, linked to the invoice's customer + `sourceInvoiceId`. Idempotent via
@@ -31,6 +32,9 @@ import {
  * 2. **`DriveEarningsLogged` → Books income** (Phase 7). Records an income row (category `gig`)
  *    for the earned amount, linked via `sourceEarningId` (no customer — gig earnings have no
  *    customer). Idempotent via check-then-insert on `source_earning_id`.
+ * 3. **`VehicleExpenseLogged` → Books expense** (Wave 2). Records an expense row (category
+ *    `vehicle_expense`) for the logged amount, linked via `sourceExpenseId`. Idempotent via
+ *    check-then-insert on `source_expense_id`.
  *
  * Wired once at startup from `src/instrumentation.ts` (fire-and-forget, like
  * `registerNotifications`). Best-effort: the event bus isolates a failing handler from the
@@ -204,14 +208,94 @@ async function onDriveEarningsLogged(event: BusEvent): Promise<void> {
 }
 
 /**
+ * Defensive parse of the `VehicleExpenseLogged` event metadata (the Books-side contract).
+ * Emitted by `createExpense` in `@/modules/drive`.
+ */
+function readVehicleExpenseMeta(event: BusEvent): {
+  expenseId: DriveExpenseId;
+  amountCents: number;
+  currency: string;
+  date: Date;
+  description: string;
+} | null {
+  const m = event.metadata;
+  const entityId = typeof event.entityId === "string" ? event.entityId : null;
+  if (!m || !entityId) return null;
+  const amountCents = typeof m.amountCents === "number" && m.amountCents > 0 ? m.amountCents : null;
+  const currency = typeof m.currency === "string" && m.currency.length === 3 ? m.currency : null;
+  const date = m.date instanceof Date ? m.date : null;
+  const description = typeof m.description === "string" ? m.description : "";
+  if (amountCents === null || !currency || !date) return null;
+  return {
+    expenseId: branded<"DriveExpenseId">(entityId),
+    amountCents,
+    currency,
+    date,
+    description,
+  };
+}
+
+async function onVehicleExpenseLogged(event: BusEvent): Promise<void> {
+  if (!event.workspaceId) return;
+  const workspaceId = event.workspaceId as WorkspaceId;
+
+  // Module gate — no-op if Books isn't installed.
+  if (!(await isModuleEnabled(workspaceId, "books"))) return;
+
+  const meta = readVehicleExpenseMeta(event);
+  if (!meta) {
+    console.error("[books] VehicleExpenseLogged event missing required metadata:", event.entityId);
+    return;
+  }
+
+  // Idempotency: skip if an expense row already exists for this drive expense.
+  const db = getDb();
+  const existing = await db
+    .select({ id: bookTransactions.id })
+    .from(bookTransactions)
+    .where(
+      and(
+        eq(bookTransactions.workspaceId, workspaceId),
+        eq(bookTransactions.sourceExpenseId, meta.expenseId),
+      ),
+    )
+    .limit(1);
+  if (existing.length > 0) return;
+
+  // Vehicle expenses have no customer — record unlinked expense. Use the expense's user-chosen
+  // date so it lands in the right P&L period (mirrors the DriveEarningsLogged subscriber).
+  try {
+    await createTransaction(
+      workspaceId,
+      {
+        type: "expense",
+        amountCents: meta.amountCents,
+        currency: meta.currency,
+        date: meta.date,
+        description: meta.description || "Vehicle expense",
+        category: "vehicle_expense",
+        customerId: null,
+        notes: "Auto-recorded from drive vehicle expense.",
+        sourceExpenseId: meta.expenseId,
+      },
+      event.actorUserId as UserId | undefined,
+    );
+  } catch (err) {
+    console.error("[books] auto-record from drive expense failed:", meta.expenseId, err);
+  }
+}
+
+/**
  * Subscribe the Books cross-module handlers. Returns a composed unsubscribe (for tests); in
  * production this is fire-and-forget — wired once at startup in `src/instrumentation.ts`.
  */
 export function registerBooksIntegration(): () => void {
   const u1 = onEvent("InvoicePaid", onInvoicePaid);
   const u2 = onEvent("DriveEarningsLogged", onDriveEarningsLogged);
+  const u3 = onEvent("VehicleExpenseLogged", onVehicleExpenseLogged);
   return () => {
     u1();
     u2();
+    u3();
   };
 }

@@ -102,6 +102,35 @@ export const bookTypeEnum = pgEnum("book_type", ["income", "expense"]);
 export type BookType = (typeof bookTypeEnum.enumValues)[number];
 
 /**
+ * Receipt extraction lifecycle (Wave 2). `pending` = extracted, awaiting human
+ * review in the queue; `reviewed` = a human has opened/edited it (intermediate);
+ * `applied` = the extracted data was written to a `book_transactions` row (terminal);
+ * `rejected` = discarded without creating a transaction (terminal). Set
+ * `transactionId` + `errorMessage` as the flow progresses.
+ */
+export const receiptExtractionStatusEnum = pgEnum("receipt_extraction_status", [
+  "pending",
+  "reviewed",
+  "applied",
+  "rejected",
+]);
+export type ReceiptExtractionStatus = (typeof receiptExtractionStatusEnum.enumValues)[number];
+
+/**
+ * Vehicle expense categories (Wave 2 Drive). Fuel/maintenance/insurance/registration
+ * are the common deductible vehicle costs; `other` catches everything else. Stored as
+ * a real enum (small fixed set, unlike platform slugs which grow).
+ */
+export const vehicleExpenseTypeEnum = pgEnum("vehicle_expense_type", [
+  "fuel",
+  "maintenance",
+  "insurance",
+  "registration",
+  "other",
+]);
+export type VehicleExpenseType = (typeof vehicleExpenseTypeEnum.enumValues)[number];
+
+/**
  * AI assistant (Phase 10). Only `user` and `assistant` text is persisted — tool calls
  * and tool results are NOT replayed (read-only Q&A; the model re-derives data per turn
  * via tools rather than trusting cached tool output).

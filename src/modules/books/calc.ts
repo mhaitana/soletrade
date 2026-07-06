@@ -25,6 +25,12 @@ export interface TransactionSummaryInput {
   date: Date;
   /** Category slug (catalog validation lives at the action boundary). */
   category: string;
+  /**
+   * GST portion of this transaction in cents (Wave 2). Optional for backward-compat
+   * with callers that don't carry GST — defaults to 0. Income GST is "collected"
+   * (remittable); expense GST is "paid" (claimable as an input tax credit).
+   */
+  gstCents?: number;
 }
 
 export interface CategoryBreakdown {
@@ -50,6 +56,12 @@ export interface TransactionSummary {
   expenseCents: number;
   /** income - expense (can be negative). */
   netCents: number;
+  /** GST collected from customers (sum of income `gstCents`). */
+  gstCollectedCents: number;
+  /** GST paid on expenses (claimable input tax credits). */
+  gstPaidCents: number;
+  /** gstCollected - gstPaid (the net GST position; can be negative = refund due). */
+  netGstCents: number;
   count: number;
   /** Income categories first (desc by amount), then expense categories (desc by amount). */
   byCategory: CategoryBreakdown[];
@@ -71,6 +83,8 @@ export function summarizeTransactions(
 ): TransactionSummary {
   let incomeCents = 0;
   let expenseCents = 0;
+  let gstCollectedCents = 0;
+  let gstPaidCents = 0;
   let count = 0;
 
   // Per type|category aggregation. Insertion order is tracked so the final sort is stable
@@ -81,11 +95,14 @@ export function summarizeTransactions(
 
   for (const row of rows) {
     const amount = Math.abs(row.amountCents);
+    const gst = Math.abs(row.gstCents ?? 0);
     count += 1;
     if (row.type === "income") {
       incomeCents += amount;
+      gstCollectedCents += gst;
     } else {
       expenseCents += amount;
+      gstPaidCents += gst;
     }
 
     const catKey = `${row.type}|${row.category}`;
@@ -132,8 +149,100 @@ export function summarizeTransactions(
     incomeCents,
     expenseCents,
     netCents: incomeCents - expenseCents,
+    gstCollectedCents,
+    gstPaidCents,
+    netGstCents: gstCollectedCents - gstPaidCents,
     count,
     byCategory,
     monthly,
+  };
+}
+
+/**
+ * A transaction reduced to the fields `summarizeGst` needs. Pure subset of
+ * `TransactionSummaryInput` + `gstCents`.
+ */
+export interface GstSummaryInput {
+  type: BookType;
+  /** GST portion in cents (income = collected, expense = paid/claimable). */
+  gstCents: number;
+  /** The transaction's calendar date — drives the quarter grouping. */
+  date: Date;
+}
+
+export interface GstQuarterPoint {
+  /** Financial-year quarter label, e.g. "2026-Q1" (FY2026–27, Q1 = Jul–Sep 2026). */
+  label: string;
+  fiscalYear: number;
+  quarter: number;
+  gstCollectedCents: number;
+  gstPaidCents: number;
+  /** collected − paid (can be negative = refund due). */
+  netGstCents: number;
+}
+
+export interface GstSummary {
+  gstCollectedCents: number;
+  gstPaidCents: number;
+  netGstCents: number;
+  /** Per-quarter breakdown, sorted ascending by (fiscalYear, quarter). */
+  byQuarter: GstQuarterPoint[];
+}
+
+/**
+ * Map a calendar date to the Australian financial-year quarter. FY starts 1 July:
+ * Q1 = Jul–Sep, Q2 = Oct–Dec, Q3 = Jan–Mar, Q4 = Apr–Jun. `fiscalYear` is the year the FY
+ * *started* (e.g. FY2026–27 → fiscalYear 2026).
+ */
+export function fiscalQuarter(date: Date): { fiscalYear: number; quarter: number; label: string } {
+  const month = date.getUTCMonth() + 1; // 1–12
+  const fiscalYear = month >= 7 ? date.getUTCFullYear() : date.getUTCFullYear() - 1;
+  const quarter = month >= 7 ? Math.ceil((month - 6) / 3) : Math.ceil((month + 6) / 3);
+  return { fiscalYear, quarter, label: `${fiscalYear}-Q${quarter}` };
+}
+
+/**
+ * Aggregate GST per financial-year quarter (the BAS / tax-runway view). Pure — no DB, no
+ * time calls. Empty input → zeros + empty array. `gstCents` is `Math.abs`'d defensively.
+ */
+export function summarizeGst(rows: readonly GstSummaryInput[]): GstSummary {
+  let gstCollectedCents = 0;
+  let gstPaidCents = 0;
+  const quarterMap = new Map<string, GstQuarterPoint>();
+
+  for (const row of rows) {
+    const gst = Math.abs(row.gstCents);
+    if (row.type === "income") gstCollectedCents += gst;
+    else gstPaidCents += gst;
+
+    const { fiscalYear, quarter, label } = fiscalQuarter(row.date);
+    const existing = quarterMap.get(label);
+    if (existing) {
+      if (row.type === "income") existing.gstCollectedCents += gst;
+      else existing.gstPaidCents += gst;
+      existing.netGstCents = existing.gstCollectedCents - existing.gstPaidCents;
+    } else {
+      const collected = row.type === "income" ? gst : 0;
+      const paid = row.type === "expense" ? gst : 0;
+      quarterMap.set(label, {
+        label,
+        fiscalYear,
+        quarter,
+        gstCollectedCents: collected,
+        gstPaidCents: paid,
+        netGstCents: collected - paid,
+      });
+    }
+  }
+
+  const byQuarter = [...quarterMap.values()].sort(
+    (a, b) => a.fiscalYear - b.fiscalYear || a.quarter - b.quarter,
+  );
+
+  return {
+    gstCollectedCents,
+    gstPaidCents,
+    netGstCents: gstCollectedCents - gstPaidCents,
+    byQuarter,
   };
 }

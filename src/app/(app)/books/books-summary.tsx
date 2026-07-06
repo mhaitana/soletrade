@@ -18,6 +18,7 @@ import type { BookType } from "@/server/db/schema/enums";
  */
 
 const PERIOD_LABEL: Record<Period, string> = {
+  week: "This week",
   month: "This month",
   quarter: "This quarter",
   year: "This year",
@@ -48,6 +49,24 @@ export function BooksSummary({
           label="Net"
           value={formatCents(summary.netCents, currency)}
           tone={summary.netCents >= 0 ? "income" : "danger"}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard
+          label="GST collected"
+          value={formatCents(summary.gstCollectedCents, currency)}
+          tone="income"
+        />
+        <StatCard
+          label="GST paid"
+          value={formatCents(summary.gstPaidCents, currency)}
+          tone="expense"
+        />
+        <StatCard
+          label="Net GST"
+          value={formatCents(summary.netGstCents, currency)}
+          tone={summary.netGstCents >= 0 ? "danger" : "income"}
         />
       </div>
 

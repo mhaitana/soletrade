@@ -46,6 +46,7 @@ export const ACTIVITY_LABELS: Record<string, ActivityLabel> = {
   ReceiptProcessed: { label: "processed a receipt", tone: "positive" },
   MileageLogged: { label: "logged mileage", tone: "info" },
   DriveEarningsLogged: { label: "logged drive earnings", tone: "info" },
+  VehicleExpenseLogged: { label: "logged a vehicle expense", tone: "info" },
   SubscriptionChanged: { label: "changed the subscription", tone: "warning" },
   CreditIssued: { label: "issued platform credit", tone: "positive" },
   RefundIssued: { label: "issued a refund", tone: "warning" },

@@ -27,6 +27,21 @@ function dollarsToCents(s: string): number {
   return Math.round(n * 100);
 }
 
+/** Default AU GST rate (10%). Hardcoded for now — no workspace GST-rate setting exists. */
+const GST_RATE = 10;
+
+/**
+ * Compute the GST portion (in dollars) for a given amount (in dollars) at the
+ * default AU rate: `gstCents = Math.round(amountCents * GST_RATE / 100)`. Returns
+ * "" when the amount is empty/invalid so the input stays placeholder-blank.
+ */
+function computeGstDollars(amountDollars: string): string {
+  const cents = dollarsToCents(amountDollars);
+  if (cents <= 0) return "";
+  const gstCents = Math.round((cents * GST_RATE) / 100);
+  return (gstCents / 100).toFixed(2);
+}
+
 function isoDate(d: Date | null | undefined): string {
   if (!d) return "";
   // toISOString gives UTC; we want the calendar date the user saved, so slice the
@@ -67,6 +82,13 @@ export function BookForm({
   const [notes, setNotes] = useState<string>(tx?.notes ?? "");
   // Receipt link (Phase 11b). Null = no receipt; a FileId = uploaded + linked.
   const [receiptFileId, setReceiptFileId] = useState<FileId | null>(tx?.receiptFileId ?? null);
+  // GST (Wave 2). "GST included" toggle + a numeric GST amount input (in dollars). When
+  // the toggle is on, the GST amount auto-computes from the transaction amount at 10% —
+  // the user can override the input for edge cases (mixed / different-rate supplies).
+  const [gstIncluded, setGstIncluded] = useState<boolean>((tx?.gstCents ?? 0) > 0);
+  const [gstDollars, setGstDollars] = useState<string>(
+    tx && tx.gstCents > 0 ? (tx.gstCents / 100).toFixed(2) : "",
+  );
 
   const categories = categoriesForType(type);
 
@@ -92,6 +114,7 @@ export function BookForm({
       customerId: customerId || null,
       notes: notes || null,
       receiptFileId,
+      gstCents: gstIncluded ? dollarsToCents(gstDollars) : 0,
     };
 
     startTransition(async () => {
@@ -138,7 +161,12 @@ export function BookForm({
             inputMode="decimal"
             required
             value={amountDollars}
-            onChange={(e) => setAmountDollars(e.target.value)}
+            onChange={(e) => {
+              setAmountDollars(e.target.value);
+              // Keep the GST field in sync with the amount while GST is included
+              // so the auto-computed 10% tracks the amount unless the user overrides it.
+              if (gstIncluded) setGstDollars(computeGstDollars(e.target.value));
+            }}
             aria-invalid={Boolean(fieldErr("amountCents"))}
             className="tabular-nums"
           />
@@ -196,6 +224,44 @@ export function BookForm({
               </option>
             ))}
           </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="gstIncluded">GST included</Label>
+          <label className="flex h-10 items-center gap-2 text-sm">
+            <input
+              id="gstIncluded"
+              name="gstIncluded"
+              type="checkbox"
+              className="size-4 rounded border-input"
+              checked={gstIncluded}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setGstIncluded(next);
+                if (next) setGstDollars(computeGstDollars(amountDollars));
+              }}
+            />
+            <span className="text-muted-foreground">10% AU GST</span>
+          </label>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="gstDollars">GST amount</Label>
+          <Input
+            id="gstDollars"
+            name="gstDollars"
+            type="number"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            value={gstDollars}
+            onChange={(e) => setGstDollars(e.target.value)}
+            disabled={!gstIncluded}
+            placeholder={gstIncluded ? "0.00" : "—"}
+            aria-invalid={Boolean(fieldErr("gstCents"))}
+            className="tabular-nums"
+          />
+          {fieldErr("gstCents") ? (
+            <p className="text-sm text-destructive">{fieldErr("gstCents")}</p>
+          ) : null}
         </div>
       </div>
 

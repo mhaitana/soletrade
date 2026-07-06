@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PERIOD, PERIODS, parsePeriod, periodRange, previousPeriodRange } from "./periods";
+import {
+  DEFAULT_PERIOD,
+  PERIODS,
+  parsePeriod,
+  periodRange,
+  previousPeriodRange,
+  startOfWeek,
+} from "./periods";
 
 describe("shared periods", () => {
   it("has a non-empty list with unique keys", () => {
@@ -14,12 +21,29 @@ describe("shared periods", () => {
   });
 
   it("parsePeriod accepts known keys and falls back to the default otherwise", () => {
+    expect(parsePeriod("week")).toBe("week");
     expect(parsePeriod("month")).toBe("month");
     expect(parsePeriod("quarter")).toBe("quarter");
     expect(parsePeriod("year")).toBe("year");
     expect(parsePeriod("all")).toBe("all");
     expect(parsePeriod(undefined)).toBe(DEFAULT_PERIOD);
     expect(parsePeriod("garbage")).toBe(DEFAULT_PERIOD);
+  });
+});
+
+describe("shared periods — startOfWeek", () => {
+  it("rolls back to Monday (Australian week starts Monday)", () => {
+    // 2026-07-08 is a Wednesday → Monday is 2026-07-06.
+    expect(startOfWeek(new Date("2026-07-08T10:30:00Z"))).toEqual(new Date("2026-07-06T00:00:00Z"));
+  });
+
+  it("keeps Monday unchanged", () => {
+    expect(startOfWeek(new Date("2026-07-06T15:00:00Z"))).toEqual(new Date("2026-07-06T00:00:00Z"));
+  });
+
+  it("rolls Sunday back to the previous Monday", () => {
+    // 2026-07-12 is a Sunday → Monday is 2026-07-06.
+    expect(startOfWeek(new Date("2026-07-12T00:00:00Z"))).toEqual(new Date("2026-07-06T00:00:00Z"));
   });
 });
 
@@ -60,6 +84,13 @@ describe("shared periods — periodRange", () => {
     const r = periodRange("year", now);
     expect(r.start).toEqual(new Date("2026-01-01T00:00:00Z"));
   });
+
+  it("week → start is the Monday of the current week, UTC midnight", () => {
+    // 2026-07-05 is a Sunday → Monday of that week is 2026-06-29.
+    const r = periodRange("week", now);
+    expect(r.start).toEqual(new Date("2026-06-29T00:00:00Z"));
+    expect(r.end).toBe(now);
+  });
 });
 
 describe("shared periods — previousPeriodRange", () => {
@@ -95,5 +126,12 @@ describe("shared periods — previousPeriodRange", () => {
     const r = previousPeriodRange("month", new Date("2026-01-05T10:30:00Z"))!;
     expect(r.start).toEqual(new Date("2025-12-01T00:00:00Z"));
     expect(r.end).toEqual(new Date("2025-12-05T10:30:00Z"));
+  });
+
+  it("week → previous 7-day window shifted back one week", () => {
+    // now = July 5 (Sun) 10:30 → current week start = Jun 29; previous start = Jun 22; previous end = Jun 28 10:30.
+    const r = previousPeriodRange("week", now)!;
+    expect(r.start).toEqual(new Date("2026-06-22T00:00:00Z"));
+    expect(r.end).toEqual(new Date("2026-06-28T10:30:00Z"));
   });
 });

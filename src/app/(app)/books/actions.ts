@@ -38,6 +38,8 @@ const createSchema = z
     customerId: z.string().uuid().nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
     receiptFileId: z.string().uuid().nullable().optional(),
+    /** GST portion in cents (Wave 2). 0 for non-GST transactions. Defaults to 0. */
+    gstCents: z.number().int().min(0).max(1_000_000_000).optional(),
   })
   .refine((v) => isBookCategory(v.type, v.category), {
     message: "Pick a category for this transaction type.",
@@ -72,6 +74,7 @@ export async function createTransactionAction(input: unknown): Promise<CreateTra
     customerId: d.customerId ? branded<"CustomerId">(d.customerId) : null,
     notes: d.notes ?? null,
     receiptFileId: d.receiptFileId ? branded<"FileId">(d.receiptFileId) : null,
+    gstCents: d.gstCents ?? 0,
   };
 
   try {
@@ -96,6 +99,8 @@ const updateSchema = z
     customerId: z.string().uuid().nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
     receiptFileId: z.string().uuid().nullable().optional(),
+    /** GST portion in cents (Wave 2). 0 for non-GST transactions. Defaults to 0. */
+    gstCents: z.number().int().min(0).max(1_000_000_000).optional(),
   })
   .refine((v) => isBookCategory(v.type, v.category), {
     message: "Pick a category for this transaction type.",
@@ -137,6 +142,7 @@ export async function updateTransactionAction(input: unknown): Promise<UpdateTra
           : rest.receiptFileId === null
             ? null
             : undefined,
+        gstCents: rest.gstCents ?? 0,
       },
       ctx.user.id,
     );

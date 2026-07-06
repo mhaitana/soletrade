@@ -15,7 +15,7 @@
  * `"all"` (no meaningful previous period — deltas are `null` in that case).
  */
 
-export type Period = "month" | "quarter" | "year" | "all";
+export type Period = "week" | "month" | "quarter" | "year" | "all";
 
 export interface PeriodOption {
   key: Period;
@@ -23,6 +23,7 @@ export interface PeriodOption {
 }
 
 export const PERIODS: readonly PeriodOption[] = [
+  { key: "week", label: "This week" },
   { key: "month", label: "This month" },
   { key: "quarter", label: "This quarter" },
   { key: "year", label: "This year" },
@@ -34,16 +35,35 @@ export const DEFAULT_PERIOD: Period = "year";
 
 /** Coerce an arbitrary string into a `Period`, falling back to the default. */
 export function parsePeriod(value: string | undefined): Period {
-  if (value === "month" || value === "quarter" || value === "year" || value === "all") {
+  if (
+    value === "week" ||
+    value === "month" ||
+    value === "quarter" ||
+    value === "year" ||
+    value === "all"
+  ) {
     return value;
   }
   return DEFAULT_PERIOD;
 }
 
 /**
+ * The Monday anchoring the week containing `now` (UTC midnight). Week starts Monday
+ * (Australian business convention). Pure date math, no DB.
+ */
+export function startOfWeek(now: Date): Date {
+  const d = new Date(now);
+  d.setUTCHours(0, 0, 0, 0);
+  const day = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
+  d.setUTCDate(d.getUTCDate() - day); // roll back to this week's Monday
+  return d;
+}
+
+/**
  * Resolve a `Period` into an inclusive date range. `end` is always `now`; `start` is null
  * for `"all"` (no lower bound). Quarter start = first day of the current quarter
- * (months 0/3/6/9 → `Math.floor(month/3)*3`). All comparisons are UTC midnight.
+ * (months 0/3/6/9 → `Math.floor(month/3)*3`). Week start = the Monday of the current week
+ * (Australian business week starts Monday). All comparisons are UTC midnight.
  */
 export function periodRange(
   period: Period,
@@ -51,6 +71,7 @@ export function periodRange(
 ): { start: Date | null; end: Date } {
   const end = now;
   if (period === "all") return { start: null, end };
+  if (period === "week") return { start: startOfWeek(now), end };
   const start = new Date(now);
   start.setUTCHours(0, 0, 0, 0);
   if (period === "month") {
@@ -68,9 +89,9 @@ export function periodRange(
 
 /**
  * The previous period's range, for period-over-period deltas. Same window length as the
- * current period-so-far, shifted back one period (month → previous calendar month, quarter
- * → previous quarter, year → previous year). Returns `null` for `"all"` — no meaningful
- * previous, so the caller skips the delta.
+ * current period-so-far, shifted back one period (week → previous 7 days, month → previous
+ * calendar month, quarter → previous quarter, year → previous year). Returns `null` for
+ * `"all"` — no meaningful previous, so the caller skips the delta.
  */
 export function previousPeriodRange(
   period: Period,
@@ -78,10 +99,13 @@ export function previousPeriodRange(
 ): { start: Date; end: Date } | null {
   if (period === "all") return null;
   const current = periodRange(period, now);
-  // `current.start` is non-null for month/quarter/year (only "all" returns null, handled above).
+  // `current.start` is non-null for week/month/quarter/year (only "all" returns null, handled above).
   const start = new Date(current.start as Date);
   const end = new Date(now);
-  if (period === "month") {
+  if (period === "week") {
+    start.setUTCDate(start.getUTCDate() - 7);
+    end.setUTCDate(end.getUTCDate() - 7);
+  } else if (period === "month") {
     start.setUTCMonth(start.getUTCMonth() - 1);
     end.setUTCMonth(end.getUTCMonth() - 1);
   } else if (period === "quarter") {
