@@ -16,6 +16,7 @@ import {
 import { getDb } from "@/server/db";
 import { invoices, invoiceLineItems, customers } from "@/server/db/schema";
 import { getCustomer } from "@/platform/customers";
+import { getWorkspace } from "@/platform/workspaces";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { computeInvoiceTotals, lineItemAmountCents } from "./totals";
@@ -158,24 +159,27 @@ function isUniqueViolation(err: unknown): boolean {
   );
 }
 
-/** Format `INV-YYYY-NNNN` from a 1-based sequence. */
-function formatInvoiceNumber(year: number, seq: number): string {
-  return `INV-${year}-${String(seq).padStart(4, "0")}`;
+/** Format `{prefix}YYYY-NNNN` from a 1-based sequence. The prefix comes from the workspace row. */
+function formatInvoiceNumber(prefix: string, year: number, seq: number): string {
+  return `${prefix}${year}-${String(seq).padStart(4, "0")}`;
 }
 
-/** Next workspace-unique invoice number for the given year (count existing + 1). */
+/** Next workspace-unique invoice number for the given year (count existing + 1). Uses the
+ *  workspace's configured `invoicePrefix` (default "INV-"). Changing the prefix resets the yearly
+ *  sequence (the count is scoped to `${prefix}${year}-`). */
 async function nextInvoiceNumber(
   db: ReturnType<typeof getDb>,
   workspaceId: WorkspaceId,
   year: number,
+  prefix: string,
 ): Promise<string> {
-  const prefix = `INV-${year}-`;
+  const yearPrefix = `${prefix}${year}-`;
   const rows = await db
     .select({ n: count() })
     .from(invoices)
-    .where(and(eq(invoices.workspaceId, workspaceId), like(invoices.number, `${prefix}%`)));
+    .where(and(eq(invoices.workspaceId, workspaceId), like(invoices.number, `${yearPrefix}%`)));
   const seq = (rows[0]?.n ?? 0) + 1;
-  return formatInvoiceNumber(year, seq);
+  return formatInvoiceNumber(prefix, year, seq);
 }
 
 /** Verify a customer belongs to the workspace (IDOR guard). Throws if customerId is set but not found. */
@@ -204,6 +208,11 @@ export async function createInvoice(
   const totals = computeInvoiceTotals(input.lineItems, input.taxRate);
   const year = new Date().getFullYear();
   const db = getDb();
+  // The workspace row carries the configured invoice prefix + default currency (migration 0018).
+  // Fall back to the schema defaults if the row is somehow missing.
+  const workspace = await getWorkspace(workspaceId);
+  const invoicePrefix = workspace?.invoicePrefix ?? "INV-";
+  const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
 
   let attempts = 0;
   let lastErr: unknown;
@@ -214,7 +223,7 @@ export async function createInvoice(
       // unique index is the real guard against races: if two concurrent creates pick
       // the same seq, one insert throws a unique violation → the retry loop re-counts
       // (now seeing the committed row) and picks the next seq.
-      const number = await nextInvoiceNumber(db, workspaceId, year);
+      const number = await nextInvoiceNumber(db, workspaceId, year, invoicePrefix);
       return await db.transaction(async (tx) => {
         const invRows = await tx
           .insert(invoices)
@@ -225,7 +234,7 @@ export async function createInvoice(
             status: "draft",
             issueDate: input.issueDate,
             dueDate: input.dueDate ?? null,
-            currency: input.currency ?? "AUD",
+            currency: input.currency ?? defaultCurrency,
             taxRate: input.taxRate,
             subtotalCents: totals.subtotalCents,
             taxCents: totals.taxCents,

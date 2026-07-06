@@ -11,6 +11,7 @@ import type { UserId, WorkspaceId } from "@/shared/types/ids";
 /** Canonical event types (brief §8.3). Modules may publish additional string types. */
 export const EVENT_TYPES = [
   "WorkspaceCreated",
+  "WorkspaceUpdated",
   "ModuleEnabled",
   "ModuleDisabled",
   "ModuleCancelled",

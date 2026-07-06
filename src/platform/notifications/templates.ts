@@ -371,3 +371,137 @@ export function quoteDeclinedEmail(m: QuoteMerchantMeta): RenderedEmail {
   ].join("\n");
   return { subject, html, text };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Member invitation email (Wave 4). Sent to the invitee on `MemberInvited` (and on
+// resend). The token carries the single-use accept link `${appUrl}/invite?token=...`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type MemberInvitedEmailMeta = {
+  email: string;
+  role: string;
+  token: string;
+  workspaceName: string;
+  inviterName: string | null;
+};
+
+/** Coerce raw event-bus metadata into `MemberInvitedEmailMeta`. The handler resolves
+ *  `workspaceName` + `inviterName` from the DB and merges them in; the bus metadata itself
+ *  only carries `{email, role, token}` (the token is the secret). Returns null if the
+ *  token or email is missing. */
+export function coerceMemberInvitedMeta(
+  record: Record<string, unknown> | undefined,
+): { email: string; role: string; token: string } | null {
+  if (!record) return null;
+  const token = typeof record.token === "string" ? record.token : null;
+  const email = typeof record.email === "string" ? record.email : null;
+  if (!token || !email) return null;
+  const role = typeof record.role === "string" ? record.role : "employee";
+  return { email, role, token };
+}
+
+function roleLabel(role: string): string {
+  const r = role.charAt(0).toUpperCase() + role.slice(1);
+  return r === "Readonly" ? "Read-only" : r;
+}
+
+/** Absolute accept link for a workspace invitation. */
+export function inviteLink(token: string, appUrl: string): string {
+  return `${appUrl.replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
+}
+
+/** "You're invited to join {workspace}" — sent to the invitee on `MemberInvited`. */
+export function memberInvitedEmail(m: MemberInvitedEmailMeta, appUrl: string): RenderedEmail {
+  const link = inviteLink(m.token, appUrl);
+  const inviter = m.inviterName
+    ? `${m.inviterName} invited you to join`
+    : "You've been invited to join";
+  const subject = `${inviter} ${m.workspaceName} on soletrade labs`;
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">Hi,</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">${inviter}</p>
+    <p style="margin:0 0 16px;font-size:28px;font-weight:600;">${m.workspaceName}</p>
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">You've been invited as <strong>${roleLabel(m.role)}</strong>. Click below to accept and create your account. This link expires in 7 days and can only be used once.</p>`;
+  const html = emailHtml({
+    accent: "#059669",
+    preheading: `Invitation to join ${m.workspaceName}`,
+    heading: "You're invited",
+    bodyHtml,
+    buttonHref: link,
+    buttonLabel: "Accept invitation",
+    showButton: true,
+  });
+  const text = [
+    `Hi,`,
+    ``,
+    `${inviter} ${m.workspaceName} on soletrade labs.`,
+    `You've been invited as ${roleLabel(m.role)}.`,
+    ``,
+    `Accept and create your account:`,
+    link,
+    ``,
+    `This link expires in 7 days and can only be used once.`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refund issued email (Wave 4). Sent to workspace members on `RefundIssued` (money
+// movement the merchant should see). The bus metadata is loose — `refundCredit`
+// carries `{amountCents, currency?, reason, moduleKey}`, the module-cancel card-refund
+// path carries `{method:"card", amountCents, moduleKey, stripeRefundId}`. Coercion
+// requires only `amountCents`; everything else is optional.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RefundMeta = {
+  amountCents: number;
+  currency: string;
+  reason: string | null;
+  moduleKey: string | null;
+  method: string | null;
+};
+
+/** Coerce raw event-bus metadata into a `RefundMeta`. Returns null if `amountCents` is missing. */
+export function coerceRefundMeta(record: Record<string, unknown> | undefined): RefundMeta | null {
+  if (!record) return null;
+  const amountCents = typeof record.amountCents === "number" ? record.amountCents : null;
+  if (amountCents == null) return null;
+  return {
+    amountCents,
+    currency: typeof record.currency === "string" && record.currency ? record.currency : "AUD",
+    reason: typeof record.reason === "string" && record.reason ? record.reason : null,
+    moduleKey: typeof record.moduleKey === "string" && record.moduleKey ? record.moduleKey : null,
+    method: typeof record.method === "string" && record.method ? record.method : null,
+  };
+}
+
+/** "A refund was issued" — sent to workspace members on `RefundIssued`. Informational, no button. */
+export function refundIssuedEmail(m: RefundMeta): RenderedEmail {
+  const modulePart = m.moduleKey ? ` for ${m.moduleKey}` : "";
+  const reason = m.reason ? ` — ${m.reason}` : "";
+  const subject = `Refund issued${modulePart}`;
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A refund was issued from your workspace.</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Refund${modulePart}</p>
+    <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.amountCents, m.currency)}</p>
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">${m.method ? `Refunded to ${m.method}.` : "The refund has been processed."}${reason}</p>`;
+  const html = emailHtml({
+    accent: "#DC2626",
+    preheading: `Refund${modulePart}`,
+    heading: "A refund was issued",
+    bodyHtml,
+    buttonHref: "#",
+    buttonLabel: "",
+    showButton: false,
+  });
+  const text = [
+    `A refund was issued from your workspace.`,
+    ``,
+    `Amount: ${money(m.amountCents, m.currency)}${modulePart}`,
+    reason ? `Reason: ${m.reason}` : ``,
+    m.method ? `Method: ${m.method}` : ``,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return { subject, html, text };
+}

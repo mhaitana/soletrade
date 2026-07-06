@@ -57,6 +57,43 @@ export async function assertModuleEnabled(workspaceId: WorkspaceId, key: ModuleK
 }
 
 /**
+ * Full installation rows for a workspace (active rows only — `cancelledAt` null). Includes
+ * `pendingCancellationAt` so the modules page can surface "Cancels on {date}" + an undo affordance
+ * for keep-until-end scheduled cancellations (Wave 4). The lighter `getInstalledModules` returns
+ * just the keys; this returns the full row for the loader.
+ */
+export async function getModuleInstallations(workspaceId: WorkspaceId): Promise<
+  Array<{
+    moduleKey: ModuleKey;
+    status: "active" | "cancelled";
+    pendingCancellationAt: Date | null;
+    cancelledAt: Date | null;
+  }>
+> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      moduleKey: moduleInstallations.moduleKey,
+      status: moduleInstallations.status,
+      pendingCancellationAt: moduleInstallations.pendingCancellationAt,
+      cancelledAt: moduleInstallations.cancelledAt,
+    })
+    .from(moduleInstallations)
+    .where(
+      and(
+        eq(moduleInstallations.workspaceId, workspaceId),
+        isNull(moduleInstallations.cancelledAt),
+      ),
+    );
+  return rows.map((r) => ({
+    moduleKey: r.moduleKey,
+    status: r.status,
+    pendingCancellationAt: r.pendingCancellationAt,
+    cancelledAt: r.cancelledAt,
+  }));
+}
+
+/**
  * Enable a module for a workspace. Inserts/upserts the installation row. 4b adds
  * an optional `stripeSubscriptionItemId` — when provided (the 4b orchestrator
  * path), it is written on insert AND on re-enable (overwriting a stale item id

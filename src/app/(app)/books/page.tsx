@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Download, FileText, Plus, Search } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
@@ -71,14 +71,32 @@ export default async function BooksPage({
           <h1 className="text-2xl font-semibold tracking-tight">Books</h1>
           <p className="text-sm text-muted-foreground">Track income, expenses, and receipts.</p>
         </div>
-        {data.canManage ? (
-          <Button asChild>
-            <Link href="/books/new">
-              <Plus className="size-4" aria-hidden />
-              New transaction
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/books/report?period=${data.period}`}>
+              <FileText className="size-4" aria-hidden />
+              P&amp;L PDF
             </Link>
           </Button>
-        ) : null}
+          {data.canManage ? (
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={`/api/books/export?period=${data.period}&type=${data.typeFilter ?? "all"}`}
+              >
+                <Download className="size-4" aria-hidden />
+                CSV
+              </Link>
+            </Button>
+          ) : null}
+          {data.canManage ? (
+            <Button asChild>
+              <Link href="/books/new">
+                <Plus className="size-4" aria-hidden />
+                New transaction
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4" aria-label="Filters">

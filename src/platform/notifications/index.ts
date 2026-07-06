@@ -3,21 +3,26 @@ import { eq } from "drizzle-orm";
 import { env } from "@/shared/lib/env";
 import { onEvent, type BusEvent } from "@/server/events";
 import { getDb } from "@/server/db";
-import { users, workspaceMembers } from "@/server/db/schema";
+import { users, workspaceMembers, workspaces } from "@/server/db/schema";
 import type { WorkspaceId } from "@/shared/types/ids";
 import { sendEmail } from "@/server/email";
 import {
   coerceInvoiceEmailMeta,
+  coerceMemberInvitedMeta,
   coerceQuoteEmailMeta,
   coerceQuoteMerchantMeta,
+  coerceRefundMeta,
   invoiceOverdueEmail,
   invoicePaidEmail,
   invoiceSentEmail,
+  memberInvitedEmail,
   quoteAcceptedEmail,
   quoteDeclinedEmail,
   quoteSentEmail,
+  refundIssuedEmail,
 } from "./templates";
 import { createNotification, memberIdsWithPermission } from "./store";
+import { renderInvoiceAttachment, renderQuoteAttachment } from "@/server/pdf/attachments";
 
 /**
  * Notifications platform (Phase 5c + Phase 8 quotes). Subscribes **cross-module side
@@ -43,7 +48,18 @@ async function onInvoiceSent(event: BusEvent): Promise<void> {
   const m = coerceInvoiceEmailMeta(event.metadata);
   if (!m || !m.customerEmail) return; // no email on file — nothing to send
   const { subject, html, text } = invoiceSentEmail(m, env.NEXT_PUBLIC_APP_URL);
-  await sendEmail({ to: m.customerEmail, subject, html, text });
+  // Best-effort PDF attachment (Wave 4 G5) — render failure doesn't block the email.
+  const attachment =
+    event.entityType === "invoice" && event.entityId
+      ? await renderInvoiceAttachment(event.workspaceId, event.entityId)
+      : null;
+  await sendEmail({
+    to: m.customerEmail,
+    subject,
+    html,
+    text,
+    attachments: attachment ? [attachment] : undefined,
+  });
 }
 
 async function onInvoiceOverdue(event: BusEvent): Promise<void> {
@@ -69,7 +85,48 @@ async function onQuoteSent(event: BusEvent): Promise<void> {
   const m = coerceQuoteEmailMeta(event.metadata);
   if (!m || !m.customerEmail) return; // no email on file — nothing to send
   const { subject, html, text } = quoteSentEmail(m, env.NEXT_PUBLIC_APP_URL);
-  await sendEmail({ to: m.customerEmail, subject, html, text });
+  // Best-effort PDF attachment (Wave 4 G5) — render failure doesn't block the email.
+  const attachment =
+    event.entityType === "quote" && event.entityId
+      ? await renderQuoteAttachment(event.workspaceId, event.entityId)
+      : null;
+  await sendEmail({
+    to: m.customerEmail,
+    subject,
+    html,
+    text,
+    attachments: attachment ? [attachment] : undefined,
+  });
+}
+
+/** "You're invited to join {workspace}" — sent to the invitee on `MemberInvited` (Wave 4).
+ *  The bus metadata carries `{email, role, token}`; the handler resolves the workspace name +
+ *  inviter name from the DB for the email body. Best-effort (never throws). */
+async function onMemberInvited(event: BusEvent): Promise<void> {
+  const m = coerceMemberInvitedMeta(event.metadata);
+  if (!m) return;
+  const db = getDb();
+  // Resolve workspace name + inviter full name in one round trip each.
+  const wsRows = await db
+    .select({ name: workspaces.name })
+    .from(workspaces)
+    .where(eq(workspaces.id, event.workspaceId))
+    .limit(1);
+  const workspaceName = wsRows[0]?.name ?? "soletrade labs";
+  let inviterName: string | null = null;
+  if (event.actorUserId) {
+    const uRows = await db
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, event.actorUserId))
+      .limit(1);
+    inviterName = uRows[0]?.fullName ?? null;
+  }
+  const { subject, html, text } = memberInvitedEmail(
+    { email: m.email, role: m.role, token: m.token, workspaceName, inviterName },
+    env.NEXT_PUBLIC_APP_URL,
+  );
+  await sendEmail({ to: m.email, subject, html, text });
 }
 
 /** Resolve the email addresses of all members of a workspace (for merchant notifications). */
@@ -114,6 +171,7 @@ export function registerNotifications(): () => void {
   const u4 = onEvent("QuoteSent", onQuoteSent);
   const u5 = onEvent("QuoteAccepted", onQuoteAccepted);
   const u6 = onEvent("QuoteDeclined", onQuoteDeclined);
+  const u12 = onEvent("MemberInvited", onMemberInvited);
   // In-app bell notifications (Phase 11c) — merchant-facing events get a row per
   // qualifying member so the bell badge lights up. Best-effort: a DB hiccup is
   // caught + logged so it can't break the event bus or the email side.
@@ -122,6 +180,13 @@ export function registerNotifications(): () => void {
   const u9 = onEvent("QuoteAccepted", onQuoteAcceptedInApp);
   const u10 = onEvent("QuoteDeclined", onQuoteDeclinedInApp);
   const u11 = onEvent("QuoteExpired", onQuoteExpiredInApp);
+  // Wave 4 — coverage gaps: InvoiceVoided / CreditIssued / RefundIssued / InvoiceViewed /
+  // QuoteViewed were already published but had no subscriber.
+  const u13 = onEvent("InvoiceVoided", onInvoiceVoidedInApp);
+  const u14 = onEvent("CreditIssued", onCreditIssuedInApp);
+  const u15 = onEvent("RefundIssued", onRefundIssued);
+  const u16 = onEvent("InvoiceViewed", onInvoiceViewedInApp);
+  const u17 = onEvent("QuoteViewed", onQuoteViewedInApp);
   return () => {
     u1();
     u2();
@@ -134,6 +199,12 @@ export function registerNotifications(): () => void {
     u9();
     u10();
     u11();
+    u12();
+    u13();
+    u14();
+    u15();
+    u16();
+    u17();
   };
 }
 
@@ -230,5 +301,91 @@ async function onQuoteExpiredInApp(event: BusEvent): Promise<void> {
     type: "quote.expired",
     title: `Quote ${number} expired`,
     body: "This quote passed its valid-until date without being accepted.",
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave 4 notification coverage gaps. These events were already published at source
+// (invoices/quotes view tracking, billing credit/refund, invoice void) but had no
+// subscriber — so the bell never lit up and (for refunds) no email went out. All
+// are best-effort; view-tracking events carry only `{ number }` and have no actor.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Pull a `number` string from event metadata, or null. */
+function metadataNumber(event: BusEvent): string | null {
+  return event.metadata && typeof event.metadata.number === "string" ? event.metadata.number : null;
+}
+
+/** "Invoice voided" — merchant bell row. No email (internal event). */
+async function onInvoiceVoidedInApp(event: BusEvent): Promise<void> {
+  const number = metadataNumber(event);
+  if (!number) return;
+  await fanOutInApp(event, "view:invoice", () => ({
+    type: "invoice.voided",
+    title: `Invoice ${number} voided`,
+    body: "The invoice was marked void. No further payment can be collected on it.",
+  }));
+}
+
+/** "Credit issued" — merchant bell row to billing-aware members. Credits are workspace-scoped
+ *  (the ledger is per-workspace), so this fans out to `view:billing` (everyone who can see money). */
+async function onCreditIssuedInApp(event: BusEvent): Promise<void> {
+  if (!event.metadata) return;
+  const amountCents =
+    typeof event.metadata.amountCents === "number" ? event.metadata.amountCents : null;
+  if (amountCents == null) return;
+  const currency =
+    typeof event.metadata.currency === "string" && event.metadata.currency
+      ? event.metadata.currency
+      : "AUD";
+  const promotion = Boolean(event.metadata.promotion);
+  await fanOutInApp(event, "view:billing", () => ({
+    type: "credit.issued",
+    title: promotion ? "Promotional credit issued" : "Credit issued",
+    body: `${money(amountCents, currency)} added to your platform credit balance`,
+  }));
+}
+
+/** "Refund issued" — merchant bell row + email. Refunds are user-facing money movement, so
+ *  members with `view:billing` get both a bell row and an email. */
+async function onRefundIssued(event: BusEvent): Promise<void> {
+  const m = coerceRefundMeta(event.metadata);
+  if (!m) return;
+  // Bell row to billing-aware members.
+  await fanOutInApp(event, "view:billing", () => ({
+    type: "refund.issued",
+    title: "Refund issued",
+    body: `${money(m.amountCents, m.currency)}${m.moduleKey ? ` · ${m.moduleKey}` : ""}`,
+  }));
+  // Email the same cohort (best-effort).
+  try {
+    const recipients = await membersEmails(event.workspaceId);
+    if (recipients.length === 0) return;
+    const { subject, html, text } = refundIssuedEmail(m);
+    await Promise.all(recipients.map((to) => sendEmail({ to, subject, html, text })));
+  } catch (err) {
+    console.warn(`Refund email fan-out failed for ${event.type}:`, err);
+  }
+}
+
+/** "Invoice viewed" — merchant bell row (the customer opened the public invoice page). */
+async function onInvoiceViewedInApp(event: BusEvent): Promise<void> {
+  const number = metadataNumber(event);
+  if (!number) return;
+  await fanOutInApp(event, "view:invoice", () => ({
+    type: "invoice.viewed",
+    title: `Invoice ${number} viewed`,
+    body: "Your customer opened the invoice online.",
+  }));
+}
+
+/** "Quote viewed" — merchant bell row (the customer opened the public quote page). */
+async function onQuoteViewedInApp(event: BusEvent): Promise<void> {
+  const number = metadataNumber(event);
+  if (!number) return;
+  await fanOutInApp(event, "view:quote", () => ({
+    type: "quote.viewed",
+    title: `Quote ${number} viewed`,
+    body: "Your customer opened the quote online.",
   }));
 }

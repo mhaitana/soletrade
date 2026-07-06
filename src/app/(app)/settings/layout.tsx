@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/shared/lib/utils";
 
 const sections = [
+  { href: "/settings/account", label: "Account" },
   { href: "/settings", label: "General" },
   { href: "/settings/modules", label: "Modules" },
   { href: "/settings/members", label: "Members" },

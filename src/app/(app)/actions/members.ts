@@ -10,6 +10,8 @@ import {
   listMembers,
   listPendingInvitations,
   removeMember,
+  resendInvitation,
+  revokeInvitation,
   updateMemberRole,
 } from "@/platform/members";
 import type { WorkspaceRole } from "@/server/db/schema/enums";
@@ -110,12 +112,64 @@ export async function removeMemberAction(input: unknown): Promise<RemoveMemberRe
   }
 }
 
+const invitationIdSchema = z.object({ invitationId: z.string().uuid() });
+
+export type RevokeInvitationResult = { ok: true } | { ok: false; error: string };
+export type ResendInvitationResult = { ok: true } | { ok: false; error: string };
+
+/** Revoke a pending invitation (Wave 4). Gated `manage:member`. */
+export async function revokeInvitationAction(input: unknown): Promise<RevokeInvitationResult> {
+  const parsed = invitationIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid invitation." };
+  const ctx = await requireWorkspaceContext();
+  if (!(await authorizeOrAudit(ctx, "manage:member")).ok) return forbid();
+  try {
+    await revokeInvitation(
+      ctx.workspaceId,
+      branded<"WorkspaceInvitationId">(parsed.data.invitationId),
+      ctx.user.id,
+    );
+    revalidatePath("/settings/members");
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to revoke invitation.",
+    };
+  }
+}
+
+/** Resend a pending invitation (Wave 4) — bumps expiry + re-publishes MemberInvited (re-sends
+ *  the email). Gated `manage:member`. */
+export async function resendInvitationAction(input: unknown): Promise<ResendInvitationResult> {
+  const parsed = invitationIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid invitation." };
+  const ctx = await requireWorkspaceContext();
+  if (!(await authorizeOrAudit(ctx, "manage:member")).ok) return forbid();
+  try {
+    const result = await resendInvitation(
+      ctx.workspaceId,
+      branded<"WorkspaceInvitationId">(parsed.data.invitationId),
+      ctx.user.id,
+    );
+    if (!result) return { ok: false, error: "Invitation not found or already used." };
+    revalidatePath("/settings/members");
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to resend invitation.",
+    };
+  }
+}
+
 export type MembersPageData = {
   members: { userId: string; role: WorkspaceRole; email: string; createdAt: string }[];
   invitations: {
     id: string;
     email: string;
     role: WorkspaceRole;
+    status: string;
     expiresAt: string;
     createdAt: string;
   }[];
@@ -154,6 +208,7 @@ export async function loadMembersPage(): Promise<MembersPageData> {
       id: i.id,
       email: i.email,
       role: i.role,
+      status: i.status,
       expiresAt: i.expiresAt.toISOString(),
       createdAt: i.createdAt.toISOString(),
     })),

@@ -28,6 +28,12 @@ export function AccountMenu({ userEmail }: { userEmail: string }) {
         <DropdownMenuLabel className="truncate">{userEmail || "Signed in"}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
+          <Link href="/settings/account" className="gap-2 text-sm">
+            <User className="size-4" aria-hidden />
+            <span>Account</span>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <Link href="/settings" className="gap-2 text-sm">
             <Settings className="size-4" aria-hidden />
             <span>Settings</span>
