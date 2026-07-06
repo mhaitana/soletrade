@@ -8,6 +8,7 @@ import type { UserId, WorkspaceId } from "@/shared/types/ids";
 import { branded } from "@/shared/types/ids";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
+import { env } from "@/shared/lib/env";
 
 export interface WorkspaceMembership {
   workspaceId: WorkspaceId;
@@ -187,13 +188,14 @@ export async function getActiveWorkspaceId(): Promise<WorkspaceId | null> {
   return value ? branded<"WorkspaceId">(value) : null;
 }
 
-/** Write the active-workspace cookie (1 year, httpOnly, lax). */
+/** Write the active-workspace cookie (1 year, httpOnly, lax, secure in production). */
 export async function setActiveWorkspaceId(id: WorkspaceId): Promise<void> {
   const store = await cookies();
   store.set(ACTIVE_WORKSPACE_COOKIE, id, {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
+    secure: env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 365,
   });
 }

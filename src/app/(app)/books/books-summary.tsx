@@ -93,7 +93,7 @@ export function BooksSummary({
 type StatTone = "income" | "expense" | "danger";
 
 const TONE_CLASS: Record<StatTone, string> = {
-  income: "text-emerald-600",
+  income: "text-emerald-600 dark:text-emerald-500",
   expense: "text-foreground",
   danger: "text-destructive",
 };

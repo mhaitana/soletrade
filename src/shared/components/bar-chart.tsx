@@ -34,7 +34,9 @@ const SVG_H = 90;
 const PAD_TOP = 4;
 const PAD_BOTTOM = 18; // room for x-axis caption
 const PAD_X = 4;
-const PRIMARY = "#2563EB";
+// Read from the theme token so bars adapt in dark mode (chart-2 is #2563eb in light,
+// #60a5fa in dark — a hardcoded #2563EB is too-dark blue on the dark background).
+const PRIMARY = "var(--chart-2)";
 
 export function BarChart({ points, ariaLabel }: BarChartProps) {
   const n = points.length;

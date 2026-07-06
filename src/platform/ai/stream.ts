@@ -37,6 +37,12 @@ export interface StreamAssistantOptions {
   conversationId: string;
   /** Persisted with the assistant turn once the stream completes. */
   onFinish: (text: string) => Promise<void> | void;
+  /**
+   * Forwarded to `streamText` so an aborted client request (user navigates away,
+   * cancels) tears down the upstream model call instead of billing a full
+   * generation whose output no one will read.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -52,6 +58,8 @@ export async function streamAssistant(opts: StreamAssistantOptions): Promise<Res
     tools: opts.tools,
     // Bound the tool-calling loop (≤6 steps) so a runaway agent can't spin.
     stopWhen: isStepCount(6),
+    // Abort the upstream model call when the client disconnects (saves tokens/latency).
+    abortSignal: opts.abortSignal,
     onFinish: async ({ text }) => {
       if (text) await opts.onFinish(text);
     },

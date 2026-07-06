@@ -39,9 +39,12 @@ export function CreateWorkspaceForm() {
           required
           maxLength={80}
           aria-invalid={Boolean(fieldErrors?.name)}
+          aria-describedby="name-error"
         />
         {fieldErrors?.name?.[0] ? (
-          <p className="text-sm text-destructive">{fieldErrors.name[0]}</p>
+          <p id="name-error" className="text-sm text-destructive">
+            {fieldErrors.name[0]}
+          </p>
         ) : null}
       </div>
       <div className="space-y-1.5">
@@ -54,10 +57,15 @@ export function CreateWorkspaceForm() {
           maxLength={40}
           pattern="[a-z0-9-]+"
           aria-invalid={Boolean(fieldErrors?.slug)}
+          aria-describedby="slug-error slug-help"
         />
-        <p className="text-xs text-muted-foreground">Lowercase letters, numbers, hyphens.</p>
+        <p id="slug-help" className="text-xs text-muted-foreground">
+          Lowercase letters, numbers, hyphens.
+        </p>
         {fieldErrors?.slug?.[0] ? (
-          <p className="text-sm text-destructive">{fieldErrors.slug[0]}</p>
+          <p id="slug-error" className="text-sm text-destructive">
+            {fieldErrors.slug[0]}
+          </p>
         ) : null}
       </div>
       {error && !fieldErrors ? (

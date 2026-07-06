@@ -28,7 +28,7 @@ const suffixFor = (interval: string) => (interval === "annual" ? "/yr" : "/mo");
 
 export default async function BillingPage() {
   const data = await loadBillingOverview();
-  const balanceClass = data.balanceCents < 0 ? "text-destructive" : "text-[#059669]";
+  const balanceClass = data.balanceCents < 0 ? "text-destructive" : "text-success";
   const interval = data.currentPricing.interval;
   const suffix = suffixFor(interval);
 
@@ -184,7 +184,7 @@ export default async function BillingPage() {
                 <tbody>
                   {data.recentLedger.map((row) => {
                     const amount = row.amountCents;
-                    const amountClass = amount < 0 ? "text-destructive" : "text-[#059669]";
+                    const amountClass = amount < 0 ? "text-destructive" : "text-success";
                     return (
                       <tr key={row.id} className="border-b last:border-0">
                         <td className="py-2 pr-4">

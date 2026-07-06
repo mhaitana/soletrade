@@ -137,7 +137,6 @@ export function QuoteAcceptForm({
           : await declineQuoteAction({ token });
       if (!res.ok) {
         setError(res.error);
-        setPending(null);
         return;
       }
       setDone(kind === "accept" ? "accepted" : "declined");
@@ -151,7 +150,7 @@ export function QuoteAcceptForm({
         role="status"
         aria-live="polite"
       >
-        <Check className="size-5 text-emerald-600" aria-hidden />
+        <Check className="size-5 text-emerald-600 dark:text-emerald-500" aria-hidden />
         <div className="text-sm">
           <p className="font-medium text-emerald-800">Quote accepted</p>
           <p className="text-emerald-700">
@@ -190,8 +189,13 @@ export function QuoteAcceptForm({
         </p>
       ) : null}
 
-      <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+      <Dialog open={pending !== null} onOpenChange={(o) => { if (!o && !isPending) setPending(null); }}>
         <DialogContent>
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
           {pending === "accept" ? (
             <>
               <DialogHeader>

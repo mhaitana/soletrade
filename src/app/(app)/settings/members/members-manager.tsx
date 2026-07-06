@@ -8,6 +8,14 @@ import { Label } from "@/shared/ui/label";
 import { Badge } from "@/shared/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/ui/dialog";
+import {
   inviteMemberAction,
   removeMemberAction,
   resendInvitationAction,
@@ -31,6 +39,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<{ userId: string; label: string } | null>(null);
 
   const [inviteState, inviteAction, invitePending] = useActionState(
     async (_prev: InviteMemberResult, formData: FormData): Promise<InviteMemberResult> => {
@@ -209,7 +218,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                           variant="outline"
                           size="sm"
                           disabled={isPending}
-                          onClick={() => void remove(m.userId)}
+                          onClick={() => setRemoveTarget({ userId: m.userId, label: m.email || m.userId })}
                           aria-label={`Remove ${m.email || m.userId}`}
                         >
                           Remove
@@ -271,6 +280,34 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
           </Card>
         </div>
       ) : null}
+
+      <Dialog open={removeTarget !== null} onOpenChange={(o) => !o && setRemoveTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove member?</DialogTitle>
+            <DialogDescription>
+              {removeTarget
+                ? `This removes ${removeTarget.label} from the workspace. They will lose access immediately. The audit log keeps a record.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveTarget(null)} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => {
+                if (removeTarget) void remove(removeTarget.userId);
+                setRemoveTarget(null);
+              }}
+            >
+              {isPending ? "Removing…" : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

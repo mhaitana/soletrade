@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/shared/components/theme-provider";
@@ -23,6 +23,14 @@ export const metadata: Metadata = {
   },
   description: "The business operating system for solo traders, freelancers, and small operators.",
   applicationName: "soletrade labs Suite",
+};
+
+// Tint the mobile browser chrome to match the app background per theme.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1220" },
+  ],
 };
 
 export default function RootLayout({

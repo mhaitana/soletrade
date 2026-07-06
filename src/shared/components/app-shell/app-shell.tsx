@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   Activity,
   Bot,
@@ -103,13 +104,14 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 
 function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
   // Bottom nav: max 5 items (bottom-nav-limit). 4 pinned + "More".
   const pinned = items.filter((i) =>
     ["/dashboard", "/customers", "/activity", "/billing"].includes(i.href),
   );
   return (
     <nav
-      aria-label="Primary"
+      aria-label="Mobile primary"
       className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {pinned.map((item) => {
@@ -132,7 +134,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
           </Link>
         );
       })}
-      <Sheet>
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetTrigger asChild>
           <button
             type="button"
@@ -148,7 +150,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
             <SheetTitle>Navigation</SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-6 pt-2">
-            <NavList items={items} />
+            <NavList items={items} onNavigate={() => setMoreOpen(false)} />
           </div>
         </SheetContent>
       </Sheet>
@@ -164,7 +166,8 @@ export function AppShell({
   notificationCount,
   children,
 }: AppShellProps) {
-  const items = buildNav(installedModules);
+  const items = useMemo(() => buildNav(installedModules), [installedModules]);
+  const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <div className="min-h-dvh">
       <a
@@ -187,7 +190,7 @@ export function AppShell({
       <div className="md:pl-64">
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
-          <Sheet>
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
                 <Menu className="size-5" aria-hidden />
@@ -199,8 +202,15 @@ export function AppShell({
                   <Logo href={null} />
                 </SheetTitle>
               </SheetHeader>
-              <div className="px-3 pb-6 pt-2">
-                <NavList items={items} />
+              <div className="space-y-4 px-3 pb-6 pt-2">
+                {/* Workspace switcher is desktop-only in the top bar; surface it here so
+                    mobile users can still switch workspaces without the desktop chrome. */}
+                <WorkspaceSwitcher
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  showOnMobile
+                />
+                <NavList items={items} onNavigate={() => setMobileOpen(false)} />
               </div>
             </SheetContent>
           </Sheet>

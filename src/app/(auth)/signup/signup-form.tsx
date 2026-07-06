@@ -53,16 +53,23 @@ export function SignupForm({ initialCheckEmail = false }: { initialCheckEmail?: 
     <div className="space-y-4">
       {showCheckEmail ? (
         <p className="text-sm text-muted-foreground" role="status">
-          We&apos;ve sent you a sign-up link — check your email (locally, open{" "}
-          <a
-            href="http://127.0.0.1:54324"
-            target="_blank"
-            rel="noreferrer"
-            className="underline-offset-4 hover:underline"
-          >
-            Inbucket
-          </a>
-          ) and click it to finish.
+          We&apos;ve sent you a sign-up link — check your email
+          {process.env.NODE_ENV === "development" ? (
+            <>
+              {" "}
+              (locally, open{" "}
+              <a
+                href="http://127.0.0.1:54324"
+                target="_blank"
+                rel="noreferrer"
+                className="underline-offset-4 hover:underline"
+              >
+                Inbucket
+              </a>
+              )
+            </>
+          ) : null}{" "}
+          and click it to finish.
         </p>
       ) : null}
       {error ? (
@@ -96,9 +103,12 @@ export function SignupForm({ initialCheckEmail = false }: { initialCheckEmail?: 
             autoComplete="email"
             placeholder="you@example.com"
             aria-invalid={Boolean(fieldErrors?.email)}
+            aria-describedby="email-error"
           />
           {fieldErrors?.email?.[0] ? (
-            <p className="text-sm text-destructive">{fieldErrors.email[0]}</p>
+            <p id="email-error" className="text-sm text-destructive">
+              {fieldErrors.email[0]}
+            </p>
           ) : null}
         </div>
 
@@ -114,11 +124,16 @@ export function SignupForm({ initialCheckEmail = false }: { initialCheckEmail?: 
                 minLength={8}
                 autoComplete="new-password"
                 aria-invalid={Boolean(fieldErrors?.password)}
+                aria-describedby="password-error password-help"
               />
               {fieldErrors?.password?.[0] ? (
-                <p className="text-sm text-destructive">{fieldErrors.password[0]}</p>
+                <p id="password-error" className="text-sm text-destructive">
+                  {fieldErrors.password[0]}
+                </p>
               ) : (
-                <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+                <p id="password-help" className="text-xs text-muted-foreground">
+                  At least 8 characters.
+                </p>
               )}
             </div>
             <div className="space-y-1.5">

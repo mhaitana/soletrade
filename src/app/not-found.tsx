@@ -14,7 +14,10 @@ export default function RootNotFound() {
           The page you&apos;re looking for doesn&apos;t exist or has moved.
         </p>
         <p className="pt-2">
-          <Link href="/" className="text-sm text-primary hover:underline">
+          <Link
+            href="/"
+            className="rounded-sm text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+          >
             Go home →
           </Link>
         </p>

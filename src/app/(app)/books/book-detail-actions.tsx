@@ -33,7 +33,6 @@ export function BookDetailActions({ txId }: { txId: string }) {
   const [error, setError] = useState<string>("");
 
   function run() {
-    setPending(null);
     setError("");
     startTransition(async () => {
       const res = await deleteTransactionAction({ transactionId: txId });

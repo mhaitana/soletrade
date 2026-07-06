@@ -27,9 +27,16 @@ export type WorkspaceOption = {
 export function WorkspaceSwitcher({
   workspaces,
   activeWorkspaceId,
+  showOnMobile = false,
 }: {
   workspaces: WorkspaceOption[];
   activeWorkspaceId: WorkspaceId;
+  /**
+   * When true the trigger drops its `hidden md:flex` gate so the switcher is
+   * visible on mobile (used inside the mobile nav Sheet). Default keeps it
+   * desktop-only so it never collides with the mobile top bar.
+   */
+  showOnMobile?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -53,7 +60,10 @@ export function WorkspaceSwitcher({
           variant="ghost"
           aria-label="Switch workspace"
           disabled={isPending}
-          className={cn("hidden gap-2 px-2 text-sm font-medium md:flex")}
+          className={cn(
+            "gap-2 px-2 text-sm font-medium",
+            showOnMobile ? "flex w-full justify-start" : "hidden md:flex",
+          )}
         >
           <span className="grid size-6 place-items-center rounded bg-primary text-xs font-semibold text-primary-foreground">
             {(active?.name ?? "W").charAt(0).toUpperCase()}

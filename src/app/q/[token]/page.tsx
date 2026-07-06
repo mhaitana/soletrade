@@ -59,6 +59,9 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
         </header>
 
         <div className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">
+          {/* Document outline for screen readers — the visible hero uses styled <p>s. */}
+          <h1 className="sr-only">Quote {q.number}</h1>
+
           {/* Hero */}
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Quote</p>
@@ -124,10 +127,8 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
 
           {/* Terms & Conditions (Wave 2) — collapsible disclosure above the accept button. */}
           {q.termsConditions ? (
-            <details className="mt-5 rounded-md border border-border bg-muted/30 p-4">
-              <summary className="cursor-pointer text-sm font-medium">
-                Terms &amp; Conditions
-              </summary>
+            <details id="terms" className="mt-5 rounded-md border border-border bg-muted/30 p-4">
+              <summary className="cursor-pointer text-sm font-medium">Terms &amp; Conditions</summary>
               <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
                 {q.termsConditions}
               </p>
@@ -143,7 +144,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               role="status"
               aria-live="polite"
             >
-              <CheckCircle2 className="size-5 text-emerald-600" aria-hidden />
+              <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-500" aria-hidden />
               <div className="text-sm">
                 <p className="font-medium text-emerald-800">Quote accepted</p>
                 <p className="text-emerald-700">

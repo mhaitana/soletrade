@@ -48,7 +48,6 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
   const isAccepted = status === "accepted";
 
   async function run(kind: Action["kind"]) {
-    setPending(null);
     setError("");
     startTransition(async () => {
       const input = { quoteId };

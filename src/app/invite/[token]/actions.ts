@@ -2,10 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { getCurrentUser } from "@/server/auth/session";
 import { acceptInvitation } from "@/platform/members";
 import { setActiveWorkspaceId } from "@/platform/workspaces";
+import { rateLimit } from "@/server/rate-limit";
 import { branded } from "@/shared/types/ids";
 
 const tokenSchema = z.object({ token: z.string().min(1) });
@@ -21,10 +23,19 @@ export type AcceptInvitationResult = { ok: true } | { ok: false; error: string }
  * Uses `getCurrentUser` (not `requireWorkspaceContext`) because a first-time invitee has no
  * workspace membership yet — `requireWorkspaceContext` would redirect them to /onboarding.
  * The platform `acceptInvitation` enforces the email-match + pending + unexpired guards.
+ *
+ * Rate-limited per IP (the 122-bit token makes brute-force infeasible, but the gate matches
+ * the sibling public actions on `/i/` and `/q/` and blocks automated replay/probing).
  */
 export async function acceptInvitationAction(input: unknown): Promise<AcceptInvitationResult> {
   const parsed = tokenSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid invitation link." };
+
+  const h = await headers();
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
+  if (!(await rateLimit(`invite:${ip}`, { max: 10, windowMs: 60_000 }))) {
+    return { ok: false, error: "Too many attempts. Please try again in a minute." };
+  }
 
   const user = await getCurrentUser();
   if (!user) {

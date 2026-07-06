@@ -67,9 +67,12 @@ export function LoginForm({ next }: { next: string | null }) {
             autoComplete="email"
             placeholder="you@example.com"
             aria-invalid={Boolean(fieldErrors?.email)}
+            aria-describedby="email-error"
           />
           {fieldErrors?.email?.[0] ? (
-            <p className="text-sm text-destructive">{fieldErrors.email[0]}</p>
+            <p id="email-error" className="text-sm text-destructive">
+              {fieldErrors.email[0]}
+            </p>
           ) : null}
         </div>
 
@@ -83,9 +86,12 @@ export function LoginForm({ next }: { next: string | null }) {
               required
               autoComplete="current-password"
               aria-invalid={Boolean(fieldErrors?.password)}
+              aria-describedby="password-error"
             />
             {fieldErrors?.password?.[0] ? (
-              <p className="text-sm text-destructive">{fieldErrors.password[0]}</p>
+              <p id="password-error" className="text-sm text-destructive">
+                {fieldErrors.password[0]}
+              </p>
             ) : null}
           </div>
         ) : null}

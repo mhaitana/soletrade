@@ -3,6 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/ui/dialog";
 import { formatRelativeTime, formatBytes } from "@/shared/lib/format";
 import { deleteFileAction } from "./actions";
 import type { FileRecord } from "@/platform/files";
@@ -18,6 +26,7 @@ export function FilesTable({ items, canManage }: { items: FileRecord[]; canManag
   const [isPending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   async function view(file: FileRecord): Promise<void> {
     setBusyId(file.id);
@@ -92,7 +101,7 @@ export function FilesTable({ items, canManage }: { items: FileRecord[]; canManag
                   variant="ghost"
                   size="sm"
                   disabled={busyId === file.id || isPending}
-                  onClick={() => remove(file.id)}
+                  onClick={() => setDeleteTarget({ id: file.id, name: file.fileName })}
                 >
                   Delete
                 </Button>
@@ -101,6 +110,34 @@ export function FilesTable({ items, canManage }: { items: FileRecord[]; canManag
           ))}
         </ul>
       </div>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete file?</DialogTitle>
+            <DialogDescription>
+              {deleteTarget
+                ? `Permanently deletes “${deleteTarget.name}”. If this file is linked to a bookkeeping record (e.g. a receipt), that link will break. This cannot be undone.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => {
+                if (deleteTarget) void remove(deleteTarget.id);
+                setDeleteTarget(null);
+              }}
+            >
+              {isPending ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

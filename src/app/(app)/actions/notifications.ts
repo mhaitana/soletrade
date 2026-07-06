@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import {
   listNotifications,
@@ -11,6 +12,8 @@ import {
   type NotificationPage,
 } from "@/platform/notifications/store";
 import { branded } from "@/shared/types/ids";
+
+const markReadSchema = z.object({ notificationId: z.string().uuid() });
 
 /**
  * Server actions for the in-app notification center (Phase 11c). All scoping comes
@@ -67,8 +70,10 @@ export async function loadNotificationsPage(
 }
 
 export async function markReadAction(notificationId: string): Promise<void> {
+  const parsed = markReadSchema.safeParse({ notificationId });
+  if (!parsed.success) return; // malformed id — no-op (the store is IDOR-safe regardless)
   const ctx = await requireWorkspaceContext();
-  await markRead(ctx.workspaceId, ctx.user.id, branded<"NotificationId">(notificationId));
+  await markRead(ctx.workspaceId, ctx.user.id, branded<"NotificationId">(parsed.data.notificationId));
   revalidatePath("/notifications");
 }
 

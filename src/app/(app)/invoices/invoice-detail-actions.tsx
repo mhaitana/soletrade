@@ -64,7 +64,6 @@ export function InvoiceDetailActions({
   const isSent = status === "sent" || status === "viewed" || status === "overdue";
 
   async function run(kind: Action["kind"]) {
-    setPending(null);
     setError("");
     startTransition(async () => {
       const input = { invoiceId };

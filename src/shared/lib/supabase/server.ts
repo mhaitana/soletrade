@@ -26,7 +26,8 @@ export function createSupabaseServerClient() {
       setAll: async (toSet) => {
         const store = await cookies();
         for (const { name, value, options } of toSet) {
-          store.set(name, value, options);
+          // Force `secure` in production so session cookies are never sent over HTTP.
+          store.set(name, value, { ...options, secure: env.NODE_ENV === "production" });
         }
       },
     },

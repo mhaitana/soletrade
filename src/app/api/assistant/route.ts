@@ -186,6 +186,8 @@ export async function POST(request: Request): Promise<Response> {
     messages: toUIMessages(conversation.messages),
     tools,
     conversationId: conversationIdStr,
+    // Tear down the upstream model call if the client disconnects mid-stream.
+    abortSignal: request.signal,
     onFinish: async (text) => {
       if (text) {
         await appendMessage(persistCtx.workspaceId, persistCtx.user.id, conversationId, {

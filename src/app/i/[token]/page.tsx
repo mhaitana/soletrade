@@ -70,6 +70,7 @@ export default async function PublicInvoicePage({
         </header>
 
         <div className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">
+          <h1 className="sr-only">Invoice {inv.number}</h1>
           {/* Hero */}
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Invoice</p>
@@ -135,7 +136,7 @@ export default async function PublicInvoicePage({
               role="status"
               aria-live="polite"
             >
-              <CheckCircle2 className="size-5 text-emerald-600" aria-hidden />
+              <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-500" aria-hidden />
               <div className="text-sm">
                 <p className="font-medium text-emerald-800">Paid</p>
                 <p className="text-emerald-700">

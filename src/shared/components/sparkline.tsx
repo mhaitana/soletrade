@@ -13,7 +13,8 @@
  * component handles signed (Books net) and non-negative (Drive earnings, dashboard revenue)
  * series without a flag.
  *
- * Per the design spec `design-system/.../pages/dashboard.md`: primary `#2563EB`, 20% fill.
+ * Per the design spec `design-system/.../pages/dashboard.md`: primary `#2563EB`, 20% fill
+ * (rendered via the `--chart-2` token so it tracks the theme).
  * Hover tooltips are native `<title>` tags (no client JS); a richer Recharts view with axis
  * labels / dashed secondary series is a later opt-in (the user chose the shared-SVG approach
  * for Phase 9 — no new dependency, server-rendered).
@@ -37,7 +38,9 @@ export interface SparklineProps {
 const SVG_W = 160;
 const SVG_H = 48;
 const PAD = 4;
-const PRIMARY = "#2563EB";
+// Read from the theme token so the line/area adapt in dark mode (chart-2 is #2563eb in
+// light, #60a5fa in dark — a hardcoded #2563EB is too-dark blue on the dark background).
+const PRIMARY = "var(--chart-2)";
 
 export function Sparkline({ points, ariaLabel }: SparklineProps) {
   const n = points.length;

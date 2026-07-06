@@ -257,7 +257,7 @@ export default async function DrivePage({
           ) : null}
         </div>
       ) : data.view === "trips" ? (
-        <div className="overflow-hidden rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -300,7 +300,7 @@ export default async function DrivePage({
           </table>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -335,7 +335,7 @@ export default async function DrivePage({
                         {e.description}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums text-emerald-600">
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-emerald-600 dark:text-emerald-500">
                       {formatCents(e.amountCents, e.currency)}
                     </td>
                   </tr>

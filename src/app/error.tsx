@@ -31,7 +31,7 @@ export default function RootError({
           <button
             type="button"
             onClick={() => reset()}
-            className="text-sm text-primary hover:underline"
+            className="rounded-sm text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
           >
             Try again →
           </button>

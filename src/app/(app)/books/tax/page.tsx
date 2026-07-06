@@ -57,7 +57,7 @@ export default async function TaxPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               GST collected
             </p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-600">
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-500">
               {formatCents(currentCollectedCents, CURRENCY)}
             </p>
           </CardContent>
@@ -79,7 +79,7 @@ export default async function TaxPage() {
             </p>
             <p
               className={`mt-1 text-2xl font-semibold tabular-nums ${
-                currentNetGstCents >= 0 ? "text-destructive" : "text-emerald-600"
+                currentNetGstCents >= 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-500"
               }`}
             >
               {formatCents(currentNetGstCents, CURRENCY)}
@@ -108,7 +108,7 @@ export default async function TaxPage() {
             </p>
             <p
               className={`text-2xl font-semibold tabular-nums ${
-                projectedNextQuarterCents >= 0 ? "text-destructive" : "text-emerald-600"
+                projectedNextQuarterCents >= 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-500"
               }`}
             >
               {formatCents(projectedNextQuarterCents, CURRENCY)}
@@ -170,7 +170,7 @@ export default async function TaxPage() {
                     <td className="px-0 py-2">
                       <Badge variant="secondary">{p.periodLabel}</Badge>
                     </td>
-                    <td className="px-0 py-2 text-right tabular-nums text-emerald-600">
+                    <td className="px-0 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-500">
                       {formatCents(p.gstCollectedCents, CURRENCY)}
                     </td>
                     <td className="px-0 py-2 text-right tabular-nums text-foreground">
@@ -178,7 +178,7 @@ export default async function TaxPage() {
                     </td>
                     <td
                       className={`px-0 py-2 text-right font-medium tabular-nums ${
-                        p.netGstCents >= 0 ? "text-destructive" : "text-emerald-600"
+                        p.netGstCents >= 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-500"
                       }`}
                     >
                       {formatCents(p.netGstCents, CURRENCY)}

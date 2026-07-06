@@ -10,11 +10,22 @@ import { env } from "@/shared/lib/env";
  * (app)-group routes.
  *
  * Public prefixes: marketing (/), /login, /signup, /pricing, the auth email-link
- * callback (/auth/), public invoice/quote share pages (/i/, /q/), and /api/.
+ * callback (/auth/), public invoice/quote share pages (/i/, /q/), the invitation
+ * accept page (/invite/ — handles signed-out first-time invitees), and /api/.
  * Everything else requires a session.
  */
 
-const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/auth", "/pricing", "/i/", "/q/", "/api"];
+const PUBLIC_PREFIXES = [
+  "/",
+  "/login",
+  "/signup",
+  "/auth",
+  "/pricing",
+  "/i/",
+  "/q/",
+  "/invite/",
+  "/api",
+];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)));
