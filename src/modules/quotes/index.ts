@@ -79,6 +79,8 @@ export interface QuoteInput {
   currency?: string;
   /** Integer percent (10 = 10% GST). */
   taxRate: number;
+  /** When true, line-item unit prices are tax-inclusive (gross); tax is back-calculated. */
+  pricesIncludeTax?: boolean;
   notes?: string | null;
   /** Terms & Conditions shown on the public page above the accept button (Wave 2). */
   termsConditions?: string | null;
@@ -100,6 +102,8 @@ export interface QuoteRow {
   validUntil: Date | null;
   currency: string;
   taxRate: number;
+  /** True when unit prices are tax-inclusive (gross); see `QuoteInput.pricesIncludeTax`. */
+  pricesIncludeTax: boolean;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -152,6 +156,7 @@ const selectQuote = {
   validUntil: quotes.validUntil,
   currency: quotes.currency,
   taxRate: quotes.taxRate,
+  pricesIncludeTax: quotes.pricesIncludeTax,
   subtotalCents: quotes.subtotalCents,
   taxCents: quotes.taxCents,
   totalCents: quotes.totalCents,
@@ -259,7 +264,8 @@ export async function createQuote(
   if (input.lineItems.length === 0) throw new Error("A quote needs at least one line item.");
   await assertCustomerInWorkspace(workspaceId, input.customerId ?? null);
 
-  const totals = computeLineItemTotals(input.lineItems, input.taxRate);
+  const pricesIncludeTax = input.pricesIncludeTax ?? false;
+  const totals = computeLineItemTotals(input.lineItems, input.taxRate, { pricesIncludeTax });
   const year = new Date().getFullYear();
   const db = getDb();
   // The workspace row carries the configured quote prefix + default currency (migration 0018).
@@ -285,6 +291,7 @@ export async function createQuote(
             validUntil: input.validUntil ?? null,
             currency: input.currency ?? defaultCurrency,
             taxRate: input.taxRate,
+            pricesIncludeTax,
             subtotalCents: totals.subtotalCents,
             taxCents: totals.taxCents,
             totalCents: totals.totalCents,
@@ -367,7 +374,12 @@ export async function updateQuote(
   const db = getDb();
   await db.transaction(async (tx) => {
     const current = await tx
-      .select({ id: quotes.id, status: quotes.status, taxRate: quotes.taxRate })
+      .select({
+        id: quotes.id,
+        status: quotes.status,
+        taxRate: quotes.taxRate,
+        pricesIncludeTax: quotes.pricesIncludeTax,
+      })
       .from(quotes)
       .where(and(eq(quotes.id, quoteId), eq(quotes.workspaceId, workspaceId)))
       .limit(1);
@@ -377,10 +389,13 @@ export async function updateQuote(
 
     const newLineItems = patch.lineItems;
     const newTaxRate = patch.taxRate;
+    // The inclusive flag can be patched; otherwise carry the existing row's value so a
+    // line-item/tax-rate edit on an inclusive quote keeps treating prices as gross.
+    const pricesIncludeTax = patch.pricesIncludeTax ?? row.pricesIncludeTax;
     let totals: { subtotalCents: number; taxCents: number; totalCents: number } | null = null;
     if (newLineItems !== undefined) {
-      totals = computeLineItemTotals(newLineItems, newTaxRate ?? row.taxRate);
-    } else if (newTaxRate !== undefined) {
+      totals = computeLineItemTotals(newLineItems, newTaxRate ?? row.taxRate, { pricesIncludeTax });
+    } else if (newTaxRate !== undefined || patch.pricesIncludeTax !== undefined) {
       const existing = await tx
         .select({
           quantity: quoteLineItems.quantity,
@@ -390,7 +405,8 @@ export async function updateQuote(
         .where(eq(quoteLineItems.quoteId, quoteId));
       totals = computeLineItemTotals(
         existing.map((e) => ({ quantity: Number(e.quantity), unitPriceCents: e.unitPriceCents })),
-        newTaxRate,
+        newTaxRate ?? row.taxRate,
+        { pricesIncludeTax },
       );
     }
 
@@ -400,6 +416,7 @@ export async function updateQuote(
     if (patch.validUntil !== undefined) set.validUntil = patch.validUntil ?? null;
     if (patch.currency !== undefined) set.currency = patch.currency;
     if (newTaxRate !== undefined) set.taxRate = newTaxRate;
+    if (patch.pricesIncludeTax !== undefined) set.pricesIncludeTax = patch.pricesIncludeTax;
     if (patch.notes !== undefined) set.notes = patch.notes ?? null;
     if (patch.termsConditions !== undefined) set.termsConditions = patch.termsConditions ?? null;
     if (totals) {
@@ -730,6 +747,8 @@ export interface PublicQuoteView {
   validUntil: Date | null;
   currency: string;
   taxRate: number;
+  /** True when unit prices are tax-inclusive (shown as "(includes $X tax)"). */
+  pricesIncludeTax: boolean;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -801,6 +820,7 @@ export async function getQuoteByPublicToken(token: string): Promise<PublicQuoteV
     validUntil: q.validUntil,
     currency: q.currency,
     taxRate: q.taxRate,
+    pricesIncludeTax: q.pricesIncludeTax,
     subtotalCents: q.subtotalCents,
     taxCents: q.taxCents,
     totalCents: q.totalCents,

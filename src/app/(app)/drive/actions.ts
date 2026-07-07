@@ -77,6 +77,11 @@ export async function createEarningAction(input: unknown): Promise<CreateEarning
   try {
     const id = await createEarning(ctx.workspaceId, earningInput, ctx.user.id);
     revalidatePath("/drive");
+    // Earnings auto-record a Books "gig" income transaction via the event bus
+    // (registerBooksIntegration). The bus fully awaits its handlers, so the row exists
+    // by the time we return — invalidate /books + /dashboard so soft-nav shows it.
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true, earningId: id };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to log earning." };
@@ -127,6 +132,8 @@ export async function updateEarningAction(input: unknown): Promise<UpdateEarning
       ctx.user.id,
     );
     revalidatePath("/drive");
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to update earning." };
@@ -248,6 +255,8 @@ export async function deleteEarningAction(input: unknown): Promise<DriveActionRe
       ctx.user.id,
     );
     revalidatePath("/drive");
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to delete earning." };

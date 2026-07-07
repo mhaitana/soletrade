@@ -1,4 +1,4 @@
-# soletrade — Full Review: UI/UX, Security, Performance
+# soletrade OS — Full Review: UI/UX, Security, Performance
 
 **Date:** 2026-07-07
 **Scope:** `src/app`, `src/shared`, `src/platform`, `src/modules`, `src/server`

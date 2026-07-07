@@ -9,6 +9,7 @@ import {
   getConversation,
   isMockProvider,
   streamAssistant,
+  streamAssistantError,
   streamMockAssistant,
   getAIModel,
 } from "@/platform/ai";
@@ -30,7 +31,12 @@ import type { WorkspaceContext } from "@/platform/context";
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
-  conversationId: z.string().uuid().optional(),
+  // `nullish` (not just `optional`) — the client seeds `conversationId` state to `null`
+  // for a new conversation and sends `body: { conversationId }` on every request, so the
+  // first send of a new chat carries `"conversationId": null`. `.optional()` only accepts
+  // `undefined`, which would 400 the very first message. `null`/undefined both fall through
+  // to the create-new-conversation branch below (`if (providedId)` is falsy for both).
+  conversationId: z.string().uuid().nullish(),
   // The AI SDK `useChat` transport sends the full `messages` array; we only need the
   // latest user message's text (the route reconstructs full history from the persisted
   // conversation — the client transcript isn't trusted as the source of truth).
@@ -180,21 +186,31 @@ export async function POST(request: Request): Promise<Response> {
   // 9. Real provider — streamText tool-calling loop; persist the assistant turn on finish.
   const tools = buildAssistantTools(ctx, installedModules, { writeEnabled });
   const persistCtx: WorkspaceContext = ctx;
-  return streamAssistant({
-    model: getAIModel(),
-    system,
-    messages: toUIMessages(conversation.messages),
-    tools,
-    conversationId: conversationIdStr,
-    // Tear down the upstream model call if the client disconnects mid-stream.
-    abortSignal: request.signal,
-    onFinish: async (text) => {
-      if (text) {
-        await appendMessage(persistCtx.workspaceId, persistCtx.user.id, conversationId, {
-          role: "assistant",
-          content: text,
-        });
-      }
-    },
-  });
+  try {
+    return await streamAssistant({
+      model: getAIModel(),
+      system,
+      messages: toUIMessages(conversation.messages),
+      tools,
+      conversationId: conversationIdStr,
+      // Tear down the upstream model call if the client disconnects mid-stream.
+      abortSignal: request.signal,
+      onFinish: async (text) => {
+        if (text) {
+          await appendMessage(persistCtx.workspaceId, persistCtx.user.id, conversationId, {
+            role: "assistant",
+            content: text,
+          });
+        }
+      },
+    });
+  } catch (err) {
+    // Synchronous failure before streaming starts — most commonly `getAIModel()`
+    // throwing because the provider API key is unset. Surface the real cause as a
+    // UI-message stream error part so the chat shows the message (a plain JSON 500
+    // would surface as an opaque transport error). Mid-stream provider errors are
+    // handled by `streamAssistant`'s `onError`, not this catch.
+    console.error("[assistant] failed to start stream:", err);
+    return streamAssistantError(err, conversationIdStr);
+  }
 }

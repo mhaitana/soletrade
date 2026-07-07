@@ -81,6 +81,10 @@ export async function createExpenseAction(input: unknown): Promise<CreateExpense
   try {
     const id = await createExpense(ctx.workspaceId, expenseInput, ctx.user.id);
     revalidatePath("/drive/expenses");
+    // Expenses auto-record a Books "vehicle_expense" transaction via the event bus
+    // (registerBooksIntegration). Invalidate /books + /dashboard so soft-nav shows it.
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true, expenseId: id };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to log expense." };
@@ -132,6 +136,8 @@ export async function updateExpenseAction(input: unknown): Promise<UpdateExpense
   try {
     await updateExpense(ctx.workspaceId, branded<"DriveExpenseId">(expenseId), patch, ctx.user.id);
     revalidatePath("/drive/expenses");
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to update expense." };
@@ -156,6 +162,8 @@ export async function deleteExpenseAction(input: unknown): Promise<ExpenseAction
       ctx.user.id,
     );
     revalidatePath("/drive/expenses");
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to delete expense." };

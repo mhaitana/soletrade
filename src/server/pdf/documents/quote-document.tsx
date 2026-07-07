@@ -30,6 +30,8 @@ export interface QuotePdfData {
   validUntil: Date | null;
   currency: string;
   taxRate: number;
+  /** True = unit prices are gross (tax-inclusive); tax is back-calculated from the total. */
+  pricesIncludeTax: boolean;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -138,11 +140,15 @@ export function QuoteDocument({
 
         <View style={styles.sectionGap}>
           <View style={styles.totalsRow}>
-            <Text style={styles.muted}>Subtotal</Text>
+            <Text style={styles.muted}>
+              {quote.pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
+            </Text>
             <Text>{money(quote.subtotalCents, quote.currency)}</Text>
           </View>
           <View style={styles.totalsRow}>
-            <Text style={styles.muted}>Tax ({quote.taxRate}%)</Text>
+            <Text style={styles.muted}>
+              Tax ({quote.taxRate}%{quote.pricesIncludeTax ? ", included" : ""})
+            </Text>
             <Text>{money(quote.taxCents, quote.currency)}</Text>
           </View>
           <View style={styles.totalRow}>

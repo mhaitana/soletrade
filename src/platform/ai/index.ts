@@ -1,5 +1,11 @@
 export { isMockProvider, getAIModel } from "./provider";
-export { streamAssistant, streamMockAssistant, type StreamAssistantOptions } from "./stream";
+export {
+  streamAssistant,
+  streamAssistantError,
+  streamMockAssistant,
+  assistantErrorMessage,
+  type StreamAssistantOptions,
+} from "./stream";
 export {
   listConversations,
   getConversation,

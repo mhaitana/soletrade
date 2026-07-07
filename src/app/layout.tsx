@@ -18,11 +18,11 @@ const fontMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "soletrade labs Suite",
-    template: "%s · soletrade labs Suite",
+    default: "soletrade OS",
+    template: "%s · soletrade OS",
   },
   description: "The business operating system for solo traders, freelancers, and small operators.",
-  applicationName: "soletrade labs Suite",
+  applicationName: "soletrade OS",
 };
 
 // Tint the mobile browser chrome to match the app background per theme.

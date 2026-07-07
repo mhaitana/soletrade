@@ -57,6 +57,8 @@ export interface InvoiceInput {
   currency?: string;
   /** Integer percent (10 = 10% GST). */
   taxRate: number;
+  /** When true, line-item unit prices are tax-inclusive (gross); tax is back-calculated. */
+  pricesIncludeTax?: boolean;
   notes?: string | null;
   lineItems: LineItemInput[];
 }
@@ -74,6 +76,8 @@ export interface InvoiceRow {
   dueDate: Date | null;
   currency: string;
   taxRate: number;
+  /** True when unit prices are tax-inclusive (gross); see `InvoiceInput.pricesIncludeTax`. */
+  pricesIncludeTax: boolean;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -111,6 +115,7 @@ const selectInvoice = {
   dueDate: invoices.dueDate,
   currency: invoices.currency,
   taxRate: invoices.taxRate,
+  pricesIncludeTax: invoices.pricesIncludeTax,
   subtotalCents: invoices.subtotalCents,
   taxCents: invoices.taxCents,
   totalCents: invoices.totalCents,
@@ -205,7 +210,8 @@ export async function createInvoice(
   if (input.lineItems.length === 0) throw new Error("An invoice needs at least one line item.");
   await assertCustomerInWorkspace(workspaceId, input.customerId ?? null);
 
-  const totals = computeInvoiceTotals(input.lineItems, input.taxRate);
+  const pricesIncludeTax = input.pricesIncludeTax ?? false;
+  const totals = computeInvoiceTotals(input.lineItems, input.taxRate, { pricesIncludeTax });
   const year = new Date().getFullYear();
   const db = getDb();
   // The workspace row carries the configured invoice prefix + default currency (migration 0018).
@@ -236,6 +242,7 @@ export async function createInvoice(
             dueDate: input.dueDate ?? null,
             currency: input.currency ?? defaultCurrency,
             taxRate: input.taxRate,
+            pricesIncludeTax,
             subtotalCents: totals.subtotalCents,
             taxCents: totals.taxCents,
             totalCents: totals.totalCents,
@@ -310,7 +317,12 @@ export async function updateInvoice(
   const db = getDb();
   await db.transaction(async (tx) => {
     const current = await tx
-      .select({ id: invoices.id, status: invoices.status, taxRate: invoices.taxRate })
+      .select({
+        id: invoices.id,
+        status: invoices.status,
+        taxRate: invoices.taxRate,
+        pricesIncludeTax: invoices.pricesIncludeTax,
+      })
       .from(invoices)
       .where(and(eq(invoices.id, invoiceId), eq(invoices.workspaceId, workspaceId)))
       .limit(1);
@@ -320,13 +332,16 @@ export async function updateInvoice(
 
     const newLineItems = patch.lineItems;
     const newTaxRate = patch.taxRate;
-    // Recompute totals when either line items or the tax rate change. When only the tax
-    // rate changes (no new line items), recompute from the EXISTING line items so a
-    // tax-rate-only edit still updates totals correctly.
+    // The inclusive flag can be patched; otherwise carry the existing row's value so a
+    // line-item/tax-rate edit on an inclusive invoice keeps treating prices as gross.
+    const pricesIncludeTax = patch.pricesIncludeTax ?? row.pricesIncludeTax;
+    // Recompute totals when either line items, the tax rate, or the inclusive flag change.
+    // When only the tax rate/inclusive flag changes (no new line items), recompute from the
+    // EXISTING line items so a tax-rate-only edit still updates totals correctly.
     let totals: { subtotalCents: number; taxCents: number; totalCents: number } | null = null;
     if (newLineItems !== undefined) {
-      totals = computeInvoiceTotals(newLineItems, newTaxRate ?? row.taxRate);
-    } else if (newTaxRate !== undefined) {
+      totals = computeInvoiceTotals(newLineItems, newTaxRate ?? row.taxRate, { pricesIncludeTax });
+    } else if (newTaxRate !== undefined || patch.pricesIncludeTax !== undefined) {
       const existing = await tx
         .select({
           quantity: invoiceLineItems.quantity,
@@ -336,7 +351,8 @@ export async function updateInvoice(
         .where(eq(invoiceLineItems.invoiceId, invoiceId));
       totals = computeInvoiceTotals(
         existing.map((e) => ({ quantity: Number(e.quantity), unitPriceCents: e.unitPriceCents })),
-        newTaxRate,
+        newTaxRate ?? row.taxRate,
+        { pricesIncludeTax },
       );
     }
 
@@ -346,6 +362,7 @@ export async function updateInvoice(
     if (patch.dueDate !== undefined) set.dueDate = patch.dueDate ?? null;
     if (patch.currency !== undefined) set.currency = patch.currency;
     if (newTaxRate !== undefined) set.taxRate = newTaxRate;
+    if (patch.pricesIncludeTax !== undefined) set.pricesIncludeTax = patch.pricesIncludeTax;
     if (patch.notes !== undefined) set.notes = patch.notes ?? null;
     if (totals) {
       set.subtotalCents = totals.subtotalCents;
@@ -676,6 +693,8 @@ export interface PublicInvoiceView {
   dueDate: Date | null;
   currency: string;
   taxRate: number;
+  /** True when unit prices are tax-inclusive (shown as "(includes $X tax)"). */
+  pricesIncludeTax: boolean;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -725,6 +744,7 @@ export async function getInvoiceByPublicToken(token: string): Promise<PublicInvo
     dueDate: inv.dueDate,
     currency: inv.currency,
     taxRate: inv.taxRate,
+    pricesIncludeTax: inv.pricesIncludeTax,
     subtotalCents: inv.subtotalCents,
     taxCents: inv.taxCents,
     totalCents: inv.totalCents,

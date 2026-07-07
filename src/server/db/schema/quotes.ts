@@ -64,6 +64,12 @@ export const quotes = pgTable(
     currency: text("currency").notNull().default("AUD"),
     /** Tax rate as an integer percent (10 = 10% GST). 0 = tax-free. */
     taxRate: integer("tax_rate").notNull().default(0),
+    /**
+     * When true, line-item unit prices are tax-inclusive (gross) and `taxCents` is
+     * back-calculated from `totalCents`; `subtotalCents` is the ex-tax portion. When
+     * false (default), tax is added on top of the ex-tax subtotal. Mirrors invoices.
+     */
+    pricesIncludeTax: boolean("prices_include_tax").notNull().default(false),
     subtotalCents: integer("subtotal_cents").notNull().default(0),
     taxCents: integer("tax_cents").notNull().default(0),
     totalCents: integer("total_cents").notNull().default(0),

@@ -14,7 +14,7 @@ import {
   type CreateInvoiceResult,
   type UpdateInvoiceResult,
 } from "./actions";
-import type { CustomerRow } from "@/platform/customers";
+import { CustomerCreateDialog, type PickerCustomer } from "../customers/customer-create-dialog";
 import type { InvoiceWithItems } from "@/modules/invoices";
 
 type Result = CreateInvoiceResult | UpdateInvoiceResult;
@@ -54,7 +54,7 @@ export function InvoiceForm({
 }: {
   mode: "create" | "edit";
   invoice?: InvoiceWithItems;
-  customers: CustomerRow[];
+  customers: PickerCustomer[];
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -62,12 +62,18 @@ export function InvoiceForm({
   const [error, setError] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
 
+  // Held in state so the inline "Add customer" dialog can append a newly-created
+  // customer and the picker can auto-select it without a round-trip.
+  const [customerList, setCustomerList] = useState<PickerCustomer[]>(customers);
   const [customerId, setCustomerId] = useState<string>(invoice?.customerId ?? "");
   const [issueDate, setIssueDate] = useState<string>(
     isoDate(invoice?.issueDate) || isoDate(new Date()),
   );
   const [dueDate, setDueDate] = useState<string>(isoDate(invoice?.dueDate));
   const [taxRate, setTaxRate] = useState<string>(String(invoice?.taxRate ?? 0));
+  const [pricesIncludeTax, setPricesIncludeTax] = useState<boolean>(
+    invoice?.pricesIncludeTax ?? false,
+  );
   const [notes, setNotes] = useState<string>(invoice?.notes ?? "");
 
   const [items, setItems] = useState<LineItemState[]>(
@@ -88,6 +94,7 @@ export function InvoiceForm({
       unitPriceCents: it.unitPriceCents,
     })),
     Number(taxRate) || 0,
+    { pricesIncludeTax },
   );
 
   function updateItem(key: string, patch: Partial<LineItemState>) {
@@ -109,6 +116,10 @@ export function InvoiceForm({
     setFieldErrors(undefined);
 
     const lineItemInputs = toLineItemInput(items);
+    if (!customerId) {
+      setError("Pick a customer — a name and email are required to send the invoice.");
+      return;
+    }
     if (lineItemInputs.length === 0) {
       setError("Add at least one line item.");
       return;
@@ -123,11 +134,12 @@ export function InvoiceForm({
     }
 
     const input = {
-      customerId: customerId || null,
+      customerId,
       issueDate: new Date(issueDate),
       dueDate: dueDate ? new Date(dueDate) : null,
       currency: "AUD" as string,
       taxRate: Number(taxRate) || 0,
+      pricesIncludeTax,
       notes: notes || null,
       lineItems: lineItemInputs,
     };
@@ -154,21 +166,33 @@ export function InvoiceForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="customerId">Customer</Label>
-          <select
-            id="customerId"
-            name="customerId"
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">Walk-in (no customer)</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.company ? ` · ${c.company}` : ""}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <select
+              id="customerId"
+              name="customerId"
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Pick a customer…</option>
+              {customerList.map((c) => (
+                <option key={c.id} value={c.id} disabled={!c.email}>
+                  {c.name}
+                  {c.company ? ` · ${c.company}` : ""}
+                  {!c.email ? " (no email — add one)" : ""}
+                </option>
+              ))}
+            </select>
+            <CustomerCreateDialog
+              onCreated={(c) => {
+                setCustomerList((prev) => (prev.some((p) => p.id === c.id) ? prev : [...prev, c]));
+                setCustomerId(c.id);
+              }}
+            />
+          </div>
+          {fieldErr("customerId") ? (
+            <p className="text-sm text-destructive">{fieldErr("customerId")}</p>
+          ) : null}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="taxRate">Tax rate (%)</Label>
@@ -184,6 +208,15 @@ export function InvoiceForm({
             aria-invalid={Boolean(fieldErr("taxRate"))}
             className="tabular-nums"
           />
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={pricesIncludeTax}
+              onChange={(e) => setPricesIncludeTax(e.target.checked)}
+              className="size-4 rounded border-input"
+            />
+            Prices include tax (gross)
+          </label>
           {fieldErr("taxRate") ? (
             <p className="text-sm text-destructive">{fieldErr("taxRate")}</p>
           ) : null}
@@ -293,11 +326,15 @@ export function InvoiceForm({
 
       <div className="rounded-md border border-border bg-muted/30 p-4">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Subtotal</span>
+          <span className="text-muted-foreground">
+            {pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
+          </span>
           <span className="tabular-nums">${(totals.subtotalCents / 100).toFixed(2)}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Tax ({Number(taxRate) || 0}%)</span>
+          <span className="text-muted-foreground">
+            Tax ({Number(taxRate) || 0}%{pricesIncludeTax ? ", included" : ""})
+          </span>
           <span className="tabular-nums">${(totals.taxCents / 100).toFixed(2)}</span>
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-base font-medium">

@@ -1,6 +1,6 @@
 # Deployment runbook — app.soletrade.example
 
-This is the operator-side checklist for taking the soletrade labs Suite from local
+This is the operator-side checklist for taking the soletrade OS from local
 dev to a production deploy on Vercel. The app is designed to boot without secrets
 (modules assert their own required secrets at their boundary), so you can deploy
 first and wire services incrementally — but every external integration below is

@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# soletrade labs Suite — project notes
+# soletrade OS — project notes
 
 ## What this is
 The `app.soletrade.example` SaaS monolith: a workspace-first, multi-module platform

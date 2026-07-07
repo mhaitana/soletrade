@@ -46,9 +46,23 @@ export interface StreamAssistantOptions {
 }
 
 /**
+ * Extract a readable message from an unknown error so the workspace admin can see
+ * the real cause (a missing API key, an upstream 401, a tool-execution failure) in
+ * the chat UI. This is the user's own workspace tool, so surfacing provider detail
+ * is appropriate — the AI SDK's default `onError` hides it behind "An error occurred."
+ */
+export function assistantErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message || "Assistant error.";
+  if (typeof error === "string") return error;
+  return "Assistant error.";
+}
+
+/**
  * Stream a real-provider assistant reply. The `onFinish` callback receives the
  * final step's text once the whole tool-calling loop settles (the caller persists
- * it). Returns the SSE `Response` directly.
+ * it). Returns the SSE `Response` directly. `onError` surfaces the real upstream
+ * error (provider 401, missing key, tool throw) to the client instead of the AI
+ * SDK's generic "An error occurred.".
  */
 export async function streamAssistant(opts: StreamAssistantOptions): Promise<Response> {
   const result = streamText({
@@ -66,6 +80,33 @@ export async function streamAssistant(opts: StreamAssistantOptions): Promise<Res
   });
   return result.toUIMessageStreamResponse({
     headers: { ...UI_MESSAGE_STREAM_HEADERS, "X-Conversation-Id": opts.conversationId },
+    onError: (error) => {
+      console.error("[assistant] stream error:", error);
+      return assistantErrorMessage(error);
+    },
+  });
+}
+
+/**
+ * Return a UI-message stream that immediately errors with `error` — used when the
+ * real-provider path fails before streaming starts (e.g. `getAIModel()` throws
+ * because the provider API key is unset). Emitting a proper error part (rather than
+ * a plain JSON 500) keeps the client on the same `useChat` error path, so the real
+ * message shows in the chat instead of an opaque transport/parse failure.
+ */
+export function streamAssistantError(error: unknown, conversationId: string): Response {
+  const stream = createUIMessageStream({
+    execute: () => {
+      throw error;
+    },
+    onError: (e) => {
+      console.error("[assistant] failed to start stream:", e);
+      return assistantErrorMessage(e);
+    },
+  });
+  return createUIMessageStreamResponse({
+    stream,
+    headers: { ...UI_MESSAGE_STREAM_HEADERS, "X-Conversation-Id": conversationId },
   });
 }
 

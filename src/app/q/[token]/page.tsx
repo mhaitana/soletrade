@@ -112,11 +112,15 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
           {/* Totals */}
           <dl className="mt-5 space-y-1.5 border-t border-border pt-5 text-sm">
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Subtotal</dt>
+              <dt className="text-muted-foreground">
+                {q.pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
+              </dt>
               <dd className="tabular-nums">{money(q.subtotalCents, q.currency)}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Tax ({q.taxRate}%)</dt>
+              <dt className="text-muted-foreground">
+                Tax ({q.taxRate}%{q.pricesIncludeTax ? ", included" : ""})
+              </dt>
               <dd className="tabular-nums">{money(q.taxCents, q.currency)}</dd>
             </div>
             <div className="flex justify-between border-t border-border pt-1.5 text-base font-semibold">

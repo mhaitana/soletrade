@@ -6,7 +6,7 @@ import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
-import { listCustomers, type CustomerRow } from "@/platform/customers";
+import { getCustomer, listCustomers, type CustomerRow } from "@/platform/customers";
 import {
   createInvoice,
   deleteInvoice,
@@ -35,11 +35,12 @@ const lineItemSchema = z.object({
 });
 
 const createSchema = z.object({
-  customerId: z.string().uuid().nullable().optional(),
+  customerId: z.string().uuid("Pick a customer."),
   issueDate: z.coerce.date(),
   dueDate: z.coerce.date().nullable().optional(),
   currency: z.string().trim().min(3).max(3).optional(),
   taxRate: z.number().int().min(0).max(100),
+  pricesIncludeTax: z.boolean().optional().default(false),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   // Form sends `notes || null`, so accept null (optional alone only allows undefined).
   notes: z.string().trim().max(2000).nullable().optional(),
@@ -62,6 +63,21 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
 
+  // Every invoice must be linked to an emailable customer (no walk-in) — the email is
+  // used to send the invoice. The picker disables no-email customers, but the server
+  // enforces it too (defense-in-depth + covers API/convert paths).
+  const customer = await getCustomer(
+    ctx.workspaceId,
+    branded<"CustomerId">(parsed.data.customerId),
+  );
+  if (!customer || !customer.email) {
+    return {
+      ok: false,
+      error: "Selected customer has no email — add one in Customers before sending.",
+      fieldErrors: { customerId: ["This customer has no email on file."] },
+    };
+  }
+
   const lineItems: LineItemInput[] = parsed.data.lineItems.map((it) => ({
     description: it.description,
     quantity: it.quantity,
@@ -72,11 +88,12 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
     const id = await createInvoice(
       ctx.workspaceId,
       {
-        customerId: parsed.data.customerId ? branded<"CustomerId">(parsed.data.customerId) : null,
+        customerId: branded<"CustomerId">(parsed.data.customerId),
         issueDate: parsed.data.issueDate,
         dueDate: parsed.data.dueDate ?? null,
         currency: parsed.data.currency ?? "AUD",
         taxRate: parsed.data.taxRate,
+        pricesIncludeTax: parsed.data.pricesIncludeTax,
         notes: parsed.data.notes ?? null,
         lineItems,
       },
@@ -92,11 +109,12 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
 
 const updateSchema = z.object({
   invoiceId: z.string().uuid(),
-  customerId: z.string().uuid().nullable().optional(),
+  customerId: z.string().uuid("Pick a customer."),
   issueDate: z.coerce.date(),
   dueDate: z.coerce.date().nullable().optional(),
   currency: z.string().trim().min(3).max(3).optional(),
   taxRate: z.number().int().min(0).max(100),
+  pricesIncludeTax: z.boolean().optional().default(false),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   notes: z.string().trim().max(2000).nullable().optional(),
 });
@@ -118,6 +136,17 @@ export async function updateInvoiceAction(input: unknown): Promise<UpdateInvoice
   if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
 
   const { invoiceId, ...rest } = parsed.data;
+
+  // Every invoice must be linked to an emailable customer (no walk-in). See createInvoiceAction.
+  const customer = await getCustomer(ctx.workspaceId, branded<"CustomerId">(rest.customerId));
+  if (!customer || !customer.email) {
+    return {
+      ok: false,
+      error: "Selected customer has no email — add one in Customers before sending.",
+      fieldErrors: { customerId: ["This customer has no email on file."] },
+    };
+  }
+
   const lineItems: LineItemInput[] = rest.lineItems.map((it) => ({
     description: it.description,
     quantity: it.quantity,
@@ -129,11 +158,12 @@ export async function updateInvoiceAction(input: unknown): Promise<UpdateInvoice
       ctx.workspaceId,
       branded<"InvoiceId">(invoiceId),
       {
-        customerId: rest.customerId ? branded<"CustomerId">(rest.customerId) : null,
+        customerId: branded<"CustomerId">(rest.customerId),
         issueDate: rest.issueDate,
         dueDate: rest.dueDate ?? null,
         currency: rest.currency ?? "AUD",
         taxRate: rest.taxRate,
+        pricesIncludeTax: rest.pricesIncludeTax,
         notes: rest.notes ?? null,
         lineItems,
       },

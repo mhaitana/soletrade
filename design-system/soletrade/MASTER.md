@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** soletrade labs Suite
+**Project:** soletrade OS
 **Category:** Business operating system (B2B SaaS — solo traders, freelancers, gig operators)
 **Direction:** Neutral Pro — ink-on-warm-white, flat, hairline, data-dense
 

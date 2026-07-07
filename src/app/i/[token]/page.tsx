@@ -104,11 +104,15 @@ export default async function PublicInvoicePage({
           {/* Totals */}
           <dl className="mt-5 space-y-1.5 border-t border-border pt-5 text-sm">
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Subtotal</dt>
+              <dt className="text-muted-foreground">
+                {inv.pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
+              </dt>
               <dd className="tabular-nums">{money(inv.subtotalCents, inv.currency)}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Tax ({inv.taxRate}%)</dt>
+              <dt className="text-muted-foreground">
+                Tax ({inv.taxRate}%{inv.pricesIncludeTax ? ", included" : ""})
+              </dt>
               <dd className="tabular-nums">{money(inv.taxCents, inv.currency)}</dd>
             </div>
             <div className="flex justify-between border-t border-border pt-1.5 text-base font-semibold">

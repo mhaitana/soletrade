@@ -279,7 +279,7 @@ export function AssistantChat({
             )}
             {error ? (
               <p className="text-center text-xs text-rose-600" role="alert">
-                Something went wrong. Please try again.
+                {error.message || "Something went wrong. Please try again."}
               </p>
             ) : null}
           </div>

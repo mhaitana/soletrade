@@ -77,3 +77,38 @@ describe("shared line-item totals — computeLineItemTotals", () => {
     expect(totals.subtotalCents).toBe(5006);
   });
 });
+
+describe("shared line-item totals — computeLineItemTotals (pricesIncludeTax)", () => {
+  it("back-calculates tax from a gross total at 10% ($100.00 inclusive → $9.09 tax, $90.91 ex-tax)", () => {
+    const totals = computeLineItemTotals([{ quantity: 1, unitPriceCents: 10000 }], 10, {
+      pricesIncludeTax: true,
+    });
+    // total 10000; tax = round(10000 * 10 / 110) = round(909.09) = 909; subtotal = 9091
+    expect(totals).toEqual({ subtotalCents: 9091, taxCents: 909, totalCents: 10000 });
+  });
+
+  it("sums inclusive line amounts into the gross total, then back-calculates tax once on the sum", () => {
+    // Two inclusive lines: 1 × $55.00 (5500) + 1 × $45.00 (4500) = 10000 gross.
+    const totals = computeLineItemTotals(
+      [
+        { quantity: 1, unitPriceCents: 5500 },
+        { quantity: 1, unitPriceCents: 4500 },
+      ],
+      10,
+      { pricesIncludeTax: true },
+    );
+    expect(totals).toEqual({ subtotalCents: 9091, taxCents: 909, totalCents: 10000 });
+  });
+
+  it("inclusive flag with a 0% rate = no tax (subtotal equals total)", () => {
+    const totals = computeLineItemTotals([{ quantity: 2, unitPriceCents: 5000 }], 0, {
+      pricesIncludeTax: true,
+    });
+    expect(totals).toEqual({ subtotalCents: 10000, taxCents: 0, totalCents: 10000 });
+  });
+
+  it("defaults to tax-exclusive when opts is omitted (existing behaviour unchanged)", () => {
+    const totals = computeLineItemTotals([{ quantity: 1, unitPriceCents: 10000 }], 10);
+    expect(totals).toEqual({ subtotalCents: 10000, taxCents: 1000, totalCents: 11000 });
+  });
+});

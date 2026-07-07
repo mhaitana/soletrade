@@ -119,9 +119,12 @@ export async function ensureStripePrices(): Promise<PriceIdMap> {
   const map = {} as PriceIdMap;
   for (const moduleKey of MODULE_KEYS) {
     // One Stripe Product per module keeps invoices clean (4 products, 4 prices each).
+    // The product id stays `soletrade-*` (a stable lookup key) even though the
+    // product display name is `soletrade OS — *`; changing the id would orphan existing
+    // Stripe products and subscriptions.
     const product = await findOrCreateProduct(
       `soletrade-${moduleKey}`,
-      `Soletrade Suite — ${moduleKey}`,
+      `soletrade OS — ${moduleKey}`,
     );
     map[moduleKey] = {
       standalone: {

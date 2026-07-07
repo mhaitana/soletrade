@@ -6,7 +6,7 @@ import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
-import { listCustomers, type CustomerRow } from "@/platform/customers";
+import { getCustomer, listCustomers, type CustomerRow } from "@/platform/customers";
 import {
   createQuote,
   deleteQuote,
@@ -44,11 +44,12 @@ const sectionSchema = z.object({
 });
 
 const createSchema = z.object({
-  customerId: z.string().uuid().nullable().optional(),
+  customerId: z.string().uuid("Pick a customer."),
   issueDate: z.coerce.date(),
   validUntil: z.coerce.date().nullable().optional(),
   currency: z.string().trim().min(3).max(3).optional(),
   taxRate: z.number().int().min(0).max(100),
+  pricesIncludeTax: z.boolean().optional().default(false),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   notes: z.string().trim().max(2000).nullable().optional(),
   sections: z.array(sectionSchema).optional(),
@@ -72,6 +73,20 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
 
+  // Every quote must be linked to an emailable customer (no walk-in) — the email is used
+  // to send the quote. The picker disables no-email customers; the server enforces too.
+  const customer = await getCustomer(
+    ctx.workspaceId,
+    branded<"CustomerId">(parsed.data.customerId),
+  );
+  if (!customer || !customer.email) {
+    return {
+      ok: false,
+      error: "Selected customer has no email — add one in Customers before sending.",
+      fieldErrors: { customerId: ["This customer has no email on file."] },
+    };
+  }
+
   const lineItems: LineItemInput[] = parsed.data.lineItems.map((it) => ({
     description: it.description,
     quantity: it.quantity,
@@ -88,11 +103,12 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
     const id = await createQuote(
       ctx.workspaceId,
       {
-        customerId: parsed.data.customerId ? branded<"CustomerId">(parsed.data.customerId) : null,
+        customerId: branded<"CustomerId">(parsed.data.customerId),
         issueDate: parsed.data.issueDate,
         validUntil: parsed.data.validUntil ?? null,
         currency: parsed.data.currency ?? "AUD",
         taxRate: parsed.data.taxRate,
+        pricesIncludeTax: parsed.data.pricesIncludeTax,
         notes: parsed.data.notes ?? null,
         termsConditions: parsed.data.termsConditions ?? null,
         lineItems,
@@ -110,11 +126,12 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
 
 const updateSchema = z.object({
   quoteId: z.string().uuid(),
-  customerId: z.string().uuid().nullable().optional(),
+  customerId: z.string().uuid("Pick a customer."),
   issueDate: z.coerce.date(),
   validUntil: z.coerce.date().nullable().optional(),
   currency: z.string().trim().min(3).max(3).optional(),
   taxRate: z.number().int().min(0).max(100),
+  pricesIncludeTax: z.boolean().optional().default(false),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   notes: z.string().trim().max(2000).nullable().optional(),
   sections: z.array(sectionSchema).optional(),
@@ -138,6 +155,17 @@ export async function updateQuoteAction(input: unknown): Promise<UpdateQuoteResu
   if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
 
   const { quoteId, ...rest } = parsed.data;
+
+  // Every quote must be linked to an emailable customer (no walk-in). See createQuoteAction.
+  const customer = await getCustomer(ctx.workspaceId, branded<"CustomerId">(rest.customerId));
+  if (!customer || !customer.email) {
+    return {
+      ok: false,
+      error: "Selected customer has no email — add one in Customers before sending.",
+      fieldErrors: { customerId: ["This customer has no email on file."] },
+    };
+  }
+
   const lineItems: LineItemInput[] = rest.lineItems.map((it) => ({
     description: it.description,
     quantity: it.quantity,
@@ -155,11 +183,12 @@ export async function updateQuoteAction(input: unknown): Promise<UpdateQuoteResu
       ctx.workspaceId,
       branded<"QuoteId">(quoteId),
       {
-        customerId: rest.customerId ? branded<"CustomerId">(rest.customerId) : null,
+        customerId: branded<"CustomerId">(rest.customerId),
         issueDate: rest.issueDate,
         validUntil: rest.validUntil ?? null,
         currency: rest.currency ?? "AUD",
         taxRate: rest.taxRate,
+        pricesIncludeTax: rest.pricesIncludeTax,
         notes: rest.notes ?? null,
         termsConditions: rest.termsConditions ?? null,
         lineItems,
@@ -245,6 +274,7 @@ export async function convertQuoteToInvoiceAction(input: unknown): Promise<Conve
         dueDate: null,
         currency: quote.currency,
         taxRate: quote.taxRate,
+        pricesIncludeTax: quote.pricesIncludeTax,
         notes: `Converted from quote ${quote.number}.`,
         lineItems: quote.lineItems.map((it) => ({
           description: it.description,

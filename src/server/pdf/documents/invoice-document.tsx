@@ -27,6 +27,8 @@ export interface InvoicePdfData {
   dueDate: Date | null;
   currency: string;
   taxRate: number;
+  /** True = unit prices are gross (tax-inclusive); tax is back-calculated from the total. */
+  pricesIncludeTax: boolean;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -131,11 +133,15 @@ export function InvoiceDocument({
 
         <View style={styles.sectionGap}>
           <View style={styles.totalsRow}>
-            <Text style={styles.muted}>Subtotal</Text>
+            <Text style={styles.muted}>
+              {invoice.pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
+            </Text>
             <Text>{money(invoice.subtotalCents, invoice.currency)}</Text>
           </View>
           <View style={styles.totalsRow}>
-            <Text style={styles.muted}>Tax ({invoice.taxRate}%)</Text>
+            <Text style={styles.muted}>
+              Tax ({invoice.taxRate}%{invoice.pricesIncludeTax ? ", included" : ""})
+            </Text>
             <Text>{money(invoice.taxCents, invoice.currency)}</Text>
           </View>
           <View style={styles.totalRow}>
