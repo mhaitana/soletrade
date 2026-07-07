@@ -26,29 +26,62 @@ const createInvoiceMock = vi.fn();
 const createQuoteMock = vi.fn();
 const createTransactionMock = vi.fn();
 const createCustomerMock = vi.fn();
+const getCustomerMock = vi.fn();
+const getCustomerByEmailMock = vi.fn();
+const updateCustomerMock = vi.fn();
 const writeAuditMock = vi.fn();
+// Invoice/quote action mocks.
+const sendInvoiceMock = vi.fn();
+const voidInvoiceMock = vi.fn();
+const markInvoicePaidMock = vi.fn();
+const getInvoiceMock = vi.fn();
+const getQuoteMock = vi.fn();
+const markQuoteConvertedMock = vi.fn();
+// Books update/delete mocks.
+const updateTransactionMock = vi.fn();
+const deleteTransactionMock = vi.fn();
+// Drive write mocks.
+const createEarningMock = vi.fn();
+const createTripMock = vi.fn();
+const createExpenseMock = vi.fn();
+const listVehiclesMock = vi.fn();
 
 vi.mock("@/modules/invoices", () => ({
   listInvoices: (...a: unknown[]) => listInvoicesMock(...a),
   summarizeInvoices: (...a: unknown[]) => summarizeInvoicesMock(...a),
   createInvoice: (...a: unknown[]) => createInvoiceMock(...a),
+  sendInvoice: (...a: unknown[]) => sendInvoiceMock(...a),
+  voidInvoice: (...a: unknown[]) => voidInvoiceMock(...a),
+  markInvoicePaid: (...a: unknown[]) => markInvoicePaidMock(...a),
+  getInvoice: (...a: unknown[]) => getInvoiceMock(...a),
 }));
 vi.mock("@/modules/quotes", () => ({
   listQuotes: (...a: unknown[]) => listQuotesMock(...a),
   summarizeQuotes: (...a: unknown[]) => summarizeQuotesMock(...a),
   createQuote: (...a: unknown[]) => createQuoteMock(...a),
+  getQuote: (...a: unknown[]) => getQuoteMock(...a),
+  markQuoteConverted: (...a: unknown[]) => markQuoteConvertedMock(...a),
 }));
 vi.mock("@/modules/books", () => ({
   listTransactions: (...a: unknown[]) => listTransactionsMock(...a),
   summarizeTransactions: (...a: unknown[]) => summarizeTransactionsMock(...a),
   createTransaction: (...a: unknown[]) => createTransactionMock(...a),
+  updateTransaction: (...a: unknown[]) => updateTransactionMock(...a),
+  deleteTransaction: (...a: unknown[]) => deleteTransactionMock(...a),
 }));
 vi.mock("@/modules/drive", () => ({
   listEarnings: (...a: unknown[]) => listEarningsMock(...a),
+  createEarning: (...a: unknown[]) => createEarningMock(...a),
+  createTrip: (...a: unknown[]) => createTripMock(...a),
+  createExpense: (...a: unknown[]) => createExpenseMock(...a),
+  listVehicles: (...a: unknown[]) => listVehiclesMock(...a),
 }));
 vi.mock("@/platform/customers", () => ({
   listCustomers: (...a: unknown[]) => listCustomersMock(...a),
   createCustomer: (...a: unknown[]) => createCustomerMock(...a),
+  getCustomer: (...a: unknown[]) => getCustomerMock(...a),
+  getCustomerByEmail: (...a: unknown[]) => getCustomerByEmailMock(...a),
+  updateCustomer: (...a: unknown[]) => updateCustomerMock(...a),
 }));
 vi.mock("@/platform/activity", () => ({
   listActivity: (...a: unknown[]) => listActivityMock(...a),
@@ -196,10 +229,10 @@ describe("buildAssistantTools — execute trims + scopes to workspace", () => {
     });
   });
 
-  it("listCustomers trims rows (no id/workspaceId/notes/createdAt)", async () => {
+  it("listCustomers returns id + trimmed rows (no workspaceId/notes/createdAt)", async () => {
     listCustomersMock.mockResolvedValue([
       {
-        id: "secret",
+        id: "cust-1",
         workspaceId: "secret",
         name: "Jane Co",
         email: "jane@example.com",
@@ -212,13 +245,15 @@ describe("buildAssistantTools — execute trims + scopes to workspace", () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("readonly"), []);
     const out = (await run(tools.listCustomers, { search: "jane" })) as Record<string, unknown>[];
+    // id is returned so the model can call updateCustomer / attach to invoices.
     expect(out[0]).toMatchObject({
+      id: "cust-1",
       name: "Jane Co",
       email: "jane@example.com",
       company: "Jane Co Pty",
       phone: "+61",
     });
-    expect(out[0]).not.toHaveProperty("id");
+    expect(out[0]).not.toHaveProperty("workspaceId");
     expect(out[0]).not.toHaveProperty("notes");
     expect(out[0]).not.toHaveProperty("createdAt");
   });
@@ -303,59 +338,130 @@ describe("buildAssistantTools — write tools", () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("owner"), ALL_MODULES);
     expect(tools.createCustomer).toBeUndefined();
+    expect(tools.updateCustomer).toBeUndefined();
     expect(tools.createInvoice).toBeUndefined();
     expect(tools.createQuote).toBeUndefined();
     expect(tools.createTransaction).toBeUndefined();
+    expect(tools.createEarning).toBeUndefined();
+    expect(tools.updateTransaction).toBeUndefined();
+    expect(tools.deleteTransaction).toBeUndefined();
+    expect(tools.sendInvoice).toBeUndefined();
+    expect(tools.convertQuoteToInvoice).toBeUndefined();
   });
 
-  it("offers all four write tools to an owner when writeEnabled + all modules installed", async () => {
+  it("offers every write tool to an owner when writeEnabled + all modules installed", async () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    // Customer + invoice/quote/books/drive write tools + actions.
     expect(tools.createCustomer).toBeDefined();
+    expect(tools.updateCustomer).toBeDefined();
     expect(tools.createInvoice).toBeDefined();
     expect(tools.createQuote).toBeDefined();
     expect(tools.createTransaction).toBeDefined();
+    expect(tools.extractReceipt).toBeDefined();
+    expect(tools.createEarning).toBeDefined();
+    expect(tools.createTrip).toBeDefined();
+    expect(tools.createExpense).toBeDefined();
+    expect(tools.updateTransaction).toBeDefined();
+    expect(tools.deleteTransaction).toBeDefined();
+    expect(tools.sendInvoice).toBeDefined();
+    expect(tools.voidInvoice).toBeDefined();
+    expect(tools.markInvoicePaid).toBeDefined();
+    expect(tools.convertQuoteToInvoice).toBeDefined();
   });
 
   it("does not offer write tools to readonly even with writeEnabled on (fail-closed on manage:R)", async () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES, { writeEnabled: true });
-    // readonly has no manage:* grants at all.
+    // readonly has no manage:* grants at all → every write tool fail-closed.
     expect(tools.createCustomer).toBeUndefined();
+    expect(tools.updateCustomer).toBeUndefined();
     expect(tools.createInvoice).toBeUndefined();
     expect(tools.createQuote).toBeUndefined();
     expect(tools.createTransaction).toBeUndefined();
+    expect(tools.createEarning).toBeUndefined();
+    expect(tools.updateTransaction).toBeUndefined();
+    expect(tools.deleteTransaction).toBeUndefined();
+    expect(tools.sendInvoice).toBeUndefined();
+    expect(tools.convertQuoteToInvoice).toBeUndefined();
   });
 
-  it("does not offer createInvoice/createQuote/createTransaction when their module is uninstalled", async () => {
+  it("does not offer module-gated write tools when their module is uninstalled", async () => {
     const { buildAssistantTools } = await import("./tools");
-    // Only books installed — invoice/quote write tools absent, books + customer present.
+    // Only books installed — invoice/quote/drive write tools absent, books + customer present.
     const tools = buildAssistantTools(ctx("owner"), ["books"], { writeEnabled: true });
     expect(tools.createCustomer).toBeDefined();
+    expect(tools.updateCustomer).toBeDefined(); // customer tools are not module-gated.
     expect(tools.createTransaction).toBeDefined();
+    expect(tools.extractReceipt).toBeDefined();
+    expect(tools.updateTransaction).toBeDefined();
+    expect(tools.deleteTransaction).toBeDefined();
+    // Invoices / quotes / drive not installed.
     expect(tools.createInvoice).toBeUndefined();
     expect(tools.createQuote).toBeUndefined();
+    expect(tools.createEarning).toBeUndefined();
+    expect(tools.createTrip).toBeUndefined();
+    expect(tools.createExpense).toBeUndefined();
+    expect(tools.sendInvoice).toBeUndefined();
+    expect(tools.voidInvoice).toBeUndefined();
+    expect(tools.markInvoicePaid).toBeUndefined();
+    expect(tools.convertQuoteToInvoice).toBeUndefined();
   });
 
-  it("employee (create:invoice but not manage:invoice) gets no createInvoice write tool", async () => {
+  it("employee (create:invoice but not manage:invoice) gets customer+drive write tools, not invoice/quote/books", async () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("employee"), ALL_MODULES, { writeEnabled: true });
     // employee has manage:customer + manage:drive + manage:file, but only create:invoice/quote
-    // (not manage) → AI write tools for invoices/quotes are fail-closed.
+    // (not manage) → AI invoice/quote write tools + actions are fail-closed.
     expect(tools.createCustomer).toBeDefined();
-    expect(tools.createInvoice).toBeUndefined();
+    expect(tools.updateCustomer).toBeDefined();
+    expect(tools.createEarning).toBeDefined(); // employee has manage:drive
+    expect(tools.createTrip).toBeDefined();
+    expect(tools.createExpense).toBeDefined();
+    expect(tools.createInvoice).toBeUndefined(); // create:invoice but not manage:invoice
     expect(tools.createQuote).toBeUndefined();
+    expect(tools.sendInvoice).toBeUndefined();
+    expect(tools.convertQuoteToInvoice).toBeUndefined();
     // employee has no books grant at all.
     expect(tools.createTransaction).toBeUndefined();
+    expect(tools.updateTransaction).toBeUndefined();
+    expect(tools.deleteTransaction).toBeUndefined();
   });
 
-  it("manager lacks manage:books → no createTransaction even with writeEnabled on", async () => {
+  it("manager lacks manage:books → no books write tools even with writeEnabled on", async () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("manager"), ALL_MODULES, { writeEnabled: true });
-    expect(tools.createInvoice).toBeDefined(); // manager has manage:invoice
-    expect(tools.createQuote).toBeDefined(); // manager has manage:quote
-    expect(tools.createCustomer).toBeDefined(); // manager has manage:customer
-    expect(tools.createTransaction).toBeUndefined(); // manager only has view:books
+    // manager has manage:invoice/quote/customer/drive.
+    expect(tools.createInvoice).toBeDefined();
+    expect(tools.createQuote).toBeDefined();
+    expect(tools.createCustomer).toBeDefined();
+    expect(tools.updateCustomer).toBeDefined();
+    expect(tools.sendInvoice).toBeDefined();
+    expect(tools.voidInvoice).toBeDefined();
+    expect(tools.markInvoicePaid).toBeDefined();
+    expect(tools.convertQuoteToInvoice).toBeDefined();
+    expect(tools.createEarning).toBeDefined(); // manager has manage:drive
+    // manager only has view:books → books write tools fail-closed.
+    expect(tools.createTransaction).toBeUndefined();
+    expect(tools.updateTransaction).toBeUndefined();
+    expect(tools.deleteTransaction).toBeUndefined();
+    expect(tools.extractReceipt).toBeUndefined();
+  });
+
+  it("accountant lacks manage:drive → no drive write tools even with writeEnabled on", async () => {
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("accountant"), ALL_MODULES, { writeEnabled: true });
+    // accountant has manage:books/invoice/quote/customer.
+    expect(tools.createTransaction).toBeDefined();
+    expect(tools.updateTransaction).toBeDefined();
+    expect(tools.deleteTransaction).toBeDefined();
+    expect(tools.createInvoice).toBeDefined();
+    expect(tools.sendInvoice).toBeDefined();
+    expect(tools.convertQuoteToInvoice).toBeDefined();
+    // accountant has NO manage:drive → drive write tools fail-closed.
+    expect(tools.createEarning).toBeUndefined();
+    expect(tools.createTrip).toBeUndefined();
+    expect(tools.createExpense).toBeUndefined();
   });
 
   it("createInvoice execute calls the service with the ctx workspaceId + actorId and returns a trimmed id", async () => {
@@ -380,6 +486,79 @@ describe("buildAssistantTools — write tools", () => {
       lineItems: [{ description: "Consulting", quantity: 10, unitPriceCents: 5000 }],
     });
     expect(input.issueDate).toBeInstanceOf(Date);
+  });
+
+  it("createInvoice resolves customerEmail to the active customer id (preferred over passing a uuid)", async () => {
+    // Email is the stable, human-meaningful reference the model reliably carries;
+    // the tool resolves it server-side so the model never has to transcribe a uuid.
+    getCustomerByEmailMock.mockResolvedValue({ id: "cust-amos", name: "Amos Palfreyman" });
+    createInvoiceMock.mockResolvedValue("inv-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.createInvoice, {
+      customerEmail: "amos@miruku.com",
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 0,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    })) as { id: string };
+    expect(out).toEqual({ id: "inv-new-id" });
+    expect(getCustomerByEmailMock).toHaveBeenCalledWith(c.workspaceId, "amos@miruku.com");
+    expect(createInvoiceMock).toHaveBeenCalledTimes(1);
+    const [, input] = createInvoiceMock.mock.calls[0]!;
+    // The resolved id (not the email, not a uuid) is passed to the service.
+    expect(input).toMatchObject({ customerId: "cust-amos" });
+    expect(input).not.toHaveProperty("customerEmail");
+  });
+
+  it("createInvoice returns a friendly, recoverable error when the customer email isn't found", async () => {
+    getCustomerByEmailMock.mockResolvedValue(null);
+    createInvoiceMock.mockResolvedValue("inv-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.createInvoice, {
+      customerEmail: "nobody@x.test",
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 0,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    })) as { error: string };
+    expect(out.error).toMatch(/couldn't find a customer with email nobody@x.test/);
+    // The service is NOT called — no half-created invoice.
+    expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("createInvoice returns a friendly error for a stale customerId (no raw 'not found' throw)", async () => {
+    getCustomerMock.mockResolvedValue(null);
+    createInvoiceMock.mockResolvedValue("inv-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.createInvoice, {
+      customerId: "00000000-0000-4000-8000-0000000000f1",
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 0,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    })) as { error: string };
+    expect(out.error).toMatch(/couldn't find that customer/i);
+    expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("createQuote resolves customerEmail to the active customer id", async () => {
+    getCustomerByEmailMock.mockResolvedValue({ id: "cust-amos", name: "Amos Palfreyman" });
+    createQuoteMock.mockResolvedValue("quo-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.createQuote, {
+      customerEmail: "amos@miruku.com",
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 0,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    })) as { id: string };
+    expect(out).toEqual({ id: "quo-new-id" });
+    expect(getCustomerByEmailMock).toHaveBeenCalledWith(c.workspaceId, "amos@miruku.com");
+    const [, input] = createQuoteMock.mock.calls[0]!;
+    expect(input).toMatchObject({ customerId: "cust-amos" });
+    expect(input).not.toHaveProperty("customerEmail");
   });
 
   it("createCustomer execute wraps the event-only service with writeAudit", async () => {
@@ -407,6 +586,109 @@ describe("buildAssistantTools — write tools", () => {
     expect(audit.metadata).toMatchObject({ source: "ai_assistant", name: "Acme Pty" });
   });
 
+  it("createCustomer returns the existing customer on a duplicate-email collision (no create, no audit)", async () => {
+    // The service throws the partial-unique-index violation; the tool recovers by
+    // returning the existing customer with `existed: true` so the model can say
+    // "already exists — using them" and continue, instead of a raw Postgres error.
+    createCustomerMock.mockRejectedValue(
+      new Error('duplicate key value violates unique constraint "customers_workspace_email_unique"'),
+    );
+    getCustomerByEmailMock.mockResolvedValue({ id: "cust-existing-id", name: "Acme Pty" });
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.createCustomer, { name: "Acme Pty", email: "acme@x.test" })) as {
+      id: string;
+      name: string;
+      existed: boolean;
+    };
+    expect(out).toEqual({ id: "cust-existing-id", name: "Acme Pty", existed: true });
+    expect(getCustomerByEmailMock).toHaveBeenCalledWith(c.workspaceId, "acme@x.test");
+    // Nothing was created → no audit, no second createCustomer call beyond the first.
+    expect(createCustomerMock).toHaveBeenCalledTimes(1);
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("createCustomer re-throws a non-duplicate error so it surfaces honestly", async () => {
+    createCustomerMock.mockRejectedValue(new Error("connection refused"));
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    await expect(run(tools.createCustomer, { name: "Acme Pty" })).rejects.toThrow("connection refused");
+    expect(getCustomerByEmailMock).not.toHaveBeenCalled();
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("updateCustomer execute patches the customer (strips customerId from the patch) + audits", async () => {
+    updateCustomerMock.mockResolvedValue(undefined);
+    writeAuditMock.mockResolvedValue(undefined);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.updateCustomer, {
+      customerId: "00000000-0000-4000-8000-0000000000d1",
+      phone: "+642742709347",
+    })) as { id: string; updated: boolean };
+    expect(out).toEqual({ id: "00000000-0000-4000-8000-0000000000d1", updated: true });
+    // The service receives the patch WITHOUT customerId, with the ctx workspaceId + actor.
+    expect(updateCustomerMock).toHaveBeenCalledTimes(1);
+    const [wsId, custId, patch, actorId] = updateCustomerMock.mock.calls[0]!;
+    expect(wsId).toBe(c.workspaceId);
+    expect(custId).toBe("00000000-0000-4000-8000-0000000000d1");
+    expect(actorId).toBe(c.user.id);
+    expect(patch).toEqual({ phone: "+642742709347" });
+    expect(patch).not.toHaveProperty("customerId");
+    // Audited as customer.update with the changed fields.
+    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+    const audit = writeAuditMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(audit).toMatchObject({
+      workspaceId: c.workspaceId,
+      actorUserId: c.user.id,
+      action: "customer.update",
+      targetType: "customer",
+      targetId: "00000000-0000-4000-8000-0000000000d1",
+    });
+    expect(audit.metadata).toMatchObject({ source: "ai_assistant", fields: ["phone"] });
+  });
+
+  it("updateCustomer returns a friendly error when the customer isn't found", async () => {
+    updateCustomerMock.mockRejectedValue(new Error("Customer not found."));
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.updateCustomer, {
+      customerId: "00000000-0000-4000-8000-0000000000d2",
+      phone: "+61",
+    })) as { error: string };
+    expect(out).toEqual({ error: "Customer not found." });
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("updateCustomer returns a friendly error on a duplicate-email collision", async () => {
+    updateCustomerMock.mockRejectedValue(
+      new Error('duplicate key value violates unique constraint "customers_workspace_email_unique"'),
+    );
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.updateCustomer, {
+      customerId: "00000000-0000-4000-8000-0000000000d3",
+      email: "taken@x.test",
+    })) as { error: string };
+    expect(out).toEqual({ error: "Another customer with that email already exists." });
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("updateCustomer re-throws a non-matching error so it surfaces honestly", async () => {
+    updateCustomerMock.mockRejectedValue(new Error("connection refused"));
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    await expect(
+      run(tools.updateCustomer, {
+        customerId: "00000000-0000-4000-8000-0000000000d4",
+        phone: "+61",
+      }),
+    ).rejects.toThrow("connection refused");
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
   it("createTransaction execute passes type/amount/date/category through to the service", async () => {
     createTransactionMock.mockResolvedValue("txn-new-id");
     const { buildAssistantTools } = await import("./tools");
@@ -429,5 +711,422 @@ describe("buildAssistantTools — write tools", () => {
     });
     expect(input.date).toBeInstanceOf(Date);
     expect(actorId).toBe(c.user.id);
+  });
+
+  it("createTransaction returns a friendly error listing valid slugs on a wrong category (no service call)", async () => {
+    // The model picks a category freely; "supplies" is expense-only, not valid for income.
+    // Pre-validation returns a friendly error listing the valid income slugs so the model
+    // can retry — instead of a raw "Unknown category" throw dumping into the chat.
+    createTransactionMock.mockResolvedValue("txn-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    const out = (await run(tools.createTransaction, {
+      type: "income",
+      amountCents: 10000,
+      date: "2026-07-06T00:00:00.000Z",
+      description: "Consulting",
+      category: "supplies",
+    })) as { error: string };
+    expect(out.error).toMatch(/Unknown category "supplies" for income/);
+    expect(out.error).toMatch(/sales, services, software/);
+    expect(createTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("createTransaction resolves customerEmail to the active customer id", async () => {
+    getCustomerByEmailMock.mockResolvedValue({ id: "cust-amos", name: "Amos" });
+    createTransactionMock.mockResolvedValue("txn-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("accountant");
+    const tools = buildAssistantTools(c, ["books"], { writeEnabled: true });
+    const out = (await run(tools.createTransaction, {
+      type: "income",
+      amountCents: 5000,
+      date: "2026-07-06T00:00:00.000Z",
+      description: "Services",
+      category: "services",
+      customerEmail: "amos@miruku.com",
+    })) as { id: string };
+    expect(out).toEqual({ id: "txn-new-id" });
+    const [, input] = createTransactionMock.mock.calls[0]!;
+    expect(input).toMatchObject({ customerId: "cust-amos" });
+    expect(input).not.toHaveProperty("customerEmail");
+  });
+
+  it("createInvoice returns a friendly error on a number-race unique throw (no raw Postgres dump)", async () => {
+    createInvoiceMock.mockRejectedValue(
+      new Error('duplicate key value violates unique constraint "invoices_number_unique"'),
+    );
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.createInvoice, {
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 10,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    })) as { error: string };
+    expect(out.error).toMatch(/unique invoice number just now/);
+  });
+
+  it("createQuote returns a friendly error on a number-race unique throw", async () => {
+    createQuoteMock.mockRejectedValue(
+      new Error('duplicate key value violates unique constraint "quotes_number_unique"'),
+    );
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.createQuote, {
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 10,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    })) as { error: string };
+    expect(out.error).toMatch(/unique quote number just now/);
+  });
+
+  it("listInvoices passes the search filter through to the service", async () => {
+    listInvoicesMock.mockResolvedValue([]);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("readonly");
+    const tools = buildAssistantTools(c, ALL_MODULES);
+    await run(tools.listInvoices, { search: "INV-2026-0007" });
+    expect(listInvoicesMock).toHaveBeenCalledWith(c.workspaceId, {
+      status: undefined,
+      search: "INV-2026-0007",
+      limit: 20,
+    });
+  });
+
+  it("listTransactions passes search through and returns the row id", async () => {
+    listTransactionsMock.mockResolvedValue([
+      {
+        id: "txn-1",
+        type: "expense",
+        amountCents: 6000,
+        currency: "AUD",
+        date: new Date("2026-07-06T00:00:00.000Z"),
+        description: "Fuel",
+        category: "travel",
+        customerName: null,
+      },
+    ]);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("readonly");
+    const tools = buildAssistantTools(c, ALL_MODULES);
+    const out = (await run(tools.listTransactions, { search: "fuel" })) as Record<string, unknown>[];
+    expect(listTransactionsMock).toHaveBeenCalledWith(c.workspaceId, {
+      type: undefined,
+      search: "fuel",
+      dateFrom: undefined,
+      dateTo: undefined,
+      limit: 20,
+    });
+    expect(out[0]).toMatchObject({ id: "txn-1", category: "travel" });
+  });
+
+  // ── Drive write tools ────────────────────────────────────────────────────────
+
+  it("createEarning validates the platform slug and calls the service with the ctx workspaceId + actor", async () => {
+    createEarningMock.mockResolvedValue("earn-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("employee");
+    const tools = buildAssistantTools(c, ["drive"], { writeEnabled: true });
+    const out = (await run(tools.createEarning, {
+      platform: "uber",
+      amountCents: 12000,
+      date: "2026-07-06T00:00:00.000Z",
+      description: "Evening shift",
+    })) as { id: string };
+    expect(out).toEqual({ id: "earn-new-id" });
+    const [wsId, input, actorId] = createEarningMock.mock.calls[0]!;
+    expect(wsId).toBe(c.workspaceId);
+    expect(actorId).toBe(c.user.id);
+    expect(input).toMatchObject({ platform: "uber", amountCents: 12000 });
+    expect(input.date).toBeInstanceOf(Date);
+  });
+
+  it("createEarning returns a friendly error listing valid platforms on a bad slug (no service call)", async () => {
+    createEarningMock.mockResolvedValue("earn-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("employee"), ["drive"], { writeEnabled: true });
+    const out = (await run(tools.createEarning, {
+      platform: "ubr",
+      amountCents: 12000,
+      date: "2026-07-06T00:00:00.000Z",
+      description: "Evening shift",
+    })) as { error: string };
+    expect(out.error).toMatch(/Unknown platform "ubr"/);
+    expect(out.error).toMatch(/uber, uber_eats, doordash/);
+    expect(createEarningMock).not.toHaveBeenCalled();
+  });
+
+  it("createTrip converts distanceKm to integer meters before calling the service", async () => {
+    createTripMock.mockResolvedValue("trip-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("employee");
+    const tools = buildAssistantTools(c, ["drive"], { writeEnabled: true });
+    const out = (await run(tools.createTrip, {
+      platform: "doordash",
+      distanceKm: 45.3,
+      date: "2026-07-06T00:00:00.000Z",
+    })) as { id: string };
+    expect(out).toEqual({ id: "trip-new-id" });
+    const [, input] = createTripMock.mock.calls[0]!;
+    // 45.3 km → 45300 meters (rounded).
+    expect(input).toMatchObject({ platform: "doordash", distanceMeters: 45300 });
+  });
+
+  it("createExpense resolves vehicleName to the vehicle id via listVehicles (case-insensitive)", async () => {
+    listVehiclesMock.mockResolvedValue([
+      { id: "veh-hilux", name: "Hilux" },
+      { id: "veh-mazda", name: "Mazda" },
+    ]);
+    createExpenseMock.mockResolvedValue("exp-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("employee");
+    const tools = buildAssistantTools(c, ["drive"], { writeEnabled: true });
+    const out = (await run(tools.createExpense, {
+      vehicleName: "hilux",
+      type: "fuel",
+      amountCents: 6000,
+      date: "2026-07-06T00:00:00.000Z",
+      description: "Fill up",
+    })) as { id: string };
+    expect(out).toEqual({ id: "exp-new-id" });
+    const [, input] = createExpenseMock.mock.calls[0]!;
+    expect(input).toMatchObject({ vehicleId: "veh-hilux", type: "fuel", amountCents: 6000 });
+  });
+
+  it("createExpense returns a friendly error when the vehicle isn't found (no createExpense call)", async () => {
+    listVehiclesMock.mockResolvedValue([{ id: "veh-hilux", name: "Hilux" }]);
+    createExpenseMock.mockResolvedValue("exp-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("employee"), ["drive"], { writeEnabled: true });
+    const out = (await run(tools.createExpense, {
+      vehicleName: "Tractor",
+      type: "fuel",
+      amountCents: 6000,
+      date: "2026-07-06T00:00:00.000Z",
+      description: "Fill up",
+    })) as { error: string };
+    expect(out.error).toMatch(/Vehicle "Tractor" not found/);
+    expect(createExpenseMock).not.toHaveBeenCalled();
+  });
+
+  // ── Books update/delete ─────────────────────────────────────────────────────
+
+  it("updateTransaction patches the transaction and returns { id, updated: true }", async () => {
+    updateTransactionMock.mockResolvedValue(undefined);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("accountant");
+    const tools = buildAssistantTools(c, ["books"], { writeEnabled: true });
+    const out = (await run(tools.updateTransaction, {
+      transactionId: "00000000-0000-4000-8000-0000000000e1",
+      category: "travel",
+    })) as { id: string; updated: boolean };
+    expect(out).toEqual({ id: "00000000-0000-4000-8000-0000000000e1", updated: true });
+    const [wsId, txId, patch, actorId] = updateTransactionMock.mock.calls[0]!;
+    expect(wsId).toBe(c.workspaceId);
+    expect(actorId).toBe(c.user.id);
+    expect(patch).toMatchObject({ category: "travel" });
+    expect(txId).toBeDefined();
+  });
+
+  it("updateTransaction returns a friendly error when type changes without a category", async () => {
+    updateTransactionMock.mockResolvedValue(undefined);
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    const out = (await run(tools.updateTransaction, {
+      transactionId: "00000000-0000-4000-8000-0000000000e2",
+      type: "expense",
+    })) as { error: string };
+    expect(out.error).toMatch(/Category is required when changing transaction type/);
+    expect(updateTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("updateTransaction returns a friendly error for a category invalid for the new type", async () => {
+    updateTransactionMock.mockResolvedValue(undefined);
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    const out = (await run(tools.updateTransaction, {
+      transactionId: "00000000-0000-4000-8000-0000000000e3",
+      type: "income",
+      category: "rent",
+    })) as { error: string };
+    expect(out.error).toMatch(/Unknown category "rent" for income/);
+    expect(updateTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("updateTransaction returns a friendly 'Transaction not found.' when the service throws not-found", async () => {
+    updateTransactionMock.mockRejectedValue(new Error("Transaction not found."));
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    const out = (await run(tools.updateTransaction, {
+      transactionId: "00000000-0000-4000-8000-0000000000e4",
+      description: "Updated",
+    })) as { error: string };
+    expect(out.error).toBe("Transaction not found.");
+  });
+
+  it("deleteTransaction returns { id, deleted: true } on success", async () => {
+    deleteTransactionMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("accountant");
+    const tools = buildAssistantTools(c, ["books"], { writeEnabled: true });
+    const out = (await run(tools.deleteTransaction, {
+      transactionId: "00000000-0000-4000-8000-0000000000e5",
+    })) as { id: string; deleted: boolean };
+    expect(out).toEqual({ id: "00000000-0000-4000-8000-0000000000e5", deleted: true });
+    expect(deleteTransactionMock).toHaveBeenCalledWith(c.workspaceId, expect.anything(), c.user.id);
+  });
+
+  it("deleteTransaction returns a friendly error when the service reports not found (returns false)", async () => {
+    deleteTransactionMock.mockResolvedValue(false);
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    const out = (await run(tools.deleteTransaction, {
+      transactionId: "00000000-0000-4000-8000-0000000000e6",
+    })) as { error: string };
+    expect(out.error).toBe("Transaction not found.");
+  });
+
+  // ── Invoice/quote action tools (resolve by number) ───────────────────────────
+
+  it("sendInvoice resolves the invoice by number and returns { sent: true, number }", async () => {
+    // resolveInvoiceByNumber reuses listInvoices search then exact-matches the number.
+    listInvoicesMock.mockResolvedValue([
+      { id: "inv-7", number: "INV-2026-0007", status: "draft" },
+    ]);
+    sendInvoiceMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.sendInvoice, { invoiceNumber: "INV-2026-0007" })) as {
+      sent: boolean;
+      number: string;
+    };
+    expect(out).toEqual({ sent: true, number: "INV-2026-0007" });
+    expect(sendInvoiceMock).toHaveBeenCalledWith(c.workspaceId, "inv-7", c.user.id);
+  });
+
+  it("sendInvoice returns a friendly error when the invoice number isn't found", async () => {
+    listInvoicesMock.mockResolvedValue([]);
+    sendInvoiceMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.sendInvoice, { invoiceNumber: "INV-9999" })) as { error: string };
+    expect(out.error).toMatch(/Invoice INV-9999 not found/);
+    expect(sendInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("sendInvoice returns a friendly state error when the service returns false (already sent)", async () => {
+    listInvoicesMock.mockResolvedValue([
+      { id: "inv-7", number: "INV-2026-0007", status: "sent" },
+    ]);
+    sendInvoiceMock.mockResolvedValue(false);
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.sendInvoice, { invoiceNumber: "INV-2026-0007" })) as { error: string };
+    expect(out.error).toMatch(/isn't a draft/);
+  });
+
+  it("voidInvoice resolves by number and returns { voided: true, number }", async () => {
+    listInvoicesMock.mockResolvedValue([{ id: "inv-7", number: "INV-2026-0007", status: "draft" }]);
+    voidInvoiceMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.voidInvoice, { invoiceNumber: "INV-2026-0007" })) as {
+      voided: boolean;
+      number: string;
+    };
+    expect(out).toEqual({ voided: true, number: "INV-2026-0007" });
+    expect(voidInvoiceMock).toHaveBeenCalledWith(c.workspaceId, "inv-7", c.user.id);
+  });
+
+  it("markInvoicePaid resolves by number and returns { paid: true, number }", async () => {
+    listInvoicesMock.mockResolvedValue([{ id: "inv-7", number: "INV-2026-0007", status: "sent" }]);
+    markInvoicePaidMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.markInvoicePaid, { invoiceNumber: "INV-2026-0007" })) as {
+      paid: boolean;
+      number: string;
+    };
+    expect(out).toEqual({ paid: true, number: "INV-2026-0007" });
+    expect(markInvoicePaidMock).toHaveBeenCalledWith(c.workspaceId, "inv-7", c.user.id);
+  });
+
+  it("convertQuoteToInvoice creates an invoice from the accepted quote's line items and marks it converted", async () => {
+    // resolveQuoteByNumber reuses listQuotes search then exact-matches.
+    listQuotesMock.mockResolvedValue([{ id: "quo-3", number: "QUO-2026-0003", status: "accepted" }]);
+    getQuoteMock.mockResolvedValue({
+      id: "quo-3",
+      customerId: "cust-amos",
+      currency: "AUD",
+      taxRate: 10,
+      notes: null,
+      status: "accepted",
+      lineItems: [
+        { description: "Build site", quantity: 1, unitPriceCents: 50000 },
+        { description: "Consulting", quantity: 2, unitPriceCents: 10000 },
+      ],
+    });
+    createInvoiceMock.mockResolvedValue("inv-new-id");
+    getInvoiceMock.mockResolvedValue({ id: "inv-new-id", number: "INV-2026-0008" });
+    markQuoteConvertedMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("./tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.convertQuoteToInvoice, { quoteNumber: "QUO-2026-0003" })) as {
+      invoiceId: string;
+      invoiceNumber: string;
+    };
+    expect(out).toEqual({ invoiceId: "inv-new-id", invoiceNumber: "INV-2026-0008" });
+    // createInvoice received the quote's customer + line items.
+    const [, invInput] = createInvoiceMock.mock.calls[0]!;
+    expect(invInput).toMatchObject({ customerId: "cust-amos", currency: "AUD", taxRate: 10 });
+    expect(invInput.lineItems).toHaveLength(2);
+    expect(invInput.issueDate).toBeInstanceOf(Date);
+    // markQuoteConverted received the new invoice id + number.
+    expect(markQuoteConvertedMock).toHaveBeenCalledWith(
+      c.workspaceId,
+      "quo-3",
+      "inv-new-id",
+      "INV-2026-0008",
+      c.user.id,
+    );
+  });
+
+  it("convertQuoteToInvoice returns a friendly error when the quote isn't accepted yet", async () => {
+    listQuotesMock.mockResolvedValue([{ id: "quo-3", number: "QUO-2026-0003", status: "sent" }]);
+    getQuoteMock.mockResolvedValue({
+      id: "quo-3",
+      customerId: null,
+      currency: "AUD",
+      taxRate: 0,
+      notes: null,
+      status: "sent",
+      lineItems: [],
+    });
+    createInvoiceMock.mockResolvedValue("inv-new-id");
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.convertQuoteToInvoice, { quoteNumber: "QUO-2026-0003" })) as {
+      error: string;
+    };
+    expect(out.error).toMatch(/isn't accepted yet/);
+    // No invoice created for a non-accepted quote.
+    expect(createInvoiceMock).not.toHaveBeenCalled();
+    expect(markQuoteConvertedMock).not.toHaveBeenCalled();
+  });
+
+  it("convertQuoteToInvoice returns a friendly error when the quote number isn't found", async () => {
+    listQuotesMock.mockResolvedValue([]);
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = (await run(tools.convertQuoteToInvoice, { quoteNumber: "QUO-9999" })) as {
+      error: string;
+    };
+    expect(out.error).toMatch(/Quote QUO-9999 not found/);
+    expect(getQuoteMock).not.toHaveBeenCalled();
+    expect(createInvoiceMock).not.toHaveBeenCalled();
   });
 });

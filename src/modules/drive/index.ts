@@ -36,12 +36,14 @@ import type {
  * `drive-platforms` catalog, validated here as a defensive guard (the action already
  * validates). Delete is hard-delete + audit-logged; soft-delete is a later phase.
  *
- * Events fire on **create only** (`DriveEarningsLogged` / `MileageLogged`) — the activity feed
- * shows the meaningful "logged" moment. Edits/deletes are silent (no event) and don't ripple
- * to Books (the `DriveEarningsLogged → Books income` subscriber, in
- * `@/modules/books/integration`, only reacts to the create — a documented no-reversal
- * limitation, same as the 6c InvoicePaid integration). All mutations write audit
- * (`drive.earning.*` / `drive.trip.*`); the action layer does not audit (mirrors Books).
+ * Events fire on **every mutation**: creates publish `DriveEarningsLogged` /
+ * `VehicleExpenseLogged` / `MileageLogged` (the meaningful "logged" moment for the activity
+ * feed), and edits/deletes publish `*Updated` / `*Deleted` so the Books mirror stays in sync
+ * (the `@/modules/books/integration` subscribers reconcile the mirrored row — "Drive wins",
+ * unconditional overwrite). `MileageLogged` carries the computed deduction amount
+ * (distance × workspace mileage rate) so the Books expense row is created at log time. All
+ * mutations write audit (`drive.earning.*` / `drive.trip.*`); the action layer does not audit
+ * (mirrors Books).
  *
  * `actorId` is **required** for every mutation — earnings/trips are always user-logged, so
  * there is no system-actor path (unlike Books' optional `actorId` for the InvoicePaid
@@ -138,6 +140,15 @@ function assertPlatform(platform: string): void {
   }
 }
 
+/**
+ * Mileage deduction in integer cents for a distance (ATO cents-per-km): `round(km * rate)`.
+ * 0 when the rate is unset/zero. Mirrors the calc in `./calc.ts` so the per-trip Books row
+ * matches the Drive page's summary-time deduction.
+ */
+function mileageAmountCents(distanceMeters: number, rateCentsPerKm: number): number {
+  return rateCentsPerKm > 0 ? Math.round((distanceMeters / 1000) * rateCentsPerKm) : 0;
+}
+
 // ─────────────────────────── Earnings CRUD ─────────────────────────────
 
 /** Create an earning. Validates the platform + publishes `DriveEarningsLogged` + audits. */
@@ -215,9 +226,32 @@ export async function updateEarning(
     .update(driveEarnings)
     .set(set)
     .where(and(eq(driveEarnings.id, earningId), eq(driveEarnings.workspaceId, workspaceId)))
-    .returning({ id: driveEarnings.id });
-  if (!rows[0]) throw new Error("Earning not found.");
+    .returning({
+      id: driveEarnings.id,
+      platform: driveEarnings.platform,
+      amountCents: driveEarnings.amountCents,
+      currency: driveEarnings.currency,
+      date: driveEarnings.date,
+      description: driveEarnings.description,
+    });
+  const row = rows[0];
+  if (!row) throw new Error("Earning not found.");
 
+  await publishEvent({
+    type: "DriveEarningUpdated",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "drive_earning",
+    entityId: row.id,
+    metadata: {
+      earningId: row.id,
+      platform: row.platform,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      date: row.date,
+      description: row.description,
+    },
+  });
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -246,6 +280,14 @@ export async function deleteEarning(
   const row = rows[0];
   if (!row) return false;
 
+  await publishEvent({
+    type: "DriveEarningDeleted",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "drive_earning",
+    entityId: row.id,
+    metadata: { earningId: row.id },
+  });
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -318,6 +360,9 @@ export async function createTrip(
   if (input.distanceMeters <= 0) throw new Error("Distance must be greater than 0.");
   assertPlatform(input.platform);
 
+  const settings = await getDriveSettings(workspaceId);
+  const amountCents = mileageAmountCents(input.distanceMeters, settings.mileageRateCentsPerKm);
+
   const db = getDb();
   const rows = await db
     .insert(driveTrips)
@@ -340,9 +385,12 @@ export async function createTrip(
     entityType: "drive_trip",
     entityId: row.id,
     metadata: {
+      tripId: row.id,
       platform: input.platform,
       distanceMeters: input.distanceMeters,
       date: input.date,
+      amountCents,
+      currency: "AUD",
     },
   });
   await writeAudit({
@@ -380,9 +428,34 @@ export async function updateTrip(
     .update(driveTrips)
     .set(set)
     .where(and(eq(driveTrips.id, tripId), eq(driveTrips.workspaceId, workspaceId)))
-    .returning({ id: driveTrips.id });
-  if (!rows[0]) throw new Error("Trip not found.");
+    .returning({
+      id: driveTrips.id,
+      platform: driveTrips.platform,
+      distanceMeters: driveTrips.distanceMeters,
+      date: driveTrips.date,
+    });
+  const row = rows[0];
+  if (!row) throw new Error("Trip not found.");
 
+  // Recompute the deduction with the current workspace mileage rate so the Books mirror
+  // stays in step with the Drive page's summary-time calc.
+  const settings = await getDriveSettings(workspaceId);
+  const amountCents = mileageAmountCents(row.distanceMeters, settings.mileageRateCentsPerKm);
+  await publishEvent({
+    type: "MileageUpdated",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "drive_trip",
+    entityId: row.id,
+    metadata: {
+      tripId: row.id,
+      platform: row.platform,
+      distanceMeters: row.distanceMeters,
+      date: row.date,
+      amountCents,
+      currency: "AUD",
+    },
+  });
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -411,6 +484,14 @@ export async function deleteTrip(
   const row = rows[0];
   if (!row) return false;
 
+  await publishEvent({
+    type: "MileageDeleted",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "drive_trip",
+    entityId: row.id,
+    metadata: { tripId: row.id },
+  });
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -779,8 +860,33 @@ export async function updateExpense(
         eq(driverVehicleExpenses.workspaceId, workspaceId),
       ),
     )
-    .returning({ id: driverVehicleExpenses.id });
-  if (!rows[0]) throw new Error("Vehicle expense not found.");
+    .returning({
+      id: driverVehicleExpenses.id,
+      vehicleId: driverVehicleExpenses.vehicleId,
+      type: driverVehicleExpenses.type,
+      amountCents: driverVehicleExpenses.amountCents,
+      currency: driverVehicleExpenses.currency,
+      date: driverVehicleExpenses.date,
+      description: driverVehicleExpenses.description,
+    });
+  const row = rows[0];
+  if (!row) throw new Error("Vehicle expense not found.");
+  await publishEvent({
+    type: "VehicleExpenseUpdated",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "drive_expense",
+    entityId: row.id,
+    metadata: {
+      expenseId: row.id,
+      vehicleId: row.vehicleId,
+      type: row.type,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      date: row.date,
+      description: row.description,
+    },
+  });
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -813,6 +919,14 @@ export async function deleteExpense(
     });
   const row = rows[0];
   if (!row) return false;
+  await publishEvent({
+    type: "VehicleExpenseDeleted",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "drive_expense",
+    entityId: row.id,
+    metadata: { expenseId: row.id },
+  });
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -947,4 +1061,79 @@ export async function upsertDriveSettings(
       defaultVehicleId: input.defaultVehicleId ?? null,
     },
   });
+}
+
+// ─────────────────────────── Backfill (Wave 5) ──────────────────────────────
+
+/**
+ * Re-publish `DriveEarningsLogged` / `VehicleExpenseLogged` / `MileageLogged` for every
+ * existing Drive row in the workspace. The Books subscribers' check-then-insert makes this
+ * idempotent — already-mirrored rows are skipped, missing ones are created. Used when Books
+ * is enabled for a workspace that already has Drive entries (the create-time subscribers
+ * no-op'd while Books was disabled). Orchestrated from `src/instrumentation.ts` on the
+ * `ModuleEnabled` event so the Books module never imports Drive directly (cross-module
+ * coupling goes via the bus).
+ */
+export async function replayDriveEventsForBooks(
+  workspaceId: WorkspaceId,
+  actorId?: UserId,
+): Promise<void> {
+  const [earnings, expenses, trips, settings] = await Promise.all([
+    listEarnings(workspaceId, { limit: 2000 }),
+    listExpenses(workspaceId, { limit: 2000 }),
+    listTrips(workspaceId, { limit: 2000 }),
+    getDriveSettings(workspaceId),
+  ]);
+
+  for (const e of earnings) {
+    await publishEvent({
+      type: "DriveEarningsLogged",
+      workspaceId,
+      actorUserId: actorId,
+      entityType: "drive_earning",
+      entityId: e.id,
+      metadata: {
+        platform: e.platform,
+        amountCents: e.amountCents,
+        currency: e.currency,
+        date: e.date,
+        description: e.description,
+      },
+    });
+  }
+  for (const x of expenses) {
+    await publishEvent({
+      type: "VehicleExpenseLogged",
+      workspaceId,
+      actorUserId: actorId,
+      entityType: "drive_expense",
+      entityId: x.id,
+      metadata: {
+        expenseId: x.id,
+        vehicleId: x.vehicleId,
+        type: x.type,
+        amountCents: x.amountCents,
+        currency: x.currency,
+        date: x.date,
+        description: x.description,
+      },
+    });
+  }
+  for (const t of trips) {
+    await publishEvent({
+      type: "MileageLogged",
+      workspaceId,
+      actorUserId: actorId,
+      entityType: "drive_trip",
+      entityId: t.id,
+      metadata: {
+        tripId: t.id,
+        platform: t.platform,
+        distanceMeters: t.distanceMeters,
+        date: t.date,
+        amountCents: mileageAmountCents(t.distanceMeters, settings.mileageRateCentsPerKm),
+        currency: "AUD",
+      },
+    });
+  }
 }

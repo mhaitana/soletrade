@@ -209,6 +209,7 @@ async function booksCards(
 async function driveCard(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
+  booksEnabled: boolean,
 ): Promise<{ card: ModuleCardData }> {
   // Drive has no headline KPI in the 4-card row, so no previous-period fetch — current period
   // only (earnings + trips in parallel).
@@ -229,24 +230,33 @@ async function driveCard(
     trips.map((t) => ({ distanceMeters: t.distanceMeters, date: t.date, platform: t.platform })),
   );
 
+  // When Books is installed it is the single source of truth for dollar earnings/expenses —
+  // the mirrored gig income already appears in the Books card. So the Drive card shows only
+  // operational (non-dollar) metrics: distance + trips, with a distance trend. Drive-only
+  // workspaces (no Books) still see dollar earnings here, since there's no Books to defer to.
   const card: ModuleCardData = {
     key: "drive",
     href: "/drive",
     name: MODULES.drive.name,
-    metrics: [
-      { label: "Earnings", value: formatCents(cur.totalEarningsCents, CURRENCY) },
-      { label: "Mileage", value: formatKm(cur.totalDistanceMeters) },
-      { label: "Trips", value: String(cur.tripsCount) },
-    ],
+    metrics: booksEnabled
+      ? [
+          { label: "Mileage", value: formatKm(cur.totalDistanceMeters) },
+          { label: "Trips", value: String(cur.tripsCount) },
+        ]
+      : [
+          { label: "Earnings", value: formatCents(cur.totalEarningsCents, CURRENCY) },
+          { label: "Mileage", value: formatKm(cur.totalDistanceMeters) },
+          { label: "Trips", value: String(cur.tripsCount) },
+        ],
     sparkline:
       cur.monthly.length > 0
         ? {
-            ariaLabel: "Monthly gig earnings trend",
-            points: cur.monthly.map((m) => ({
-              month: m.month,
-              value: m.earningsCents,
-              label: formatCents(m.earningsCents, CURRENCY),
-            })),
+            ariaLabel: booksEnabled ? "Monthly distance trend" : "Monthly gig earnings trend",
+            points: cur.monthly.map((m) =>
+              booksEnabled
+                ? { month: m.month, value: m.distanceMeters, label: formatKm(m.distanceMeters) }
+                : { month: m.month, value: m.earningsCents, label: formatCents(m.earningsCents, CURRENCY) },
+            ),
           }
         : null,
   };
@@ -320,7 +330,7 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
   const [invoices, books, drive, quotes, activity] = await Promise.all([
     has("invoices") ? invoicesCards(ctx.workspaceId, currentRange, previousRange) : null,
     has("books") ? booksCards(ctx.workspaceId, currentRange, previousRange) : null,
-    has("drive") ? driveCard(ctx.workspaceId, currentRange) : null,
+    has("drive") ? driveCard(ctx.workspaceId, currentRange, has("books")) : null,
     has("quotes") ? quotesCards(ctx.workspaceId, currentRange) : null,
     listActivity(ctx.workspaceId, { limit: 5 }),
   ]);

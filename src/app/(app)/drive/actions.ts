@@ -182,6 +182,10 @@ export async function createTripAction(input: unknown): Promise<CreateTripResult
   try {
     const id = await createTrip(ctx.workspaceId, tripInput, ctx.user.id);
     revalidatePath("/drive");
+    // Mileage auto-records a Books "mileage" expense via the event bus; invalidate
+    // /books + /dashboard so soft-nav shows it (the bus awaits its handlers first).
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true, tripId: id };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to log trip." };
@@ -230,6 +234,9 @@ export async function updateTripAction(input: unknown): Promise<UpdateTripResult
       ctx.user.id,
     );
     revalidatePath("/drive");
+    // The mirrored Books mileage row is reconciled via the bus — invalidate /books + /dashboard.
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to update trip." };
@@ -271,6 +278,9 @@ export async function deleteTripAction(input: unknown): Promise<DriveActionResul
   try {
     await deleteTrip(ctx.workspaceId, branded<"DriveTripId">(parsed.data.tripId), ctx.user.id);
     revalidatePath("/drive");
+    // The mirrored Books mileage row is removed via the bus — invalidate /books + /dashboard.
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to delete trip." };

@@ -133,6 +133,36 @@ export async function getCustomer(
   return rows[0] ?? null;
 }
 
+/**
+ * Find an active customer by email within a workspace (IDOR-safe). Email is
+ * normalised to lowercase/trimmed the same way `createCustomer` does, so the
+ * lookup matches the partial unique index `customers_workspace_email_unique`
+ * (`email is not null and deletedAt is null`). Returns `null` for a missing or
+ * empty email, or when no active customer has that email. Used by the AI
+ * `createCustomer` write-tool to recover from a duplicate-email collision by
+ * returning the existing customer instead of throwing.
+ */
+export async function getCustomerByEmail(
+  workspaceId: WorkspaceId,
+  email: string | null | undefined,
+): Promise<CustomerRow | null> {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const db = getDb();
+  const rows = await db
+    .select(selectRow)
+    .from(customers)
+    .where(
+      and(
+        eq(customers.workspaceId, workspaceId),
+        eq(customers.email, normalized),
+        isNull(customers.deletedAt),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 /** Update a customer (workspace-isolated). Throws if not found. */
 export async function updateCustomer(
   workspaceId: WorkspaceId,

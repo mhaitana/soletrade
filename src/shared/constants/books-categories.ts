@@ -36,6 +36,7 @@ export const EXPENSE_CATEGORIES = [
   { key: "wages", label: "Wages" },
   { key: "software_expense", label: "Software" },
   { key: "vehicle_expense", label: "Vehicle expense" },
+  { key: "mileage", label: "Mileage" },
   { key: "other_expense", label: "Other expense" },
 ] as const satisfies readonly BookCategory[];
 

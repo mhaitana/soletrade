@@ -13,6 +13,7 @@ import type {
   CustomerId,
   DriveEarningId,
   DriveExpenseId,
+  DriveTripId,
   FileId,
   InvoiceId,
   UserId,
@@ -68,6 +69,12 @@ export interface TransactionInput {
    */
   sourceExpenseId?: DriveExpenseId | null;
   /**
+   * Optional link to the Drive trip that generated this mileage expense row (Wave 5).
+   * Set by the `MileageLogged` subscriber; null otherwise. Stored on
+   * `book_transactions.source_trip_id` (no FK constraint).
+   */
+  sourceTripId?: DriveTripId | null;
+  /**
    * Optional link to a receipt file (Phase 11b). Stored on
    * `book_transactions.receipt_file_id` (no FK constraint — keeps Books decoupled from
    * the files table at the DB level). Null for transactions without a receipt.
@@ -97,6 +104,8 @@ export interface TransactionRow {
   sourceEarningId: DriveEarningId | null;
   /** The Drive vehicle expense that generated this expense, or null. */
   sourceExpenseId: DriveExpenseId | null;
+  /** The Drive trip that generated this mileage expense, or null. */
+  sourceTripId: DriveTripId | null;
   /** The receipt file attached to this transaction, or null. */
   receiptFileId: FileId | null;
   notes: string | null;
@@ -118,6 +127,7 @@ const selectTransaction = {
   sourceInvoiceId: bookTransactions.sourceInvoiceId,
   sourceEarningId: bookTransactions.sourceEarningId,
   sourceExpenseId: bookTransactions.sourceExpenseId,
+  sourceTripId: bookTransactions.sourceTripId,
   receiptFileId: bookTransactions.receiptFileId,
   notes: bookTransactions.notes,
   createdAt: bookTransactions.createdAt,
@@ -176,6 +186,7 @@ export async function createTransaction(
       sourceInvoiceId: input.sourceInvoiceId ?? null,
       sourceEarningId: input.sourceEarningId ?? null,
       sourceExpenseId: input.sourceExpenseId ?? null,
+      sourceTripId: input.sourceTripId ?? null,
       receiptFileId: input.receiptFileId ?? null,
       notes: input.notes ?? null,
     })
@@ -196,6 +207,8 @@ export async function createTransaction(
       description: input.description.trim(),
       ...(input.sourceInvoiceId ? { sourceInvoiceId: input.sourceInvoiceId } : {}),
       ...(input.sourceEarningId ? { sourceEarningId: input.sourceEarningId } : {}),
+      ...(input.sourceExpenseId ? { sourceExpenseId: input.sourceExpenseId } : {}),
+      ...(input.sourceTripId ? { sourceTripId: input.sourceTripId } : {}),
       ...(input.receiptFileId ? { receiptFileId: input.receiptFileId } : {}),
     },
   });
@@ -225,6 +238,8 @@ export async function createTransaction(
         ? { sourceInvoiceId: input.sourceInvoiceId, source: "invoice" }
         : {}),
       ...(input.sourceEarningId ? { sourceEarningId: input.sourceEarningId, source: "drive" } : {}),
+      ...(input.sourceExpenseId ? { sourceExpenseId: input.sourceExpenseId, source: "drive" } : {}),
+      ...(input.sourceTripId ? { sourceTripId: input.sourceTripId, source: "drive" } : {}),
     },
   });
   return row.id;
@@ -235,7 +250,7 @@ export async function updateTransaction(
   workspaceId: WorkspaceId,
   txId: BookTransactionId,
   patch: TransactionPatch,
-  actorId: UserId,
+  actorId?: UserId,
 ): Promise<void> {
   if (patch.type !== undefined && patch.category !== undefined) {
     assertCategoryForType(patch.type, patch.category);
@@ -302,7 +317,7 @@ export async function updateTransaction(
 export async function deleteTransaction(
   workspaceId: WorkspaceId,
   txId: BookTransactionId,
-  actorId: UserId,
+  actorId?: UserId,
 ): Promise<boolean> {
   const db = getDb();
   const rows = await db
@@ -404,6 +419,49 @@ export async function getTransaction(
   if (!row) return null;
   const { customerName, ...tx } = row;
   return { ...tx, customerName: customerName ?? null };
+}
+
+/**
+ * Find the Books transaction mirrored from a cross-module source row (invoice / Drive
+ * earning / Drive vehicle expense / Drive trip), scoped to the workspace. Returns the
+ * transaction id or null. Used by the Drive→Books update/delete sync subscribers to
+ * locate the row to update or delete, and shared with the create-side idempotency check.
+ * At most one source key is expected; if more than one is supplied, the first non-null
+ * one wins in this order: sourceInvoiceId, sourceEarningId, sourceExpenseId, sourceTripId.
+ */
+export async function findTransactionIdBySource(
+  workspaceId: WorkspaceId,
+  source: {
+    sourceInvoiceId?: InvoiceId | null;
+    sourceEarningId?: DriveEarningId | null;
+    sourceExpenseId?: DriveExpenseId | null;
+    sourceTripId?: DriveTripId | null;
+  },
+): Promise<BookTransactionId | null> {
+  const db = getDb();
+  let column;
+  let value;
+  if (source.sourceInvoiceId) {
+    column = bookTransactions.sourceInvoiceId;
+    value = source.sourceInvoiceId;
+  } else if (source.sourceEarningId) {
+    column = bookTransactions.sourceEarningId;
+    value = source.sourceEarningId;
+  } else if (source.sourceExpenseId) {
+    column = bookTransactions.sourceExpenseId;
+    value = source.sourceExpenseId;
+  } else if (source.sourceTripId) {
+    column = bookTransactions.sourceTripId;
+    value = source.sourceTripId;
+  } else {
+    return null;
+  }
+  const rows = await db
+    .select({ id: bookTransactions.id })
+    .from(bookTransactions)
+    .where(and(eq(bookTransactions.workspaceId, workspaceId), eq(column, value)))
+    .limit(1);
+  return rows[0]?.id ?? null;
 }
 
 // Re-export the pure aggregator (Phase 9 cross-module dashboard loader uses it).

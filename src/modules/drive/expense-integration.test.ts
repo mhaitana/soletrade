@@ -5,6 +5,8 @@ import {
   activityEvents,
   auditLogs,
   bookTransactions as bookTransactionsTable,
+  driveEarnings as driveEarningsTable,
+  driveTrips as driveTripsTable,
   driverProfiles,
   driverVehicleExpenses,
   moduleInstallations,
@@ -13,11 +15,27 @@ import {
   workspaces as workspacesTable,
   workspaceMembers,
 } from "@/server/db/schema";
-import { branded, type DriveExpenseId, type VehicleId, type WorkspaceId } from "@/shared/types/ids";
+import {
+  branded,
+  type DriveExpenseId,
+  type DriveTripId,
+  type VehicleId,
+  type WorkspaceId,
+} from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { enableModule } from "@/platform/module-installations";
 import { clearEventBus, publishEvent } from "@/server/events";
-import { createExpense, createVehicle } from "./index";
+import {
+  createEarning,
+  createExpense,
+  createTrip,
+  createVehicle,
+  deleteExpense,
+  deleteTrip,
+  replayDriveEventsForBooks,
+  updateExpense,
+  updateTrip,
+} from "./index";
 import { registerBooksIntegration } from "@/modules/books/integration";
 
 /**
@@ -67,6 +85,12 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     await db
       .delete(bookTransactionsTable)
       .where(inArray(bookTransactionsTable.workspaceId, workspaceIds));
+    await db
+      .delete(driveTripsTable)
+      .where(inArray(driveTripsTable.workspaceId, workspaceIds));
+    await db
+      .delete(driveEarningsTable)
+      .where(inArray(driveEarningsTable.workspaceId, workspaceIds));
     // driverVehicleExpenses cascade their vehicle FK, but delete explicitly to be safe.
     await db
       .delete(driverVehicleExpenses)
@@ -204,6 +228,232 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     });
     const after = await dbRowCountForWorkspace(ws1!);
     expect(after).toBe(before); // no new row
+  });
+
+  // ─────────── Wave 5: vehicle-expense edit/delete sync ("Drive wins") ───────────
+
+  it("updates the mirrored Books expense row when a Drive vehicle expense is edited", async () => {
+    const expenseId = await createExpense(
+      ws1!,
+      {
+        vehicleId: ws1Vehicle!,
+        type: "fuel",
+        amountCents: 6000,
+        currency: "AUD",
+        date: new Date("2026-07-05"),
+        description: "Original fuel",
+      },
+      actor,
+    );
+    createdExpenseIds.push(expenseId);
+
+    await updateExpense(
+      ws1!,
+      expenseId,
+      { amountCents: 9000, description: "Revised fuel", date: new Date("2026-07-06") },
+      actor,
+    );
+
+    const row = await getExpenseForDriveExpense(ws1!, expenseId);
+    expect(row).not.toBeNull();
+    expect(row!.amountCents).toBe(9000);
+    expect(row!.description).toBe("Revised fuel");
+    expect(row!.date.toISOString()).toBe(new Date("2026-07-06").toISOString());
+    expect(row!.category).toBe("vehicle_expense");
+    expect(row!.sourceExpenseId).toBe(expenseId);
+  });
+
+  it("deletes the mirrored Books expense row when a Drive vehicle expense is deleted", async () => {
+    const expenseId = await createExpense(
+      ws1!,
+      {
+        vehicleId: ws1Vehicle!,
+        type: "maintenance",
+        amountCents: 12000,
+        currency: "AUD",
+        date: new Date("2026-07-07"),
+        description: "To delete",
+      },
+      actor,
+    );
+    createdExpenseIds.push(expenseId);
+    expect(await countExpenseForDriveExpense(ws1!, expenseId)).toBe(1);
+
+    const ok = await deleteExpense(ws1!, expenseId, actor);
+    expect(ok).toBe(true);
+    expect(await countExpenseForDriveExpense(ws1!, expenseId)).toBe(0);
+    const idx = createdExpenseIds.indexOf(expenseId);
+    if (idx >= 0) createdExpenseIds.splice(idx, 1);
+  });
+
+  // ───────────────── Wave 5: mileage → Books expense ──────────────────
+
+  /** Fetch the (single) Books mileage expense row linked to a trip, or null. */
+  async function getMileageForTrip(workspaceId: WorkspaceId, tripId: DriveTripId) {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(bookTransactionsTable)
+      .where(
+        and(
+          eq(bookTransactionsTable.workspaceId, workspaceId),
+          eq(bookTransactionsTable.sourceTripId, tripId),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async function countMileageForTrip(workspaceId: WorkspaceId, tripId: DriveTripId): Promise<number> {
+    const db = getDb();
+    const rows = await db
+      .select({ id: bookTransactionsTable.id })
+      .from(bookTransactionsTable)
+      .where(
+        and(
+          eq(bookTransactionsTable.workspaceId, workspaceId),
+          eq(bookTransactionsTable.sourceTripId, tripId),
+        ),
+      );
+    return rows.length;
+  }
+
+  it("records a Books mileage expense when a Drive trip is logged (happy path)", async () => {
+    // Default mileage rate is 85c/km → 50km = $42.50 (4250c).
+    const tripId = await createTrip(
+      ws1!,
+      {
+        platform: "uber",
+        distanceMeters: 50000,
+        date: new Date("2026-07-08"),
+        purpose: "City loop",
+      },
+      actor,
+    );
+
+    const row = await getMileageForTrip(ws1!, tripId);
+    expect(row).not.toBeNull();
+    expect(row!.type).toBe("expense");
+    expect(row!.category).toBe("mileage");
+    expect(row!.amountCents).toBe(4250);
+    expect(row!.currency).toBe("AUD");
+    expect(row!.customerId).toBeNull();
+    expect(row!.sourceTripId).toBe(tripId);
+    expect(row!.date.toISOString()).toBe(new Date("2026-07-08").toISOString());
+    expect(row!.description).toBe("Drive mileage · Uber");
+    expect(row!.notes).toBe("Auto-recorded from drive mileage (Uber).");
+  });
+
+  it("updates the mirrored Books mileage row when a trip is edited", async () => {
+    const tripId = await createTrip(
+      ws1!,
+      {
+        platform: "uber",
+        distanceMeters: 20000, // 20km → $17.00 (1700c)
+        date: new Date("2026-07-09"),
+        purpose: "Short",
+      },
+      actor,
+    );
+    expect((await getMileageForTrip(ws1!, tripId))!.amountCents).toBe(1700);
+
+    await updateTrip(
+      ws1!,
+      tripId,
+      { distanceMeters: 60000, date: new Date("2026-07-10") }, // 60km → $51.00 (5100c)
+      actor,
+    );
+
+    const row = await getMileageForTrip(ws1!, tripId);
+    expect(row!.amountCents).toBe(5100);
+    expect(row!.date.toISOString()).toBe(new Date("2026-07-10").toISOString());
+    expect(row!.category).toBe("mileage");
+    expect(row!.sourceTripId).toBe(tripId);
+  });
+
+  it("deletes the mirrored Books mileage row when a trip is deleted", async () => {
+    const tripId = await createTrip(
+      ws1!,
+      {
+        platform: "doordash",
+        distanceMeters: 10000,
+        date: new Date("2026-07-11"),
+        purpose: "To delete",
+      },
+      actor,
+    );
+    expect(await countMileageForTrip(ws1!, tripId)).toBe(1);
+
+    const ok = await deleteTrip(ws1!, tripId, actor);
+    expect(ok).toBe(true);
+    expect(await countMileageForTrip(ws1!, tripId)).toBe(0);
+  });
+
+  // ───────────────── Wave 5: backfill when Books is enabled later ─────────────────
+
+  it("backfills Books rows for existing Drive entries when Books is enabled (idempotent)", async () => {
+    // ws2 has Drive enabled, Books NOT enabled — entries logged now don't mirror.
+    const earningId = await createEarning(
+      ws2!,
+      {
+        platform: "uber",
+        amountCents: 22000,
+        currency: "AUD",
+        date: new Date("2026-07-12"),
+        description: "Pre-books earning",
+      },
+      actor,
+    );
+    const expenseId = await createExpense(
+      ws2!,
+      {
+        vehicleId: ws2Vehicle!,
+        type: "fuel",
+        amountCents: 7700,
+        currency: "AUD",
+        date: new Date("2026-07-12"),
+        description: "Pre-books expense",
+      },
+      actor,
+    );
+    createdExpenseIds.push(expenseId);
+    const tripId = await createTrip(
+      ws2!,
+      {
+        platform: "uber",
+        distanceMeters: 30000, // 30km → $25.50 (2550c)
+        date: new Date("2026-07-12"),
+        purpose: "Pre-books trip",
+      },
+      actor,
+    );
+
+    // Nothing mirrored yet — Books isn't installed on ws2.
+    expect(await countExpenseForDriveExpense(ws2!, expenseId)).toBe(0);
+
+    // Enable Books, then replay the Drive events (the instrumentation.ts ModuleEnabled glue
+    // calls this; here we invoke it directly to test the backfill mechanism).
+    await enableModule(ws2!, "books", actor);
+    await replayDriveEventsForBooks(ws2!, actor);
+
+    // All three entry types now have mirrored Books rows.
+    const incomeRow = await getDb()
+      .select()
+      .from(bookTransactionsTable)
+      .where(eq(bookTransactionsTable.sourceEarningId, earningId))
+      .limit(1);
+    expect(incomeRow[0]).toBeDefined();
+    expect(incomeRow[0]!.type).toBe("income");
+    expect(incomeRow[0]!.category).toBe("gig");
+    expect(incomeRow[0]!.amountCents).toBe(22000);
+
+    expect((await getExpenseForDriveExpense(ws2!, expenseId))!.amountCents).toBe(7700);
+    expect((await getMileageForTrip(ws2!, tripId))!.amountCents).toBe(2550);
+
+    // Replaying again is idempotent — no duplicate rows.
+    await replayDriveEventsForBooks(ws2!, actor);
+    expect((await countExpenseForDriveExpense(ws2!, expenseId)) as number).toBe(1);
+    expect(await countMileageForTrip(ws2!, tripId)).toBe(1);
   });
 });
 

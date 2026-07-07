@@ -15,7 +15,7 @@ import { branded, type DriveEarningId, type WorkspaceId } from "@/shared/types/i
 import { createWorkspace } from "@/platform/workspaces";
 import { enableModule } from "@/platform/module-installations";
 import { clearEventBus, publishEvent } from "@/server/events";
-import { createEarning } from "./index";
+import { createEarning, deleteEarning, updateEarning } from "./index";
 import { registerBooksIntegration } from "@/modules/books/integration";
 
 /**
@@ -191,6 +191,97 @@ describe.skipIf(!HAS_DB)("books DriveEarningsLogged integration (requires DATABA
     });
     const after = await dbRowCountForWorkspace(ws1!);
     expect(after).toBe(before); // no new row
+  });
+
+  // ───────────────── Wave 5: edit / delete sync ("Drive wins") ─────────────────
+
+  it("updates the mirrored Books income row when a Drive earning is edited", async () => {
+    const earningId = await createEarning(
+      ws1!,
+      {
+        platform: "uber",
+        amountCents: 30000,
+        currency: "AUD",
+        date: new Date("2026-07-10"),
+        description: "Original earning",
+      },
+      actor,
+    );
+    createdEarningIds.push(earningId);
+
+    let row = await getIncomeForEarning(ws1!, earningId);
+    expect(row!.amountCents).toBe(30000);
+    expect(row!.description).toBe("Drive earnings · Uber");
+
+    await updateEarning(
+      ws1!,
+      earningId,
+      { amountCents: 42500, description: "Revised earning", date: new Date("2026-07-11") },
+      actor,
+    );
+
+    row = await getIncomeForEarning(ws1!, earningId);
+    expect(row).not.toBeNull();
+    expect(row!.amountCents).toBe(42500);
+    expect(row!.description).toBe("Drive earnings · Uber");
+    expect(row!.date.toISOString()).toBe(new Date("2026-07-11").toISOString());
+    // Category + source link are preserved across the overwrite.
+    expect(row!.category).toBe("gig");
+    expect(row!.sourceEarningId).toBe(earningId);
+  });
+
+  it("overwrites a manually-edited Books row on a later Drive edit (Drive wins)", async () => {
+    const earningId = await createEarning(
+      ws1!,
+      {
+        platform: "uber",
+        amountCents: 10000,
+        currency: "AUD",
+        date: new Date("2026-07-12"),
+        description: "Manual base",
+      },
+      actor,
+    );
+    createdEarningIds.push(earningId);
+
+    // Simulate the user editing the mirrored Books row directly in Books.
+    const db = getDb();
+    await db
+      .update(bookTransactionsTable)
+      .set({ amountCents: 55555, description: "Manual edit" })
+      .where(eq(bookTransactionsTable.sourceEarningId, earningId));
+
+    // A later Drive edit overwrites the manual change ("Drive wins").
+    await updateEarning(ws1!, earningId, { amountCents: 15000 }, actor);
+
+    const row = await getIncomeForEarning(ws1!, earningId);
+    expect(row!.amountCents).toBe(15000);
+    expect(row!.description).toBe("Drive earnings · Uber");
+  });
+
+  it("deletes the mirrored Books income row when a Drive earning is deleted", async () => {
+    const earningId = await createEarning(
+      ws1!,
+      {
+        platform: "doordash",
+        amountCents: 7000,
+        currency: "AUD",
+        date: new Date("2026-07-13"),
+        description: "To delete",
+      },
+      actor,
+    );
+    createdEarningIds.push(earningId);
+    expect(await countIncomeForEarning(ws1!, earningId)).toBe(1);
+
+    const ok = await deleteEarning(ws1!, earningId, actor);
+    expect(ok).toBe(true);
+
+    // The Books row is removed — no orphaned mirror.
+    expect(await countIncomeForEarning(ws1!, earningId)).toBe(0);
+    // Remove from cleanup list — already gone.
+    const idx = createdEarningIds.indexOf(earningId);
+    if (idx >= 0) createdEarningIds.splice(idx, 1);
   });
 });
 

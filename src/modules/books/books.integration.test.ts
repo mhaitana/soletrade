@@ -21,6 +21,7 @@ import { onEvent } from "@/server/events";
 import {
   createTransaction,
   deleteTransaction,
+  findTransactionIdBySource,
   getTransaction,
   listTransactions,
   updateTransaction,
@@ -363,5 +364,33 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     } finally {
       off();
     }
+  });
+
+  // ───────────────── Wave 5: findTransactionIdBySource ─────────────────
+
+  it("findTransactionIdBySource locates a row by its source link (and is workspace-isolated)", async () => {
+    const earningId = branded<"DriveEarningId">("00000000-0000-9000-8000-0000000000f1");
+    const id = await createTransaction(
+      ws1!,
+      {
+        type: "income",
+        amountCents: 15000,
+        date: new Date("2026-07-01"),
+        description: "Drive earnings · Uber",
+        category: "gig",
+        sourceEarningId: earningId,
+      },
+      actor,
+    );
+    createdTxIds.push(id);
+
+    expect(await findTransactionIdBySource(ws1!, { sourceEarningId: earningId })).toBe(id);
+    // Wrong source id → null.
+    const otherEarning = branded<"DriveEarningId">("00000000-0000-9000-8000-0000000000f2");
+    expect(await findTransactionIdBySource(ws1!, { sourceEarningId: otherEarning })).toBeNull();
+    // Workspace isolation — the earning looks absent from ws2.
+    expect(await findTransactionIdBySource(ws2!, { sourceEarningId: earningId })).toBeNull();
+    // No source keys supplied → null.
+    expect(await findTransactionIdBySource(ws1!, {})).toBeNull();
   });
 });

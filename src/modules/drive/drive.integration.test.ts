@@ -72,9 +72,41 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
         metadata: e.metadata as Record<string, unknown> | undefined,
       });
     });
+    const u3 = onEvent("DriveEarningUpdated", (e) => {
+      captured.push({
+        type: "DriveEarningUpdated",
+        entityId: e.entityId,
+        metadata: e.metadata as Record<string, unknown> | undefined,
+      });
+    });
+    const u4 = onEvent("DriveEarningDeleted", (e) => {
+      captured.push({
+        type: "DriveEarningDeleted",
+        entityId: e.entityId,
+        metadata: e.metadata as Record<string, unknown> | undefined,
+      });
+    });
+    const u5 = onEvent("MileageUpdated", (e) => {
+      captured.push({
+        type: "MileageUpdated",
+        entityId: e.entityId,
+        metadata: e.metadata as Record<string, unknown> | undefined,
+      });
+    });
+    const u6 = onEvent("MileageDeleted", (e) => {
+      captured.push({
+        type: "MileageDeleted",
+        entityId: e.entityId,
+        metadata: e.metadata as Record<string, unknown> | undefined,
+      });
+    });
     unsub = () => {
       u1();
       u2();
+      u3();
+      u4();
+      u5();
+      u6();
     };
   });
 
@@ -162,8 +194,7 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     expect(ws2List.some((e) => e.id === createdEarningIds[0])).toBe(false);
   });
 
-  it("updates an earning and stays silent (no event)", async () => {
-    const before = captured.filter((e) => e.type === "DriveEarningsLogged").length;
+  it("updates an earning and fires DriveEarningUpdated", async () => {
     await updateEarning(
       ws1!,
       createdEarningIds[0]!,
@@ -173,8 +204,12 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     const row = await getEarning(ws1!, createdEarningIds[0]!);
     expect(row!.amountCents).toBe(9999);
     expect(row!.description).toBe("Airport run (revised)");
-    const after = captured.filter((e) => e.type === "DriveEarningsLogged").length;
-    expect(after).toBe(before); // no new event on edit
+
+    const evt = captured.find(
+      (e) => e.type === "DriveEarningUpdated" && e.entityId === createdEarningIds[0],
+    );
+    expect(evt).toBeDefined();
+    expect(evt?.metadata).toMatchObject({ amountCents: 9999, description: "Airport run (revised)" });
   });
 
   it("updateEarning on another workspace's row throws (not found)", async () => {
@@ -195,7 +230,7 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     expect(byDescription.some((e) => e.id === createdEarningIds[0])).toBe(true);
   });
 
-  it("deletes an earning and stays silent (no event)", async () => {
+  it("deletes an earning and fires DriveEarningDeleted", async () => {
     const id = await createEarning(
       ws1!,
       {
@@ -209,6 +244,10 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     const ok = await deleteEarning(ws1!, id, actor);
     expect(ok).toBe(true);
     expect(await getEarning(ws1!, id)).toBeNull();
+
+    const evt = captured.find((e) => e.type === "DriveEarningDeleted" && e.entityId === id);
+    expect(evt).toBeDefined();
+    expect(evt?.metadata).toMatchObject({ earningId: id });
 
     // Deleting from another workspace returns false (not found there).
     const refused = await deleteEarning(ws2!, createdEarningIds[0]!, otherActor);
@@ -267,8 +306,7 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     expect(ws2List.some((t) => t.id === createdTripIds[0])).toBe(false);
   });
 
-  it("updates a trip and stays silent (no event)", async () => {
-    const before = captured.filter((e) => e.type === "MileageLogged").length;
+  it("updates a trip and fires MileageUpdated", async () => {
     await updateTrip(
       ws1!,
       createdTripIds[0]!,
@@ -278,8 +316,12 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     const row = await getTrip(ws1!, createdTripIds[0]!);
     expect(row!.distanceMeters).toBe(50000);
     expect(row!.purpose).toBe("Airport pickup (revised)");
-    const after = captured.filter((e) => e.type === "MileageLogged").length;
-    expect(after).toBe(before); // no new event on edit
+
+    const evt = captured.find(
+      (e) => e.type === "MileageUpdated" && e.entityId === createdTripIds[0],
+    );
+    expect(evt).toBeDefined();
+    expect(evt?.metadata).toMatchObject({ distanceMeters: 50000, amountCents: 4250 });
   });
 
   it("updateTrip on another workspace's row throws (not found)", async () => {
@@ -298,7 +340,7 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     expect(byPurpose.some((t) => t.id === createdTripIds[0])).toBe(true);
   });
 
-  it("deletes a trip and stays silent (no event)", async () => {
+  it("deletes a trip and fires MileageDeleted", async () => {
     const id = await createTrip(
       ws1!,
       {
@@ -312,6 +354,10 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     const ok = await deleteTrip(ws1!, id, actor);
     expect(ok).toBe(true);
     expect(await getTrip(ws1!, id)).toBeNull();
+
+    const evt = captured.find((e) => e.type === "MileageDeleted" && e.entityId === id);
+    expect(evt).toBeDefined();
+    expect(evt?.metadata).toMatchObject({ tripId: id });
 
     // Deleting from another workspace returns false (not found there).
     const refused = await deleteTrip(ws2!, createdTripIds[0]!, otherActor);

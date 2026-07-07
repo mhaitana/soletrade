@@ -4,6 +4,7 @@ import type {
   CustomerId,
   DriveEarningId,
   DriveExpenseId,
+  DriveTripId,
   FileId,
   InvoiceId,
   WorkspaceId,
@@ -80,6 +81,15 @@ export const bookTransactions = pgTable(
      * transactions and income rows.
      */
     sourceExpenseId: uuid("source_expense_id").$type<DriveExpenseId>(),
+    /**
+     * Optional link to the Drive trip that generated this mileage expense row (Wave 5
+     * event-bus integration — MileageLogged → Books expense). No FK constraint — keeps
+     * Books decoupled from the drive_trips table at the DB level, mirroring
+     * `sourceInvoiceId`/`sourceEarningId`/`sourceExpenseId`. Indexed for the idempotency
+     * check-then-insert in the Books integration subscriber. Null for manually-recorded
+     * transactions and non-mileage rows.
+     */
+    sourceTripId: uuid("source_trip_id").$type<DriveTripId>(),
     /** Private workspace note (never exposed publicly). */
     notes: text("notes"),
     /**
@@ -103,6 +113,8 @@ export const bookTransactions = pgTable(
     index("book_transactions_workspace_source_earning_idx").on(t.workspaceId, t.sourceEarningId),
     // Idempotency lookup for the VehicleExpenseLogged → Books expense subscriber (Wave 2).
     index("book_transactions_workspace_source_expense_idx").on(t.workspaceId, t.sourceExpenseId),
+    // Idempotency lookup for the MileageLogged → Books expense subscriber.
+    index("book_transactions_workspace_source_trip_idx").on(t.workspaceId, t.sourceTripId),
     // Reverse lookup: which transactions reference this file (receipts page, Wave 2).
     index("book_transactions_workspace_receipt_file_idx").on(t.workspaceId, t.receiptFileId),
   ],
