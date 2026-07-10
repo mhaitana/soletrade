@@ -21,7 +21,8 @@ const PERIOD_LABEL: Record<Period, string> = {
   week: "This week",
   month: "This month",
   quarter: "This quarter",
-  year: "This year",
+  year: "Current FY",
+  calendar: "Calendar year",
   all: "All time",
 };
 

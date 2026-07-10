@@ -5,7 +5,11 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
-import { SUPPORTED_CURRENCIES, COMMON_TIMEZONES } from "@/shared/constants/currencies";
+import {
+  SUPPORTED_CURRENCIES,
+  COMMON_TIMEZONES,
+  FINANCIAL_YEAR_START_MONTHS,
+} from "@/shared/constants/currencies";
 import {
   updateWorkspaceAction,
   type GeneralSettingsPageData,
@@ -23,6 +27,7 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
         invoicePrefix: String(formData.get("invoicePrefix") ?? ""),
         quotePrefix: String(formData.get("quotePrefix") ?? ""),
         timezone: String(formData.get("timezone") ?? ""),
+        fyStartMonth: Number(formData.get("fyStartMonth") ?? 7),
       }),
     initialState,
   );
@@ -141,6 +146,28 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
               </select>
               <p className="text-xs text-muted-foreground">
                 Used for date display on the dashboard and lists. Stored dates stay UTC.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="fyStartMonth">Financial year starts</Label>
+              <select
+                id="fyStartMonth"
+                name="fyStartMonth"
+                defaultValue={String(initial.workspace.fyStartMonth)}
+                disabled={!initial.canManage}
+                className={selectClass}
+              >
+                {FINANCIAL_YEAR_START_MONTHS.map((m) => (
+                  <option key={m.month} value={String(m.month)}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Anchors the GST/BAS quarter labels and the &quot;This year&quot;/&quot;This
+                quarter&quot; dashboard windows. e.g. 1 July (AU), 1 April (NZ), 1 January (calendar
+                year).
               </p>
             </div>
 

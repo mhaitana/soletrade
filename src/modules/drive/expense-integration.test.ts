@@ -85,9 +85,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     await db
       .delete(bookTransactionsTable)
       .where(inArray(bookTransactionsTable.workspaceId, workspaceIds));
-    await db
-      .delete(driveTripsTable)
-      .where(inArray(driveTripsTable.workspaceId, workspaceIds));
+    await db.delete(driveTripsTable).where(inArray(driveTripsTable.workspaceId, workspaceIds));
     await db
       .delete(driveEarningsTable)
       .where(inArray(driveEarningsTable.workspaceId, workspaceIds));
@@ -304,7 +302,10 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     return rows[0] ?? null;
   }
 
-  async function countMileageForTrip(workspaceId: WorkspaceId, tripId: DriveTripId): Promise<number> {
+  async function countMileageForTrip(
+    workspaceId: WorkspaceId,
+    tripId: DriveTripId,
+  ): Promise<number> {
     const db = getDb();
     const rows = await db
       .select({ id: bookTransactionsTable.id })

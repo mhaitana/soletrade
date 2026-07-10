@@ -382,11 +382,13 @@ function readMileageMeta(event: BusEvent): {
   const id = readSourceId(event, "tripId");
   if (!m || !id) return null;
   const platform = typeof m.platform === "string" ? m.platform : null;
-  const distanceMeters = typeof m.distanceMeters === "number" && m.distanceMeters > 0 ? m.distanceMeters : null;
+  const distanceMeters =
+    typeof m.distanceMeters === "number" && m.distanceMeters > 0 ? m.distanceMeters : null;
   const date = m.date instanceof Date ? m.date : null;
   const amountCents = typeof m.amountCents === "number" && m.amountCents > 0 ? m.amountCents : null;
   const currency = typeof m.currency === "string" && m.currency.length === 3 ? m.currency : null;
-  if (!platform || distanceMeters === null || !date || amountCents === null || !currency) return null;
+  if (!platform || distanceMeters === null || !date || amountCents === null || !currency)
+    return null;
   return {
     tripId: branded<"DriveTripId">(id),
     platform,

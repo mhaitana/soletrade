@@ -34,7 +34,10 @@ export default async function OnboardingPage() {
         </p>
         {hasWorkspace ? (
           <p className="mt-4 text-center text-sm">
-            <Link href="/dashboard" className="font-medium text-primary underline underline-offset-2">
+            <Link
+              href="/dashboard"
+              className="font-medium text-primary underline underline-offset-2"
+            >
               Back to dashboard
             </Link>
           </p>

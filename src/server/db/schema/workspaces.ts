@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { UserId, WorkspaceId } from "@/shared/types/ids";
 import { users } from "./users";
 
@@ -18,6 +18,8 @@ export const workspaces = pgTable("workspaces", {
   invoicePrefix: text("invoice_prefix").default("INV-").notNull(),
   /** Prefix for new quote numbers, e.g. "QUO-" → "QUO-2026-0001". */
   quotePrefix: text("quote_prefix").default("QUO-").notNull(),
+  /** Financial-year start month, 1–12 (1 = January = calendar year). Default 7 = 1 July (AU). Drives GST/BAS quarter labels + the "year"/"quarter" period-selector windows. */
+  fyStartMonth: integer("fy_start_month").default(7).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),

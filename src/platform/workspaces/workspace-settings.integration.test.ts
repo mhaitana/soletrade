@@ -66,9 +66,11 @@ describe.skipIf(!HAS_DB)(
       expect(row!.invoicePrefix).toBe("INV-");
       expect(row!.quotePrefix).toBe("QUO-");
       expect(row!.timezone).toBe("Australia/Sydney");
+      // migration 0022: financial-year start defaults to 7 (1 July, Australian).
+      expect(row!.fyStartMonth).toBe(7);
     });
 
-    it("updateWorkspace persists name + currency + prefixes + timezone", async () => {
+    it("updateWorkspace persists name + currency + prefixes + timezone + fyStartMonth", async () => {
       const updated = await updateWorkspace(
         ws!,
         {
@@ -77,6 +79,7 @@ describe.skipIf(!HAS_DB)(
           invoicePrefix: "INVOICE-",
           quotePrefix: "QUOTE-",
           timezone: "America/New_York",
+          fyStartMonth: 4,
         },
         owner,
       );
@@ -86,10 +89,12 @@ describe.skipIf(!HAS_DB)(
       expect(updated!.invoicePrefix).toBe("INVOICE-");
       expect(updated!.quotePrefix).toBe("QUOTE-");
       expect(updated!.timezone).toBe("America/New_York");
+      expect(updated!.fyStartMonth).toBe(4);
       // Re-read to confirm persistence.
       const reread = await getWorkspace(ws!);
       expect(reread!.invoicePrefix).toBe("INVOICE-");
       expect(reread!.defaultCurrency).toBe("USD");
+      expect(reread!.fyStartMonth).toBe(4);
     });
 
     it("createInvoice uses the workspace invoice prefix + default currency", async () => {

@@ -37,7 +37,11 @@ export async function GET(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const period: Period = parsePeriod(url.searchParams.get("period") ?? undefined);
-  const range = periodRange(period);
+  // Fetch the workspace so the "year"/"quarter" window reanchors to its financial year
+  // (matches the on-page summary) + the PDF header can show the workspace name.
+  const workspace = await getWorkspace(ctx.workspaceId).catch(() => null);
+  const fyStartMonth = workspace?.fyStartMonth ?? 7;
+  const range = periodRange(period, undefined, fyStartMonth);
 
   const rows = await listTransactions(ctx.workspaceId, {
     dateFrom: range.start ?? undefined,
@@ -55,7 +59,6 @@ export async function GET(request: Request): Promise<Response> {
   );
 
   // Build the element before the try/catch — see invoices pdf route for rationale.
-  const workspace = await getWorkspace(ctx.workspaceId).catch(() => null);
   const element = (
     <BooksPlDocument
       summary={summary}

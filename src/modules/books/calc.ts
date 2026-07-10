@@ -190,22 +190,34 @@ export interface GstSummary {
 }
 
 /**
- * Map a calendar date to the Australian financial-year quarter. FY starts 1 July:
- * Q1 = Jul–Sep, Q2 = Oct–Dec, Q3 = Jan–Mar, Q4 = Apr–Jun. `fiscalYear` is the year the FY
- * *started* (e.g. FY2026–27 → fiscalYear 2026).
+ * Map a calendar date to the financial-year quarter. `fyStartMonth` is 1–12 (1 = January =
+ * calendar year); default `7` = 1 July (Australian) — the historical behaviour, so
+ * unthreaded callers + existing tests stay green. Quarters start at `fyStartMonth`, +3, +6,
+ * +9 months. `fiscalYear` is the year the FY *started* (e.g. AU FY2026–27 → fiscalYear 2026;
+ * NZ FY2026–27 starting 1 Apr 2026 → fiscalYear 2026).
  */
-export function fiscalQuarter(date: Date): { fiscalYear: number; quarter: number; label: string } {
-  const month = date.getUTCMonth() + 1; // 1–12
-  const fiscalYear = month >= 7 ? date.getUTCFullYear() : date.getUTCFullYear() - 1;
-  const quarter = month >= 7 ? Math.ceil((month - 6) / 3) : Math.ceil((month + 6) / 3);
+export function fiscalQuarter(
+  date: Date,
+  fyStartMonth: number = 7,
+): { fiscalYear: number; quarter: number; label: string } {
+  const startMonthIdx = fyStartMonth - 1; // 0–11
+  const monthsSinceFYStart = (date.getUTCMonth() - startMonthIdx + 12) % 12;
+  const quarter = Math.floor(monthsSinceFYStart / 3) + 1; // 1–4
+  const fiscalYear =
+    date.getUTCMonth() >= startMonthIdx ? date.getUTCFullYear() : date.getUTCFullYear() - 1;
   return { fiscalYear, quarter, label: `${fiscalYear}-Q${quarter}` };
 }
 
 /**
  * Aggregate GST per financial-year quarter (the BAS / tax-runway view). Pure — no DB, no
  * time calls. Empty input → zeros + empty array. `gstCents` is `Math.abs`'d defensively.
+ * `fyStartMonth` (1–12, default `7` = July) threads through to `fiscalQuarter` so the
+ * quarter labels follow the workspace's financial-year anchor.
  */
-export function summarizeGst(rows: readonly GstSummaryInput[]): GstSummary {
+export function summarizeGst(
+  rows: readonly GstSummaryInput[],
+  fyStartMonth: number = 7,
+): GstSummary {
   let gstCollectedCents = 0;
   let gstPaidCents = 0;
   const quarterMap = new Map<string, GstQuarterPoint>();
@@ -215,7 +227,7 @@ export function summarizeGst(rows: readonly GstSummaryInput[]): GstSummary {
     if (row.type === "income") gstCollectedCents += gst;
     else gstPaidCents += gst;
 
-    const { fiscalYear, quarter, label } = fiscalQuarter(row.date);
+    const { fiscalYear, quarter, label } = fiscalQuarter(row.date, fyStartMonth);
     const existing = quarterMap.get(label);
     if (existing) {
       if (row.type === "income") existing.gstCollectedCents += gst;

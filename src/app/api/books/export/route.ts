@@ -3,6 +3,7 @@ import { z } from "zod";
 import { tryWorkspaceContext } from "@/platform/context";
 import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
+import { getWorkspace } from "@/platform/workspaces";
 import { listTransactions } from "@/modules/books";
 import { categoryLabel } from "@/shared/constants/books-categories";
 import { parsePeriod, periodRange, type Period } from "@/shared/utils/periods";
@@ -59,7 +60,9 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const period: Period = parsePeriod(parsed.data.period);
-  const range = periodRange(period);
+  // Reanchor the "year"/"quarter" window to the workspace's financial year (matches the page).
+  const workspace = await getWorkspace(ctx.workspaceId).catch(() => null);
+  const range = periodRange(period, undefined, workspace?.fyStartMonth ?? 7);
 
   const rows = await listTransactions(ctx.workspaceId, {
     type: parsed.data.type === "all" ? undefined : parsed.data.type,

@@ -5,7 +5,10 @@ import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorizeOrAudit } from "@/server/security";
 import { getWorkspace, updateWorkspace, type WorkspaceRow } from "@/platform/workspaces";
-import { SUPPORTED_CURRENCY_CODES } from "@/shared/constants/currencies";
+import {
+  SUPPORTED_CURRENCY_CODES,
+  FINANCIAL_YEAR_START_MONTH_VALUES,
+} from "@/shared/constants/currencies";
 
 const PREFIX_RE = /^[A-Za-z0-9_-]{0,10}$/;
 
@@ -23,6 +26,14 @@ const workspaceSchema = z.object({
     .max(10, "Use at most 10 characters.")
     .regex(PREFIX_RE, "Use letters, numbers, hyphens, or underscores only."),
   timezone: z.string().trim().min(1, "Timezone is required."),
+  fyStartMonth: z
+    .number()
+    .int()
+    .min(1, "Financial year start is required.")
+    .max(12, "Use a month between 1 and 12.")
+    .refine((m) => (FINANCIAL_YEAR_START_MONTH_VALUES as readonly number[]).includes(m), {
+      message: "Use a month between 1 and 12.",
+    }),
 });
 
 export type UpdateWorkspaceResult = { ok: true } | { ok: false; error: string };
@@ -58,7 +69,14 @@ export async function updateWorkspaceAction(input: unknown): Promise<UpdateWorks
 export interface GeneralSettingsPageData {
   workspace: Pick<
     WorkspaceRow,
-    "id" | "name" | "slug" | "defaultCurrency" | "invoicePrefix" | "quotePrefix" | "timezone"
+    | "id"
+    | "name"
+    | "slug"
+    | "defaultCurrency"
+    | "invoicePrefix"
+    | "quotePrefix"
+    | "timezone"
+    | "fyStartMonth"
   >;
   canManage: boolean;
 }
@@ -77,6 +95,7 @@ export async function loadGeneralSettingsPage(): Promise<GeneralSettingsPageData
       invoicePrefix: workspace.invoicePrefix,
       quotePrefix: workspace.quotePrefix,
       timezone: workspace.timezone,
+      fyStartMonth: workspace.fyStartMonth,
     },
     canManage: ctx.role === "owner" || ctx.role === "admin",
   };

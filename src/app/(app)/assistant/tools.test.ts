@@ -591,7 +591,9 @@ describe("buildAssistantTools — write tools", () => {
     // returning the existing customer with `existed: true` so the model can say
     // "already exists — using them" and continue, instead of a raw Postgres error.
     createCustomerMock.mockRejectedValue(
-      new Error('duplicate key value violates unique constraint "customers_workspace_email_unique"'),
+      new Error(
+        'duplicate key value violates unique constraint "customers_workspace_email_unique"',
+      ),
     );
     getCustomerByEmailMock.mockResolvedValue({ id: "cust-existing-id", name: "Acme Pty" });
     const { buildAssistantTools } = await import("./tools");
@@ -613,7 +615,9 @@ describe("buildAssistantTools — write tools", () => {
     createCustomerMock.mockRejectedValue(new Error("connection refused"));
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
-    await expect(run(tools.createCustomer, { name: "Acme Pty" })).rejects.toThrow("connection refused");
+    await expect(run(tools.createCustomer, { name: "Acme Pty" })).rejects.toThrow(
+      "connection refused",
+    );
     expect(getCustomerByEmailMock).not.toHaveBeenCalled();
     expect(writeAuditMock).not.toHaveBeenCalled();
   });
@@ -664,7 +668,9 @@ describe("buildAssistantTools — write tools", () => {
 
   it("updateCustomer returns a friendly error on a duplicate-email collision", async () => {
     updateCustomerMock.mockRejectedValue(
-      new Error('duplicate key value violates unique constraint "customers_workspace_email_unique"'),
+      new Error(
+        'duplicate key value violates unique constraint "customers_workspace_email_unique"',
+      ),
     );
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
@@ -809,7 +815,10 @@ describe("buildAssistantTools — write tools", () => {
     const { buildAssistantTools } = await import("./tools");
     const c = ctx("readonly");
     const tools = buildAssistantTools(c, ALL_MODULES);
-    const out = (await run(tools.listTransactions, { search: "fuel" })) as Record<string, unknown>[];
+    const out = (await run(tools.listTransactions, { search: "fuel" })) as Record<
+      string,
+      unknown
+    >[];
     expect(listTransactionsMock).toHaveBeenCalledWith(c.workspaceId, {
       type: undefined,
       search: "fuel",
@@ -990,9 +999,7 @@ describe("buildAssistantTools — write tools", () => {
 
   it("sendInvoice resolves the invoice by number and returns { sent: true, number }", async () => {
     // resolveInvoiceByNumber reuses listInvoices search then exact-matches the number.
-    listInvoicesMock.mockResolvedValue([
-      { id: "inv-7", number: "INV-2026-0007", status: "draft" },
-    ]);
+    listInvoicesMock.mockResolvedValue([{ id: "inv-7", number: "INV-2026-0007", status: "draft" }]);
     sendInvoiceMock.mockResolvedValue(true);
     const { buildAssistantTools } = await import("./tools");
     const c = ctx("owner");
@@ -1016,13 +1023,13 @@ describe("buildAssistantTools — write tools", () => {
   });
 
   it("sendInvoice returns a friendly state error when the service returns false (already sent)", async () => {
-    listInvoicesMock.mockResolvedValue([
-      { id: "inv-7", number: "INV-2026-0007", status: "sent" },
-    ]);
+    listInvoicesMock.mockResolvedValue([{ id: "inv-7", number: "INV-2026-0007", status: "sent" }]);
     sendInvoiceMock.mockResolvedValue(false);
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
-    const out = (await run(tools.sendInvoice, { invoiceNumber: "INV-2026-0007" })) as { error: string };
+    const out = (await run(tools.sendInvoice, { invoiceNumber: "INV-2026-0007" })) as {
+      error: string;
+    };
     expect(out.error).toMatch(/isn't a draft/);
   });
 
@@ -1056,7 +1063,9 @@ describe("buildAssistantTools — write tools", () => {
 
   it("convertQuoteToInvoice creates an invoice from the accepted quote's line items and marks it converted", async () => {
     // resolveQuoteByNumber reuses listQuotes search then exact-matches.
-    listQuotesMock.mockResolvedValue([{ id: "quo-3", number: "QUO-2026-0003", status: "accepted" }]);
+    listQuotesMock.mockResolvedValue([
+      { id: "quo-3", number: "QUO-2026-0003", status: "accepted" },
+    ]);
     getQuoteMock.mockResolvedValue({
       id: "quo-3",
       customerId: "cust-amos",

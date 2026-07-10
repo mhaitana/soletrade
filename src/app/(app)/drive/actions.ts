@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
+import { getWorkspace } from "@/platform/workspaces";
 import { authorize } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
@@ -319,13 +320,18 @@ export async function loadDrivePage(params?: {
   period?: Period;
 }): Promise<DrivePageData> {
   const ctx = await requireWorkspaceContext();
-  if (!(await isModuleEnabled(ctx.workspaceId, "drive"))) return { installed: false };
+  const [enabled, workspace] = await Promise.all([
+    isModuleEnabled(ctx.workspaceId, "drive"),
+    getWorkspace(ctx.workspaceId),
+  ]);
+  if (!enabled || !workspace) return { installed: false };
+  const fyStartMonth = workspace.fyStartMonth;
 
   const view: DriveView = params?.view === "trips" ? "trips" : "earnings";
   const period = params?.period ?? parsePeriod(undefined);
   const search = params?.search?.trim() ?? "";
   const platform = params?.platform || undefined;
-  const range = periodRange(period);
+  const range = periodRange(period, undefined, fyStartMonth);
 
   // 4 fetches: list (capped 100) + summary (capped 2000) per entity type. The summary spans
   // both earnings + trips, so both summary fetches run regardless of `view`. The inactive

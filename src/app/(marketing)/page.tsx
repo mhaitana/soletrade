@@ -18,9 +18,9 @@ export default function MarketingPage() {
           One workspace for invoices, books, quotes, and gig earnings.
         </h1>
         <p className="mt-5 max-w-xl text-balance text-muted-foreground">
-          soletrade OS is a modular, mobile-first platform for solo traders, freelancers, and
-          gig operators. Enable the modules you need — share customers, files, and billing across
-          all of them.
+          soletrade OS is a modular, mobile-first platform for solo traders, freelancers, and gig
+          operators. Enable the modules you need — share customers, files, and billing across all of
+          them.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Button asChild size="lg">

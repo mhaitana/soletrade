@@ -14,13 +14,24 @@ import type { TaxPeriodId, UserId, WorkspaceId } from "@/shared/types/ids";
  * the list/get reads for the `/books/tax` page.
  */
 
-/** Date range (UTC) for an Australian financial-year quarter. */
-function quarterRange(fiscalYear: number, quarter: number): { start: Date; end: Date } {
-  // Q1 = Jul–Sep, Q2 = Oct–Dec, Q3 = Jan–Mar, Q4 = Apr–Jun (FY starts 1 July).
-  const startMonth = 6 + (quarter - 1) * 3; // 0-indexed: Q1→6 (Jul), Q2→9 (Oct), Q3→0 (Jan), Q4→3 (Apr)
-  const year = quarter <= 2 ? fiscalYear : fiscalYear + 1;
-  const start = new Date(Date.UTC(year, startMonth % 12, 1));
-  const end = new Date(Date.UTC(year, (startMonth % 12) + 3, 1) - 1); // inclusive last ms of the quarter
+/**
+ * Date range (UTC) for a financial-year quarter. `fyStartMonth` is 1–12 (default `7` = 1 July,
+ * Australian); the quarter starts on day 1 of `fyStartMonth + (quarter-1)*3` (mod 12).
+ * `end` is the inclusive last ms of the quarter (first ms of the next quarter − 1).
+ */
+function quarterRange(
+  fiscalYear: number,
+  quarter: number,
+  fyStartMonth: number = 7,
+): { start: Date; end: Date } {
+  const startMonthIdx = fyStartMonth - 1; // 0–11
+  // Absolute month index from a fixed epoch: fiscalYear's FY-start month + (quarter-1)*3.
+  // Q1/Q2 fall in `fiscalYear` (the FY-start calendar year); Q3/Q4 fall in `fiscalYear + 1`.
+  const absStartMonth = startMonthIdx + (quarter - 1) * 3; // months since Jan of fiscalYear
+  const year = fiscalYear + Math.floor(absStartMonth / 12);
+  const month = absStartMonth % 12;
+  const start = new Date(Date.UTC(year, month, 1));
+  const end = new Date(Date.UTC(year, month + 3, 1) - 1); // inclusive last ms of the quarter
   return { start, end };
 }
 
@@ -50,10 +61,11 @@ export async function lodgeTaxPeriod(
   fiscalYear: number,
   quarter: number,
   actorId: UserId,
+  fyStartMonth: number = 7,
 ): Promise<TaxPeriodRow> {
   if (quarter < 1 || quarter > 4) throw new Error("Quarter must be 1–4.");
   const label = `${fiscalYear}-Q${quarter}`;
-  const { start, end } = quarterRange(fiscalYear, quarter);
+  const { start, end } = quarterRange(fiscalYear, quarter, fyStartMonth);
 
   const db = getDb();
   // Sum GST collected (income) and paid (expense) for the quarter from transactions.
@@ -153,7 +165,11 @@ export async function listTaxPeriods(workspaceId: WorkspaceId): Promise<TaxPerio
   return rows as TaxPeriodRow[];
 }
 
-/** The current Australian financial-year quarter containing `now`. */
-export function currentQuarter(now: Date): { fiscalYear: number; quarter: number; label: string } {
-  return fiscalQuarter(now);
+/** The current financial-year quarter containing `now`, per the workspace's `fyStartMonth`
+ *  (1–12, default `7` = 1 July). */
+export function currentQuarter(
+  now: Date,
+  fyStartMonth: number = 7,
+): { fiscalYear: number; quarter: number; label: string } {
+  return fiscalQuarter(now, fyStartMonth);
 }

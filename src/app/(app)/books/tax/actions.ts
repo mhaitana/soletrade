@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
+import { getWorkspace } from "@/platform/workspaces";
 import { authorize } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
@@ -40,7 +41,12 @@ export type TaxPageData =
  */
 export async function loadTaxPage(): Promise<TaxPageData> {
   const ctx = await requireWorkspaceContext();
-  if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
+  const [enabled, workspace] = await Promise.all([
+    isModuleEnabled(ctx.workspaceId, "books"),
+    getWorkspace(ctx.workspaceId),
+  ]);
+  if (!enabled || !workspace) return { installed: false };
+  const fyStartMonth = workspace.fyStartMonth;
 
   const now = new Date();
   const [rows, lodgedPeriods, canManage] = await Promise.all([
@@ -51,6 +57,7 @@ export async function loadTaxPage(): Promise<TaxPageData> {
 
   const gstSummary = summarizeGst(
     rows.map((r) => ({ type: r.type, gstCents: r.gstCents, date: r.date })),
+    fyStartMonth,
   );
 
   return {
@@ -58,7 +65,7 @@ export async function loadTaxPage(): Promise<TaxPageData> {
     gstSummary,
     lodgedPeriods,
     canManage,
-    currentQuarter: currentQuarter(now),
+    currentQuarter: currentQuarter(now, fyStartMonth),
   };
 }
 
@@ -81,7 +88,15 @@ export async function lodgeTaxPeriodAction(input: unknown): Promise<LodgeTaxPeri
   if (!(await authorizeOrAudit(ctx, "manage:books")).ok) return forbid();
 
   try {
-    await lodgeTaxPeriod(ctx.workspaceId, parsed.data.fiscalYear, parsed.data.quarter, ctx.user.id);
+    const workspace = await getWorkspace(ctx.workspaceId);
+    const fyStartMonth = workspace?.fyStartMonth ?? 7;
+    await lodgeTaxPeriod(
+      ctx.workspaceId,
+      parsed.data.fiscalYear,
+      parsed.data.quarter,
+      ctx.user.id,
+      fyStartMonth,
+    );
     revalidatePath("/books/tax");
     return { ok: true };
   } catch (err) {

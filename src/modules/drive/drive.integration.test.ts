@@ -209,7 +209,10 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
       (e) => e.type === "DriveEarningUpdated" && e.entityId === createdEarningIds[0],
     );
     expect(evt).toBeDefined();
-    expect(evt?.metadata).toMatchObject({ amountCents: 9999, description: "Airport run (revised)" });
+    expect(evt?.metadata).toMatchObject({
+      amountCents: 9999,
+      description: "Airport run (revised)",
+    });
   });
 
   it("updateEarning on another workspace's row throws (not found)", async () => {

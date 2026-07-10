@@ -19,6 +19,7 @@ const PERIOD_NOUN: Record<Exclude<Period, "all">, string> = {
   month: "last month",
   quarter: "last quarter",
   year: "last year",
+  calendar: "last calendar year",
 };
 
 const CHECKLIST = [

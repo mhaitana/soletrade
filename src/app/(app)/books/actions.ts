@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/platform/context";
+import { getWorkspace } from "@/platform/workspaces";
 import { authorize } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
 import { isModuleEnabled } from "@/platform/module-installations";
@@ -202,11 +203,16 @@ export async function loadBooksPage(params?: {
   period?: Period;
 }): Promise<BooksPageData> {
   const ctx = await requireWorkspaceContext();
-  if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
+  const [enabled, workspace] = await Promise.all([
+    isModuleEnabled(ctx.workspaceId, "books"),
+    getWorkspace(ctx.workspaceId),
+  ]);
+  if (!enabled || !workspace) return { installed: false };
+  const fyStartMonth = workspace.fyStartMonth;
 
   const period = params?.period ?? parsePeriod(undefined);
   const search = params?.search?.trim() ?? "";
-  const range = periodRange(period);
+  const range = periodRange(period, undefined, fyStartMonth);
   const [transactions, summaryRows, canManage] = await Promise.all([
     // Page list: cap at the default 100, with the type + search + date range.
     listTransactions(ctx.workspaceId, {

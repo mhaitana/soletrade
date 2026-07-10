@@ -517,7 +517,9 @@ export function buildAssistantTools(
             // a different failure re-throws so it surfaces honestly.
             const message = err instanceof Error ? err.message : "";
             if (!/unique|duplicate/i.test(message)) throw err;
-            const existing = input.email ? await getCustomerByEmail(workspaceId, input.email) : null;
+            const existing = input.email
+              ? await getCustomerByEmail(workspaceId, input.email)
+              : null;
             if (!existing) throw err;
             return { id: existing.id, name: existing.name, existed: true };
           }
@@ -531,7 +533,10 @@ export function buildAssistantTools(
         description:
           "Update an existing customer's fields (e.g. add or change a phone number, email, company, notes). Use after the user confirms. Pass the customer id (from listCustomers or a prior create) and only the fields to change — omitted fields are left unchanged. Returns { id, updated: true }.",
         inputSchema: z.object({
-          customerId: z.string().uuid().describe("The existing customer's id (from listCustomers)."),
+          customerId: z
+            .string()
+            .uuid()
+            .describe("The existing customer's id (from listCustomers)."),
           name: z.string().min(1).max(200).optional().describe("New display name."),
           email: z.string().email().optional().describe("New contact email."),
           phone: z.string().max(50).optional().describe("New phone number."),
@@ -579,14 +584,18 @@ export function buildAssistantTools(
     if (hasModule("invoices") && can("manage:invoice")) {
       tools.createInvoice = tool({
         description:
-          "Create a draft invoice in the workspace. Use after the user confirms the line items + totals. Returns the new invoice id + number. Required: issueDate (ISO), taxRate (integer percent, 10 = 10%), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred — e.g. \"amos@miruku.com\") or customerId (from listCustomers); omit both for a walk-in invoice. Optional: dueDate (ISO), currency, notes.",
+          'Create a draft invoice in the workspace. Use after the user confirms the line items + totals. Returns the new invoice id + number. Required: issueDate (ISO), taxRate (integer percent, 10 = 10%), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred — e.g. "amos@miruku.com") or customerId (from listCustomers); omit both for a walk-in invoice. Optional: dueDate (ISO), currency, notes.',
         inputSchema: z.object({
           customerEmail: z
             .string()
             .email()
             .optional()
             .describe("Customer email — preferred way to attach an existing customer."),
-          customerId: z.string().uuid().optional().describe("Optional customer id (from listCustomers)."),
+          customerId: z
+            .string()
+            .uuid()
+            .optional()
+            .describe("Optional customer id (from listCustomers)."),
           issueDate: z.string().datetime().describe("Issue date (ISO 8601)."),
           dueDate: z.string().datetime().optional().describe("Optional due date (ISO 8601)."),
           currency: z.string().length(3).optional().describe("ISO 4217 code, e.g. AUD."),
@@ -643,7 +652,9 @@ export function buildAssistantTools(
             // re-throws so it surfaces honestly.
             const message = err instanceof Error ? err.message : "";
             if (/unique|duplicate/i.test(message))
-              return { error: "Couldn't generate a unique invoice number just now — please try again." };
+              return {
+                error: "Couldn't generate a unique invoice number just now — please try again.",
+              };
             throw err;
           }
         },
@@ -654,14 +665,18 @@ export function buildAssistantTools(
     if (hasModule("quotes") && can("manage:quote")) {
       tools.createQuote = tool({
         description:
-          "Create a draft quote in the workspace. Use after the user confirms the line items + totals. Returns the new quote id. Required: issueDate (ISO), taxRate (integer percent), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred — e.g. \"amos@miruku.com\") or customerId (from listCustomers); omit both for a walk-in quote. Optional: validUntil (ISO), currency, notes.",
+          'Create a draft quote in the workspace. Use after the user confirms the line items + totals. Returns the new quote id. Required: issueDate (ISO), taxRate (integer percent), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred — e.g. "amos@miruku.com") or customerId (from listCustomers); omit both for a walk-in quote. Optional: validUntil (ISO), currency, notes.',
         inputSchema: z.object({
           customerEmail: z
             .string()
             .email()
             .optional()
             .describe("Customer email — preferred way to attach an existing customer."),
-          customerId: z.string().uuid().optional().describe("Optional customer id (from listCustomers)."),
+          customerId: z
+            .string()
+            .uuid()
+            .optional()
+            .describe("Optional customer id (from listCustomers)."),
           issueDate: z.string().datetime().describe("Issue date (ISO 8601)."),
           validUntil: z
             .string()
@@ -718,7 +733,9 @@ export function buildAssistantTools(
           } catch (err) {
             const message = err instanceof Error ? err.message : "";
             if (/unique|duplicate/i.test(message))
-              return { error: "Couldn't generate a unique quote number just now — please try again." };
+              return {
+                error: "Couldn't generate a unique quote number just now — please try again.",
+              };
             throw err;
           }
         },
@@ -840,7 +857,11 @@ export function buildAssistantTools(
           platform: z.string().min(1).max(50).describe("Platform slug (e.g. uber, doordash)."),
           amountCents: z.number().int().min(1).describe("Earnings in integer cents (positive)."),
           date: z.string().datetime().describe("Earning date (ISO 8601)."),
-          description: z.string().min(1).max(500).describe("Short description (e.g. 'Evening shift')."),
+          description: z
+            .string()
+            .min(1)
+            .max(500)
+            .describe("Short description (e.g. 'Evening shift')."),
           currency: z.string().length(3).optional().describe("ISO 4217 code, e.g. AUD."),
           notes: z.string().max(2000).optional().describe("Optional notes."),
         }),
@@ -937,11 +958,18 @@ export function buildAssistantTools(
             .optional()
             .describe("Vehicle name (preferred — exact match against listVehicles)."),
           vehicleId: z.string().uuid().optional().describe("Optional vehicle id."),
-          type: z.enum(["fuel", "maintenance", "insurance", "registration", "other"]).describe("Expense type."),
+          type: z
+            .enum(["fuel", "maintenance", "insurance", "registration", "other"])
+            .describe("Expense type."),
           amountCents: z.number().int().min(1).describe("Amount in integer cents (positive)."),
           date: z.string().datetime().describe("Expense date (ISO 8601)."),
           description: z.string().min(1).max(500).describe("Short description."),
-          odometerKm: z.number().int().min(0).optional().describe("Optional odometer reading in km."),
+          odometerKm: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Optional odometer reading in km."),
           currency: z.string().length(3).optional().describe("ISO 4217 code, e.g. AUD."),
           notes: z.string().max(2000).optional().describe("Optional notes."),
         }),
@@ -988,7 +1016,8 @@ export function buildAssistantTools(
             const message = err instanceof Error ? err.message : "";
             if (/not found in this workspace/i.test(message))
               return {
-                error: "Vehicle not found in this workspace. Call listVehicles first to get the vehicle name/id.",
+                error:
+                  "Vehicle not found in this workspace. Call listVehicles first to get the vehicle name/id.",
               };
             if (/must be greater than 0/i.test(message))
               return { error: "Amount must be greater than 0." };
@@ -1121,7 +1150,11 @@ export function buildAssistantTools(
         description:
           "Send a draft invoice to its customer — this emails them a payment link (outward-facing, so confirm the exact invoice number with the user first). Required: invoiceNumber (e.g. INV-2026-0007). Returns { sent: true, number }, or an error if the invoice isn't a draft (it may already be sent) or isn't found.",
         inputSchema: z.object({
-          invoiceNumber: z.string().min(1).max(50).describe("The invoice number (e.g. INV-2026-0007)."),
+          invoiceNumber: z
+            .string()
+            .min(1)
+            .max(50)
+            .describe("The invoice number (e.g. INV-2026-0007)."),
         }),
         execute: async (input) => {
           if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) {
@@ -1143,7 +1176,11 @@ export function buildAssistantTools(
         description:
           "Void an invoice (draft or sent → void). Required: invoiceNumber. Returns { voided: true, number }, or an error if the invoice is already paid/void or isn't found.",
         inputSchema: z.object({
-          invoiceNumber: z.string().min(1).max(50).describe("The invoice number (e.g. INV-2026-0007)."),
+          invoiceNumber: z
+            .string()
+            .min(1)
+            .max(50)
+            .describe("The invoice number (e.g. INV-2026-0007)."),
         }),
         execute: async (input) => {
           if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) {
@@ -1166,7 +1203,11 @@ export function buildAssistantTools(
         description:
           "Mark a sent invoice as paid (manual / offline payment — e.g. cash, bank transfer). Required: invoiceNumber. Returns { paid: true, number }, or an error if the invoice isn't sent yet (or is already paid/void) or isn't found.",
         inputSchema: z.object({
-          invoiceNumber: z.string().min(1).max(50).describe("The invoice number (e.g. INV-2026-0007)."),
+          invoiceNumber: z
+            .string()
+            .min(1)
+            .max(50)
+            .describe("The invoice number (e.g. INV-2026-0007)."),
         }),
         execute: async (input) => {
           if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) {
@@ -1254,7 +1295,9 @@ export function buildAssistantTools(
           } catch (err) {
             const message = err instanceof Error ? err.message : "";
             if (/unique|duplicate/i.test(message))
-              return { error: "Couldn't generate a unique invoice number just now — please try again." };
+              return {
+                error: "Couldn't generate a unique invoice number just now — please try again.",
+              };
             throw err;
           }
         },

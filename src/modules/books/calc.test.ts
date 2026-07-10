@@ -179,6 +179,87 @@ describe("fiscalQuarter (Australian FY starts July)", () => {
   });
 });
 
+describe("fiscalQuarter — configurable fyStartMonth", () => {
+  it("default (7 = July) preserves the Australian behaviour", () => {
+    expect(fiscalQuarter(new Date("2026-08-15"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 1,
+      label: "2026-Q1",
+    });
+    expect(fiscalQuarter(new Date("2027-02-15"))).toEqual({
+      fiscalYear: 2026,
+      quarter: 3,
+      label: "2026-Q3",
+    });
+  });
+
+  it("NZ (fyStartMonth=4): Q1=Apr–Jun, Q2=Jul–Sep, Q3=Oct–Dec, Q4=Jan–Mar", () => {
+    // May 2026 → NZ FY2026 Q1 (Apr–Jun 2026).
+    expect(fiscalQuarter(new Date("2026-05-15"), 4)).toEqual({
+      fiscalYear: 2026,
+      quarter: 1,
+      label: "2026-Q1",
+    });
+    // Aug 2026 → NZ FY2026 Q2 (Jul–Sep 2026).
+    expect(fiscalQuarter(new Date("2026-08-15"), 4)).toEqual({
+      fiscalYear: 2026,
+      quarter: 2,
+      label: "2026-Q2",
+    });
+    // Nov 2026 → NZ FY2026 Q3 (Oct–Dec 2026).
+    expect(fiscalQuarter(new Date("2026-11-15"), 4)).toEqual({
+      fiscalYear: 2026,
+      quarter: 3,
+      label: "2026-Q3",
+    });
+    // Feb 2027 → NZ FY2026 Q4 (Jan–Mar 2027); fiscalYear is the FY-start year 2026.
+    expect(fiscalQuarter(new Date("2027-02-15"), 4)).toEqual({
+      fiscalYear: 2026,
+      quarter: 4,
+      label: "2026-Q4",
+    });
+  });
+
+  it("January (fyStartMonth=1) = calendar-year quarters", () => {
+    expect(fiscalQuarter(new Date("2026-02-15"), 1)).toEqual({
+      fiscalYear: 2026,
+      quarter: 1,
+      label: "2026-Q1",
+    });
+    expect(fiscalQuarter(new Date("2026-07-15"), 1)).toEqual({
+      fiscalYear: 2026,
+      quarter: 3,
+      label: "2026-Q3",
+    });
+  });
+});
+
+describe("summarizeGst — configurable fyStartMonth", () => {
+  function grow(partial: Omit<GstSummaryInput, "date"> & { date?: Date }): GstSummaryInput {
+    return { date: new Date("2026-08-15T12:00:00Z"), ...partial };
+  }
+
+  it("default (7 = July) keeps the Australian quarter labels", () => {
+    const s = summarizeGst([
+      grow({ type: "income", gstCents: 1000, date: new Date("2026-08-01") }), // AU Q1
+      grow({ type: "expense", gstCents: 200, date: new Date("2027-02-01") }), // AU Q3
+    ]);
+    expect(s.byQuarter.map((q) => q.label)).toEqual(["2026-Q1", "2026-Q3"]);
+  });
+
+  it("NZ (fyStartMonth=4) regroups the same dates into NZ fiscal quarters", () => {
+    // Aug 2026 is NZ Q2 (not AU Q1); Feb 2027 is NZ Q4 (not AU Q3).
+    const s = summarizeGst(
+      [
+        grow({ type: "income", gstCents: 1000, date: new Date("2026-08-01") }),
+        grow({ type: "expense", gstCents: 200, date: new Date("2027-02-01") }),
+      ],
+      4,
+    );
+    expect(s.byQuarter.map((q) => q.label)).toEqual(["2026-Q2", "2026-Q4"]);
+  });
+});
+
 describe("summarizeGst", () => {
   function grow(partial: Omit<GstSummaryInput, "date"> & { date?: Date }): GstSummaryInput {
     return { date: new Date("2026-08-15T12:00:00Z"), ...partial };

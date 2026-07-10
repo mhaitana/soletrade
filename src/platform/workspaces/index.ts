@@ -102,6 +102,8 @@ export interface WorkspaceUpdateInput {
   invoicePrefix: string;
   quotePrefix: string;
   timezone: string;
+  /** Financial-year start month, 1–12 (1 = January, 7 = July). */
+  fyStartMonth: number;
 }
 
 /**
@@ -124,6 +126,7 @@ export async function updateWorkspace(
       invoicePrefix: input.invoicePrefix,
       quotePrefix: input.quotePrefix,
       timezone: input.timezone,
+      fyStartMonth: input.fyStartMonth,
       updatedAt: new Date(),
     })
     .where(and(eq(workspaces.id, workspaceId), isNull(workspaces.deletedAt)))
@@ -142,6 +145,7 @@ export async function updateWorkspace(
       invoicePrefix: input.invoicePrefix,
       quotePrefix: input.quotePrefix,
       timezone: input.timezone,
+      fyStartMonth: input.fyStartMonth,
     },
   });
   await writeAudit({
@@ -156,6 +160,7 @@ export async function updateWorkspace(
       invoicePrefix: input.invoicePrefix,
       quotePrefix: input.quotePrefix,
       timezone: input.timezone,
+      fyStartMonth: input.fyStartMonth,
     },
   });
   return updated;

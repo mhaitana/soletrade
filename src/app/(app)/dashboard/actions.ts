@@ -1,6 +1,7 @@
 "use server";
 
 import { requireWorkspaceContext } from "@/platform/context";
+import { getWorkspace } from "@/platform/workspaces";
 import { getInstalledModules } from "@/platform/module-installations";
 import { formatCents } from "@/platform/billing/pricing";
 import { formatKm } from "@/modules/drive/calc";
@@ -255,7 +256,11 @@ async function driveCard(
             points: cur.monthly.map((m) =>
               booksEnabled
                 ? { month: m.month, value: m.distanceMeters, label: formatKm(m.distanceMeters) }
-                : { month: m.month, value: m.earningsCents, label: formatCents(m.earningsCents, CURRENCY) },
+                : {
+                    month: m.month,
+                    value: m.earningsCents,
+                    label: formatCents(m.earningsCents, CURRENCY),
+                  },
             ),
           }
         : null,
@@ -319,10 +324,16 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
   const ctx = await requireWorkspaceContext();
   const requested = params?.period;
   const period: Period = requested ? parsePeriod(requested) : DASHBOARD_DEFAULT_PERIOD;
-  const currentRange = periodRange(period);
-  const previousRange = previousPeriodRange(period);
 
-  const installed = await getInstalledModules(ctx.workspaceId);
+  // Fetch the workspace (for its `fyStartMonth`) alongside the installed-module list, then
+  // reanchor the "year"/"quarter" period windows to the workspace's financial year.
+  const [workspace, installed] = await Promise.all([
+    getWorkspace(ctx.workspaceId),
+    getInstalledModules(ctx.workspaceId),
+  ]);
+  const fyStartMonth = workspace?.fyStartMonth ?? 7;
+  const currentRange = periodRange(period, undefined, fyStartMonth);
+  const previousRange = previousPeriodRange(period, undefined, fyStartMonth);
   const has = (k: ModuleKey) => installed.includes(k);
 
   // Fetch only installed modules; each runs its own parallel fetches internally. All four
