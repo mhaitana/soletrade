@@ -69,7 +69,11 @@ describe("requireWorkspaceContext", () => {
     expect(mockSetActiveWorkspaceId).not.toHaveBeenCalled();
   });
 
-  it("uses the first membership and repairs the cookie when it's missing", async () => {
+  it("uses the first membership when the cookie is missing, without writing the cookie", async () => {
+    // The resolver is read-only (called from Server Component renders, where Next
+    // forbids cookies().set()). It falls back to the first membership but leaves the
+    // cookie unset — the cookie is persisted only by explicit activation actions
+    // (switchWorkspace / createWorkspace / acceptInvite).
     const memberships = [
       { workspaceId: WID("ws-1"), name: "Acme", slug: "acme", role: "owner" as const },
       { workspaceId: WID("ws-2"), name: "Beta", slug: "beta", role: "admin" as const },
@@ -80,11 +84,10 @@ describe("requireWorkspaceContext", () => {
     const ctx = await requireWorkspaceContext();
 
     expect(ctx.workspaceId).toBe("ws-1");
-    expect(mockSetActiveWorkspaceId).toHaveBeenCalledTimes(1);
-    expect(mockSetActiveWorkspaceId).toHaveBeenCalledWith(WID("ws-1"));
+    expect(mockSetActiveWorkspaceId).not.toHaveBeenCalled();
   });
 
-  it("falls back to the first membership when the cookie points at a revoked workspace", async () => {
+  it("falls back to the first membership when the cookie points at a revoked workspace, without writing the cookie", async () => {
     const memberships = setupMembership("manager");
     mockListUserWorkspaces.mockResolvedValue(memberships);
     // Cookie references a workspace the user is no longer a member of.
@@ -93,7 +96,7 @@ describe("requireWorkspaceContext", () => {
     const ctx = await requireWorkspaceContext();
 
     expect(ctx.workspaceId).toBe("ws-1");
-    expect(mockSetActiveWorkspaceId).toHaveBeenCalledWith(WID("ws-1"));
+    expect(mockSetActiveWorkspaceId).not.toHaveBeenCalled();
   });
 
   it("redirects to /onboarding when the user has no workspaces", async () => {

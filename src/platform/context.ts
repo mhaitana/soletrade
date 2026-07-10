@@ -6,7 +6,6 @@ import {
   getActiveWorkspaceId,
   getMembershipRole,
   listUserWorkspaces,
-  setActiveWorkspaceId,
   type WorkspaceMembership,
 } from "@/platform/workspaces";
 import type { WorkspaceId } from "@/shared/types/ids";
@@ -29,8 +28,16 @@ export interface WorkspaceContext {
  * would redirect to `/login` / `/onboarding`. Route Handlers (e.g. the streaming AI
  * assistant endpoint) can't redirect — a `redirect()` call throws a `NEXT_REDIRECT`
  * sentinel that can't be turned into an HTTP response — so they use this variant and
- * map `null` to a `401`/`403`. Ensures the active-workspace cookie always points at a
- * workspace the user is actually a member of (same repair as the requiring variant).
+ * map `null` to a `401`/`403`.
+ *
+ * Read-only: this is called from Server Component renders (layout, dashboard, PDF/report
+ * routes), where Next forbids `cookies().set()` — "Setting cookies is not supported during
+ * Server Component rendering" (see Next `cookies` docs). So we validate the active-workspace
+ * cookie against the user's memberships and fall back to the first membership if the cookie
+ * is missing or stale, but we never WRITE the cookie here. The resolved workspace is always a
+ * valid membership; the cookie itself is persisted only by the explicit activation actions
+ * (`switchWorkspace` / `createWorkspace` / `acceptInvite`), which run in Server Action contexts
+ * where cookie writes are allowed.
  */
 export async function tryWorkspaceContext(): Promise<WorkspaceContext | null> {
   const user = await getCurrentUser();
@@ -42,11 +49,6 @@ export async function tryWorkspaceContext(): Promise<WorkspaceContext | null> {
   const cookieId = await getActiveWorkspaceId();
   const fromCookie = cookieId ? memberships.find((m) => m.workspaceId === cookieId) : undefined;
   const chosen: WorkspaceMembership = fromCookie ?? memberships[0]!;
-
-  // If the cookie was missing or stale, repair it so subsequent requests are stable.
-  if (!fromCookie) {
-    await setActiveWorkspaceId(chosen.workspaceId);
-  }
 
   const role = await getMembershipRole(chosen.workspaceId, user.id);
   if (!role) return null;
