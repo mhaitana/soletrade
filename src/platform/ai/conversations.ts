@@ -1,8 +1,7 @@
 import "server-only";
-import { and, asc, desc, eq } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { aiConversations, aiMessages } from "@/server/db/schema";
-import type { AiConversationId, UserId, WorkspaceId } from "@/shared/types/ids";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
+import { branded, type AiConversationId, type UserId, type WorkspaceId } from "@/shared/types/ids";
 
 /**
  * AI assistant conversation persistence (Phase 10). Per-user within a workspace:
@@ -39,19 +38,22 @@ export async function listConversations(
   userId: UserId,
   opts: { limit?: number } = {},
 ): Promise<ConversationSummary[]> {
-  const db = getDb();
+  const supabase = getDataClient();
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
-  const rows = await db
-    .select({
-      id: aiConversations.id,
-      title: aiConversations.title,
-      updatedAt: aiConversations.updatedAt,
-    })
-    .from(aiConversations)
-    .where(and(eq(aiConversations.workspaceId, workspaceId), eq(aiConversations.userId, userId)))
-    .orderBy(desc(aiConversations.updatedAt))
-    .limit(limit);
-  return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt }));
+  const rows = await unwrap(
+    supabase
+      .from("ai_conversations")
+      .select("id, title, updated_at")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(limit),
+  );
+  return rows.map((r) => ({
+    id: branded<"AiConversationId">(r.id),
+    title: r.title,
+    updatedAt: parsePgTimestamp(r.updated_at),
+  }));
 }
 
 /**
@@ -64,42 +66,38 @@ export async function getConversation(
   userId: UserId,
   conversationId: AiConversationId,
 ): Promise<Conversation | null> {
-  const db = getDb();
-  const [conv] = await db
-    .select({
-      id: aiConversations.id,
-      title: aiConversations.title,
-      writeEnabled: aiConversations.writeEnabled,
-      updatedAt: aiConversations.updatedAt,
-    })
-    .from(aiConversations)
-    .where(
-      and(
-        eq(aiConversations.id, conversationId),
-        eq(aiConversations.workspaceId, workspaceId),
-        eq(aiConversations.userId, userId),
-      ),
-    )
-    .limit(1);
+  const supabase = getDataClient();
+  const conv = await unwrapMaybe(
+    supabase
+      .from("ai_conversations")
+      .select("id, title, write_enabled, updated_at")
+      .eq("id", conversationId)
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle(),
+  );
   if (!conv) return null;
 
-  const msgs = await db
-    .select({
-      role: aiMessages.role,
-      content: aiMessages.content,
-      createdAt: aiMessages.createdAt,
-    })
-    .from(aiMessages)
-    .where(eq(aiMessages.conversationId, conversationId))
-    .orderBy(asc(aiMessages.createdAt))
-    .limit(1000);
+  const msgs = await unwrap(
+    supabase
+      .from("ai_messages")
+      .select("role, content, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .limit(1000),
+  );
 
   return {
-    id: conv.id,
+    id: branded<"AiConversationId">(conv.id),
     title: conv.title,
-    writeEnabled: conv.writeEnabled,
-    updatedAt: conv.updatedAt,
-    messages: msgs.map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
+    writeEnabled: conv.write_enabled,
+    updatedAt: parsePgTimestamp(conv.updated_at),
+    messages: msgs.map((m) => ({
+      role: m.role,
+      content: m.content,
+      createdAt: parsePgTimestamp(m.created_at),
+    })),
   };
 }
 
@@ -109,20 +107,25 @@ export async function createConversation(
   userId: UserId,
   title?: string,
 ): Promise<AiConversationId> {
-  const db = getDb();
-  const [row] = await db
-    .insert(aiConversations)
-    .values({ workspaceId, userId, title: title ?? undefined })
-    .returning({ id: aiConversations.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("ai_conversations")
+      // `title` is NOT NULL with a default ("New conversation"); pass `undefined` (omitted
+      // from the payload via JSON.stringify) so the DB default applies when no title given.
+      .insert({ workspace_id: workspaceId, user_id: userId, title: title ?? undefined })
+      .select("id"),
+  );
+  const row = rows[0];
   if (!row) throw new Error("Failed to create AI conversation.");
-  return row.id;
+  return branded<"AiConversationId">(row.id);
 }
 
 /**
  * Append a message to a conversation and bump its `updatedAt`. Verifies ownership
- * first (IDOR-safe) — a no-op/throw if the conversation isn't this user's in this
- * workspace. Throws on a missing conversation so the caller surfaces a 404/403
- * rather than silently writing to a row the user doesn't own.
+ * first (IDOR-safe) — a throw if the conversation isn't this user's in this
+ * workspace, so the caller surfaces a 404/403 rather than silently writing to a
+ * row the user doesn't own.
  */
 export async function appendMessage(
   workspaceId: WorkspaceId,
@@ -130,30 +133,33 @@ export async function appendMessage(
   conversationId: AiConversationId,
   input: { role: "user" | "assistant"; content: string },
 ): Promise<void> {
-  const db = getDb();
-  const [owned] = await db
-    .select({ id: aiConversations.id })
-    .from(aiConversations)
-    .where(
-      and(
-        eq(aiConversations.id, conversationId),
-        eq(aiConversations.workspaceId, workspaceId),
-        eq(aiConversations.userId, userId),
-      ),
-    )
-    .limit(1);
+  const supabase = getDataClient();
+  const owned = await unwrapMaybe(
+    supabase
+      .from("ai_conversations")
+      .select("id")
+      .eq("id", conversationId)
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle(),
+  );
   if (!owned) {
     throw new Error("AI conversation not found for this user in this workspace.");
   }
-  await db.insert(aiMessages).values({
-    conversationId,
-    role: input.role,
-    content: input.content,
-  });
-  await db
-    .update(aiConversations)
-    .set({ updatedAt: new Date() })
-    .where(eq(aiConversations.id, conversationId));
+  await unwrapVoid(
+    supabase.from("ai_messages").insert({
+      conversation_id: conversationId,
+      role: input.role,
+      content: input.content,
+    }),
+  );
+  await unwrapVoid(
+    supabase
+      .from("ai_conversations")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", conversationId),
+  );
 }
 
 /** Hard-delete a conversation (cascades its messages). IDOR-safe ownership filter. */
@@ -162,16 +168,15 @@ export async function deleteConversation(
   userId: UserId,
   conversationId: AiConversationId,
 ): Promise<void> {
-  const db = getDb();
-  await db
-    .delete(aiConversations)
-    .where(
-      and(
-        eq(aiConversations.id, conversationId),
-        eq(aiConversations.workspaceId, workspaceId),
-        eq(aiConversations.userId, userId),
-      ),
-    );
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("ai_conversations")
+      .delete()
+      .eq("id", conversationId)
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId),
+  );
 }
 
 /** Rename a conversation (e.g. derived from the first user message). IDOR-safe. */
@@ -181,17 +186,15 @@ export async function renameConversation(
   conversationId: AiConversationId,
   title: string,
 ): Promise<void> {
-  const db = getDb();
-  await db
-    .update(aiConversations)
-    .set({ title, updatedAt: new Date() })
-    .where(
-      and(
-        eq(aiConversations.id, conversationId),
-        eq(aiConversations.workspaceId, workspaceId),
-        eq(aiConversations.userId, userId),
-      ),
-    );
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("ai_conversations")
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq("id", conversationId)
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId),
+  );
 }
 
 /**
@@ -207,15 +210,13 @@ export async function setConversationWriteEnabled(
   conversationId: AiConversationId,
   enabled: boolean,
 ): Promise<void> {
-  const db = getDb();
-  await db
-    .update(aiConversations)
-    .set({ writeEnabled: enabled, updatedAt: new Date() })
-    .where(
-      and(
-        eq(aiConversations.id, conversationId),
-        eq(aiConversations.workspaceId, workspaceId),
-        eq(aiConversations.userId, userId),
-      ),
-    );
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("ai_conversations")
+      .update({ write_enabled: enabled, updated_at: new Date().toISOString() })
+      .eq("id", conversationId)
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId),
+  );
 }

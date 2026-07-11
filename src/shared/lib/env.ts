@@ -45,7 +45,9 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
-  // Database (Drizzle — Supabase pooled connection)
+  // Postgres connection string used ONLY by integration tests (the HAS_DB gate +
+  // setup.ts TCP probe). The app's data client uses NEXT_PUBLIC_SUPABASE_URL +
+  // SUPABASE_SERVICE_ROLE_KEY (PostgREST), not a direct Postgres connection.
   DATABASE_URL: z.string().optional(),
 
   // Stripe

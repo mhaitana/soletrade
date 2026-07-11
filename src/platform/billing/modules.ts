@@ -25,7 +25,7 @@ import {
 import type { CancelOption } from "@/platform/billing/cancellation";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
-import type { BillingInterval } from "@/server/db/schema/enums";
+import type { BillingInterval } from "@/server/db/enums";
 import type { UserId, WorkspaceId } from "@/shared/types/ids";
 import type { ModuleKey } from "@/shared/constants/modules";
 

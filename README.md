@@ -13,7 +13,7 @@ customers, files, activity, AI, permissions, and settings.
 - **Framework:** Next.js 16 (App Router) · React 19
 - **Language:** TypeScript (strict + `noUncheckedIndexedAccess`)
 - **Styling:** Tailwind CSS v4 · shadcn/ui (new-york · Radix)
-- **Data:** Drizzle ORM · PostgreSQL (Supabase)
+- **Data:** Supabase JS client (PostgREST) · PostgreSQL (Supabase) · Supabase CLI migrations
 - **Auth:** Supabase Auth
 - **Billing:** Stripe Billing (subscriptions, credit ledger)
 - **Email/SMS:** Resend · Twilio (optional)
@@ -25,7 +25,7 @@ customers, files, activity, AI, permissions, and settings.
 ```bash
 pnpm install
 pnpm db:start          # start local Supabase (Docker) — first run pulls images
-pnpm db:migrate        # apply Drizzle migrations to the local Postgres
+pnpm db:reset          # apply all Supabase migrations to the local Postgres
 pnpm dev               # http://localhost:3000
 ```
 
@@ -41,16 +41,40 @@ The project ships a local Supabase stack for development and for the
 
 ```bash
 pnpm db:start          # supabase start — Postgres + Auth + Studio on 54321–54323
-pnpm db:migrate        # drizzle-kit migrate (applies src/server/db/migrations)
-pnpm db:studio         # (optional) Drizzle Studio to browse tables
+pnpm db:reset          # wipe + recreate local DB, then re-apply supabase/migrations
+pnpm db:types          # regenerate src/server/db/types.ts from the local schema
 pnpm test:ci           # runs unit + integration tests against the local DB
 pnpm db:stop           # stop the local stack (data persists in Docker volumes)
-pnpm db:reset          # wipe + recreate local DB, then re-apply migrations
 ```
 
 Integration tests auto-skip when `DATABASE_URL` is unset, so `pnpm test:ci`
 stays green in environments without a DB (e.g. CI smoke checks). With the local
 stack running, they execute for real.
+
+### Seed data
+
+`pnpm db:reset` also loads `supabase/seed.sql` (wired via `[db.seed]` in
+`supabase/config.toml`), so a freshly-reset local DB is populated and browseable
+in the app. It creates 6 login-able users (password `password123` for all) plus
+full demo data across both workspaces — every module, every lifecycle status
+(invoices ×6 statuses, quotes ×7), all enum values, cross-module source links
+(InvoicePaid / Drive→Books income / mileage / vehicle-expense), the credit
+ledger (all 6 entry types), tax periods, activity/audit/notifications, an AI
+conversation, files, and receipt extractions.
+
+Dev login credentials:
+
+| Email                  | Role       | Workspace              |
+| ---------------------- | ---------- | ---------------------- |
+| `owner@soletrade.test`    | owner      | Soletrade Demo Co + Bellflower |
+| `admin@soletrade.test`    | admin      | Soletrade Demo Co        |
+| `accountant@soletrade.test` | accountant | Soletrade Demo Co      |
+| `employee@soletrade.test` | employee   | Soletrade Demo Co        |
+| `readonly@soletrade.test` | readonly   | Soletrade Demo Co        |
+| `pending@soletrade.test`  | — (pending invitation) | Soletrade Demo Co |
+
+Seed is **local-dev only** — `supabase db push` does not run `seed.sql` on the
+linked remote, so these test users never reach production.
 
 ## Scripts
 
@@ -67,10 +91,9 @@ stack running, they execute for real.
 | `pnpm db:start`     | Start local Supabase stack                |
 | `pnpm db:stop`      | Stop local Supabase stack                 |
 | `pnpm db:status`    | Show local Supabase URLs + keys           |
-| `pnpm db:migrate`   | Apply pending Drizzle migrations          |
-| `pnpm db:generate`  | Generate migrations from schema changes   |
 | `pnpm db:reset`     | Wipe + recreate local DB, re-apply migrations |
-| `pnpm db:studio`    | Drizzle Studio (table browser)            |
+| `pnpm db:push`      | Push local schema/migrations to the linked remote |
+| `pnpm db:types`     | Regenerate `src/server/db/types.ts` from the local schema |
 
 ## Project structure
 

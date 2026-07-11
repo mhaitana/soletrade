@@ -1,14 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  invoices,
-  invoiceLineItems,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace, getWorkspace, updateWorkspace } from "@/platform/workspaces";
 import { createInvoice, getInvoice } from "@/modules/invoices";
@@ -29,11 +22,9 @@ describe.skipIf(!HAS_DB)(
   () => {
     const owner = branded<"UserId">("00000000-0000-4000-8000-0000000000f1");
     let ws: WorkspaceId;
-    let createdInvoiceId: string | null = null;
 
     beforeAll(async () => {
-      const db = getDb();
-      await db.insert(usersTable).values([
+      await seedUsers([
         {
           id: owner,
           email: "ws-settings-owner@soletrade-test.local",
@@ -44,19 +35,14 @@ describe.skipIf(!HAS_DB)(
     });
 
     afterAll(async () => {
-      const db = getDb();
       if (!ws) return;
-      if (createdInvoiceId) {
-        await db
-          .delete(invoiceLineItems)
-          .where(eq(invoiceLineItems.invoiceId, branded<"InvoiceId">(createdInvoiceId)));
-        await db.delete(invoices).where(eq(invoices.id, branded<"InvoiceId">(createdInvoiceId)));
-      }
-      await db.delete(auditLogs).where(eq(auditLogs.workspaceId, ws));
-      // createWorkspace inserts the owner as a workspace_members row; drop it before the workspace.
-      await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws));
-      await db.delete(workspacesTable).where(eq(workspacesTable.id, ws));
-      await db.delete(usersTable).where(inArray(usersTable.id, [owner]));
+      // invoice_line_items + invoices are workspace-scoped; the single created invoice (if
+      // any) is covered by these deletes. Order matters: line items before invoices (FK).
+      await cleanupWorkspaces(
+        [ws],
+        [owner],
+        [{ table: "invoice_line_items" }, { table: "invoices" }, { table: "audit_logs" }],
+      );
     });
 
     it("workspaces has the migration 0018 columns with defaults", async () => {
@@ -108,7 +94,6 @@ describe.skipIf(!HAS_DB)(
         },
         owner,
       );
-      createdInvoiceId = invId;
 
       // createInvoice returns the InvoiceId only; read the row back to assert the stored
       // number + currency (the workspace prefix + default currency, not the hardcoded ones).
@@ -119,12 +104,17 @@ describe.skipIf(!HAS_DB)(
     });
 
     it("workspace_settings table is gone (migration 0018 dropped it)", async () => {
-      // After dropping the table + removing the schema export, a raw query against the
-      // old table name should error with "relation does not exist".
-      const db = getDb();
-      await expect(db.execute("SELECT 1 FROM workspace_settings LIMIT 1" as never)).rejects.toThrow(
-        /workspace_settings|does not exist/i,
-      );
+      // After dropping the table + removing the schema export, a PostgREST read against
+      // the old table name errors (PGRST205 — table not found in schema cache). unwrap
+      // surfaces the error, which carries the table name.
+      await expect(
+        unwrap(
+          getDataClient()
+            .from("workspace_settings" as never)
+            .select("*")
+            .limit(1),
+        ),
+      ).rejects.toThrow(/workspace_settings|does not exist/i);
     });
   },
 );

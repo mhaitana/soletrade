@@ -7,7 +7,7 @@ import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
 import { loadInvoice } from "../actions";
 import { InvoiceDetailActions } from "../invoice-detail-actions";
-import type { InvoiceStatus } from "@/server/db/schema/enums";
+import type { InvoiceStatus } from "@/server/db/enums";
 
 export const metadata = { title: "Invoice" };
 

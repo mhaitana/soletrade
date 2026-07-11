@@ -9,7 +9,7 @@ import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed
 import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
 import { loadInvoicesPage } from "./actions";
-import type { InvoiceStatus } from "@/server/db/schema/enums";
+import type { InvoiceStatus } from "@/server/db/enums";
 
 export const metadata = { title: "Invoices" };
 

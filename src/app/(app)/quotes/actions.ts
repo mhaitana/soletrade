@@ -23,7 +23,7 @@ import {
   type SectionInput,
 } from "@/modules/quotes";
 import { createInvoice, getInvoice } from "@/modules/invoices";
-import type { QuoteStatus } from "@/server/db/schema/enums";
+import type { QuoteStatus } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 
 const forbid = (msg = "You don't have permission to manage quotes.") => ({

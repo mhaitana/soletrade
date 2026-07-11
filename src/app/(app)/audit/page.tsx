@@ -28,17 +28,17 @@ const CATEGORY_FILTERS: Record<string, { label: string; prefix?: string }> = {
 const DEFAULT_LIMIT = 25;
 const ALL_CATEGORY: { label: string; prefix?: string } = { label: "All entries" };
 
-/** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip. */
+/** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip.
+ *  `createdAt` is the raw µs-precision ISO string (never a Date) so the keyset
+ *  comparison stays exact — see `AuditCursor`. */
 function encodeCursor(cursor: AuditCursor): string {
-  return `${cursor.createdAt.toISOString()}|${cursor.id}`;
+  return `${cursor.createdAt}|${cursor.id}`;
 }
 
 function parseCursor(raw: string): AuditCursor | null {
   const [iso, id] = raw.split("|");
   if (!iso || !id) return null;
-  const createdAt = new Date(iso);
-  if (Number.isNaN(createdAt.getTime())) return null;
-  return { createdAt, id: branded<"AuditLogId">(id) };
+  return { createdAt: iso, id: branded<"AuditLogId">(id) };
 }
 
 export default async function AuditPage({

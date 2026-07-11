@@ -1,20 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  activityEvents,
-  auditLogs,
-  bookTransactions as bookTransactionsTable,
-  driveEarnings as driveEarningsTable,
-  driveTrips as driveTripsTable,
-  driverProfiles,
-  driverVehicleExpenses,
-  moduleInstallations,
-  users as usersTable,
-  vehicles as vehiclesTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapMaybe, parsePgTimestamp } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers, type CleanupTable } from "@/tests/db-helpers";
 import {
   branded,
   type DriveExpenseId,
@@ -48,6 +35,36 @@ import { registerBooksIntegration } from "@/modules/books/integration";
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
+/** Shape the assertions use — mapped from the raw snake_case PostgREST row. */
+interface BookTxRow {
+  type: string;
+  category: string;
+  amountCents: number;
+  currency: string;
+  customerId: string | null;
+  sourceExpenseId: string | null;
+  sourceTripId: string | null;
+  date: Date;
+  description: string;
+  notes: string | null;
+}
+
+/** Map a raw `book_transactions` PostgREST row to the shape the assertions use. */
+function mapBookTx(r: Record<string, unknown>): BookTxRow {
+  return {
+    type: r.type as string,
+    category: r.category as string,
+    amountCents: r.amount_cents as number,
+    currency: r.currency as string,
+    customerId: (r.customer_id as string | null) ?? null,
+    sourceExpenseId: (r.source_expense_id as string | null) ?? null,
+    sourceTripId: (r.source_trip_id as string | null) ?? null,
+    date: parsePgTimestamp(r.date as string),
+    description: r.description as string,
+    notes: (r.notes as string | null) ?? null,
+  };
+}
+
 describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATABASE_URL)", () => {
   const actor = branded<"UserId">("00000000-0000-9000-8000-0000000000d1");
   let ws1: WorkspaceId; // Books + Drive enabled
@@ -58,12 +75,9 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db
-      .insert(usersTable)
-      .values([
-        { id: actor, email: "drive-expense-int@soletrade-test.local", fullName: "Drive Expense Int" },
-      ]);
+    await seedUsers([
+      { id: actor, email: "drive-expense-int@soletrade-test.local", fullName: "Drive Expense Int" },
+    ]);
     ws1 = await createWorkspace(actor, "Drive Expense Int One", `drive-exp-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Drive Expense Int Two", `drive-exp-two-${Date.now()}`);
     await enableModule(ws1, "books", actor);
@@ -76,33 +90,23 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     clearEventBus();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    // bookTransactions reference workspace (no cascade) — delete first.
-    await db
-      .delete(bookTransactionsTable)
-      .where(inArray(bookTransactionsTable.workspaceId, workspaceIds));
-    await db.delete(driveTripsTable).where(inArray(driveTripsTable.workspaceId, workspaceIds));
-    await db
-      .delete(driveEarningsTable)
-      .where(inArray(driveEarningsTable.workspaceId, workspaceIds));
-    // driverVehicleExpenses cascade their vehicle FK, but delete explicitly to be safe.
-    await db
-      .delete(driverVehicleExpenses)
-      .where(inArray(driverVehicleExpenses.workspaceId, workspaceIds));
-    await db.delete(driverProfiles).where(inArray(driverProfiles.workspaceId, workspaceIds));
-    await db.delete(vehiclesTable).where(inArray(vehiclesTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(activityEvents).where(inArray(activityEvents.workspaceId, workspaceIds));
-    await db
-      .delete(moduleInstallations)
-      .where(inArray(moduleInstallations.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    const tables: CleanupTable[] = [
+      // bookTransactions reference workspace (no cascade) — delete first.
+      { table: "book_transactions" },
+      { table: "drive_trips" },
+      { table: "drive_earnings" },
+      // driverVehicleExpenses cascade their vehicle FK, but delete explicitly to be safe.
+      { table: "driver_vehicle_expenses" },
+      { table: "driver_profiles" },
+      { table: "vehicles" },
+      { table: "audit_logs" },
+      { table: "activity_events" },
+      { table: "module_installations" },
+    ];
+    await cleanupWorkspaces(workspaceIds, [actor], tables);
   });
 
   /** Count Books expense rows linked to a given drive expense in a workspace. */
@@ -110,33 +114,28 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     workspaceId: WorkspaceId,
     expenseId: DriveExpenseId,
   ): Promise<number> {
-    const db = getDb();
-    const rows = await db
-      .select({ id: bookTransactionsTable.id })
-      .from(bookTransactionsTable)
-      .where(
-        and(
-          eq(bookTransactionsTable.workspaceId, workspaceId),
-          eq(bookTransactionsTable.sourceExpenseId, expenseId),
-        ),
-      );
+    const rows = await unwrap(
+      getDataClient()
+        .from("book_transactions")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("source_expense_id", expenseId),
+    );
     return rows.length;
   }
 
   /** Fetch the (single) Books expense row linked to a drive expense, or null. */
   async function getExpenseForDriveExpense(workspaceId: WorkspaceId, expenseId: DriveExpenseId) {
-    const db = getDb();
-    const rows = await db
-      .select()
-      .from(bookTransactionsTable)
-      .where(
-        and(
-          eq(bookTransactionsTable.workspaceId, workspaceId),
-          eq(bookTransactionsTable.sourceExpenseId, expenseId),
-        ),
-      )
-      .limit(1);
-    return rows[0] ?? null;
+    const row = await unwrapMaybe(
+      getDataClient()
+        .from("book_transactions")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("source_expense_id", expenseId)
+        .limit(1)
+        .maybeSingle(),
+    );
+    return row ? mapBookTx(row as Record<string, unknown>) : null;
   }
 
   it("records a Books vehicle_expense when a Drive vehicle expense is logged (happy path)", async () => {
@@ -288,34 +287,29 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
 
   /** Fetch the (single) Books mileage expense row linked to a trip, or null. */
   async function getMileageForTrip(workspaceId: WorkspaceId, tripId: DriveTripId) {
-    const db = getDb();
-    const rows = await db
-      .select()
-      .from(bookTransactionsTable)
-      .where(
-        and(
-          eq(bookTransactionsTable.workspaceId, workspaceId),
-          eq(bookTransactionsTable.sourceTripId, tripId),
-        ),
-      )
-      .limit(1);
-    return rows[0] ?? null;
+    const row = await unwrapMaybe(
+      getDataClient()
+        .from("book_transactions")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("source_trip_id", tripId)
+        .limit(1)
+        .maybeSingle(),
+    );
+    return row ? mapBookTx(row as Record<string, unknown>) : null;
   }
 
   async function countMileageForTrip(
     workspaceId: WorkspaceId,
     tripId: DriveTripId,
   ): Promise<number> {
-    const db = getDb();
-    const rows = await db
-      .select({ id: bookTransactionsTable.id })
-      .from(bookTransactionsTable)
-      .where(
-        and(
-          eq(bookTransactionsTable.workspaceId, workspaceId),
-          eq(bookTransactionsTable.sourceTripId, tripId),
-        ),
-      );
+    const rows = await unwrap(
+      getDataClient()
+        .from("book_transactions")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("source_trip_id", tripId),
+    );
     return rows.length;
   }
 
@@ -438,32 +432,33 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     await replayDriveEventsForBooks(ws2!, actor);
 
     // All three entry types now have mirrored Books rows.
-    const incomeRow = await getDb()
-      .select()
-      .from(bookTransactionsTable)
-      .where(eq(bookTransactionsTable.sourceEarningId, earningId))
-      .limit(1);
-    expect(incomeRow[0]).toBeDefined();
-    expect(incomeRow[0]!.type).toBe("income");
-    expect(incomeRow[0]!.category).toBe("gig");
-    expect(incomeRow[0]!.amountCents).toBe(22000);
+    const incomeRow = await unwrapMaybe(
+      getDataClient()
+        .from("book_transactions")
+        .select("*")
+        .eq("source_earning_id", earningId)
+        .limit(1)
+        .maybeSingle(),
+    );
+    expect(incomeRow).toBeDefined();
+    expect((incomeRow as Record<string, unknown> | null)!.type).toBe("income");
+    expect((incomeRow as Record<string, unknown> | null)!.category).toBe("gig");
+    expect((incomeRow as Record<string, unknown> | null)!.amount_cents).toBe(22000);
 
     expect((await getExpenseForDriveExpense(ws2!, expenseId))!.amountCents).toBe(7700);
     expect((await getMileageForTrip(ws2!, tripId))!.amountCents).toBe(2550);
 
     // Replaying again is idempotent — no duplicate rows.
     await replayDriveEventsForBooks(ws2!, actor);
-    expect((await countExpenseForDriveExpense(ws2!, expenseId)) as number).toBe(1);
+    expect(await countExpenseForDriveExpense(ws2!, expenseId)).toBe(1);
     expect(await countMileageForTrip(ws2!, tripId)).toBe(1);
   });
 });
 
 /** Total book_transactions row count for a workspace (used by the missing-metadata test). */
 async function dbRowCountForWorkspace(workspaceId: WorkspaceId): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .select({ id: bookTransactionsTable.id })
-    .from(bookTransactionsTable)
-    .where(eq(bookTransactionsTable.workspaceId, workspaceId));
+  const rows = await unwrap(
+    getDataClient().from("book_transactions").select("id").eq("workspace_id", workspaceId),
+  );
   return rows.length;
 }

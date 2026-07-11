@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/shared/ui/dialog";
 import { convertQuoteToInvoiceAction, deleteQuoteAction, sendQuoteAction } from "./actions";
-import type { QuoteStatus } from "@/server/db/schema/enums";
+import type { QuoteStatus } from "@/server/db/enums";
 
 type Action = { kind: "send" } | { kind: "delete" } | { kind: "convert" };
 

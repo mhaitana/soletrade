@@ -1,14 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  bookTransactions,
-  taxPeriods,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
+import { getDataClient } from "@/server/db/client";
+import { unwrapVoid } from "@/server/db/helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace, updateWorkspace } from "@/platform/workspaces";
 import { listTaxPeriods, lodgeTaxPeriod } from "@/modules/books/tax";
@@ -28,8 +21,7 @@ describe.skipIf(!HAS_DB)("tax lodgement honours fyStartMonth (migration 0022)", 
   let ws: WorkspaceId;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       {
         id: owner,
         email: "tax-fy-owner@soletrade-test.local",
@@ -54,40 +46,40 @@ describe.skipIf(!HAS_DB)("tax lodgement honours fyStartMonth (migration 0022)", 
     // Two income transactions with GST, one per NZ fiscal quarter:
     //   txA: May 2026 → NZ FY2026 Q1 (Apr–Jun).
     //   txB: Aug 2026 → NZ FY2026 Q2 (Jul–Sep).
-    await db.insert(bookTransactions).values([
-      {
-        workspaceId: ws,
-        type: "income",
-        amountCents: 10000,
-        gstCents: 1000,
-        currency: "NZD",
-        date: new Date("2026-05-15T12:00:00Z"),
-        description: "Q1 NZ transaction",
-        category: "sales",
-      },
-      {
-        workspaceId: ws,
-        type: "income",
-        amountCents: 20000,
-        gstCents: 2000,
-        currency: "NZD",
-        date: new Date("2026-08-15T12:00:00Z"),
-        description: "Q2 NZ transaction",
-        category: "sales",
-      },
-    ]);
+    const supabase = getDataClient();
+    await unwrapVoid(
+      supabase.from("book_transactions").insert([
+        {
+          workspace_id: ws,
+          type: "income",
+          amount_cents: 10000,
+          gst_cents: 1000,
+          currency: "NZD",
+          date: new Date("2026-05-15T12:00:00Z").toISOString(),
+          description: "Q1 NZ transaction",
+          category: "sales",
+        },
+        {
+          workspace_id: ws,
+          type: "income",
+          amount_cents: 20000,
+          gst_cents: 2000,
+          currency: "NZD",
+          date: new Date("2026-08-15T12:00:00Z").toISOString(),
+          description: "Q2 NZ transaction",
+          category: "sales",
+        },
+      ]),
+    );
   });
 
   afterAll(async () => {
-    const db = getDb();
     if (!ws) return;
-    await db.delete(taxPeriods).where(eq(taxPeriods.workspaceId, ws));
-    await db.delete(bookTransactions).where(eq(bookTransactions.workspaceId, ws));
-    await db.delete(auditLogs).where(eq(auditLogs.workspaceId, ws));
-    // createWorkspace inserts the owner as a workspace_members row; drop it before the workspace.
-    await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws));
-    await db.delete(workspacesTable).where(eq(workspacesTable.id, ws));
-    await db.delete(usersTable).where(inArray(usersTable.id, [owner]));
+    await cleanupWorkspaces(
+      [ws],
+      [owner],
+      [{ table: "tax_periods" }, { table: "book_transactions" }, { table: "audit_logs" }],
+    );
   });
 
   it("lodges NZ FY2026 Q1 as Apr–Jun (captures May, excludes Aug)", async () => {

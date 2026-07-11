@@ -1,15 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  creditLedger as creditLedgerTable,
-  moduleInstallations as moduleInstallationsTable,
-  subscriptions as subscriptionsTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapVoid } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus, onEvent } from "@/server/events";
@@ -46,31 +38,32 @@ describe.skipIf(!HAS_DB)("cancellation engine integration (requires DATABASE_URL
   const collectedEvents: { type: string; metadata?: Record<string, unknown> }[] = [];
 
   beforeAll(async () => {
-    const db = getDb();
     clearEventBus();
     removeModuleSubscriptionItem.mockResolvedValue({ deletedItemId: "si_test" });
     refundToCard.mockResolvedValue("re_test");
 
-    await db
-      .insert(usersTable)
-      .values({ id: actor, email: "cancel-actor@soletrade-test.local", fullName: "Cancel Actor" });
+    await seedUsers([
+      { id: actor, email: "cancel-actor@soletrade-test.local", fullName: "Cancel Actor" },
+    ]);
     ws = await createWorkspace(actor, "Cancel Test", `cancel-test-${Date.now()}`);
 
     // The WorkspaceCreated subscriber that provisions the subscription row is wiped
     // by clearEventBus() above, so create it explicitly, then seed active billing state.
     await ensureSubscription(ws);
     const anchor = new Date(Date.now() - 5 * 86_400_000);
-    await db
-      .update(subscriptionsTable)
-      .set({
-        billingInterval: "monthly",
-        status: "active",
-        stripeSubscriptionId: "sub_test",
-        stripeCustomerId: "cus_test",
-        anchorBillingDate: anchor,
-        updatedAt: new Date(),
-      })
-      .where(eq(subscriptionsTable.workspaceId, ws));
+    await unwrapVoid(
+      getDataClient()
+        .from("subscriptions")
+        .update({
+          billing_interval: "monthly",
+          status: "active",
+          stripe_subscription_id: "sub_test",
+          stripe_customer_id: "cus_test",
+          anchor_billing_date: anchor.toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("workspace_id", ws),
+    );
 
     // Install two modules: books (anchor) + invoices (addon).
     await enableModule(ws, "books", actor, "si_books");
@@ -88,36 +81,27 @@ describe.skipIf(!HAS_DB)("cancellation engine integration (requires DATABASE_URL
   });
 
   afterAll(async () => {
-    const db = getDb();
-    if (!ws) {
-      await db.delete(usersTable).where(eq(usersTable.id, actor));
-      return;
-    }
-    await db.delete(creditLedgerTable).where(eq(creditLedgerTable.workspaceId, ws));
-    await db.delete(auditLogs).where(eq(auditLogs.workspaceId, ws));
-    await db.delete(moduleInstallationsTable).where(eq(moduleInstallationsTable.workspaceId, ws));
-    await db.delete(subscriptionsTable).where(eq(subscriptionsTable.workspaceId, ws));
-    await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws));
-    await db.delete(workspacesTable).where(eq(workspacesTable.id, ws));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    await cleanupWorkspaces(
+      ws ? [ws] : [],
+      [actor],
+      [
+        { table: "credit_ledger" },
+        { table: "audit_logs" },
+        { table: "module_installations" },
+        { table: "subscriptions" },
+      ],
+    );
     clearEventBus();
   });
 
   async function getInstallation(key: string) {
-    const db = getDb();
-    const rows = await db
-      .select({
-        status: moduleInstallationsTable.status,
-        cancelledAt: moduleInstallationsTable.cancelledAt,
-        pendingCancellationAt: moduleInstallationsTable.pendingCancellationAt,
-      })
-      .from(moduleInstallationsTable)
-      .where(
-        and(
-          eq(moduleInstallationsTable.workspaceId, ws!),
-          eq(moduleInstallationsTable.moduleKey, key as never),
-        ),
-      );
+    const rows = await unwrap(
+      getDataClient()
+        .from("module_installations")
+        .select("status, cancelled_at, pending_cancellation_at")
+        .eq("workspace_id", ws!)
+        .eq("module_key", key as never),
+    );
     return rows[0];
   }
 
@@ -136,17 +120,15 @@ describe.skipIf(!HAS_DB)("cancellation engine integration (requires DATABASE_URL
 
     const row = await getInstallation("invoices");
     expect(row?.status).toBe("active");
-    expect(row?.cancelledAt).toBeNull();
-    expect(row?.pendingCancellationAt).not.toBeNull();
+    expect(row?.cancelled_at).toBeNull();
+    expect(row?.pending_cancellation_at).not.toBeNull();
     // Effective at is the period end (≈ 25 days from the 5-day-ago anchor).
     expect(res.effectiveAt?.getTime()).toBeGreaterThan(Date.now());
 
     // No ledger refund row was written.
-    const db = getDb();
-    const ledger = await db
-      .select({ entryType: creditLedgerTable.entryType })
-      .from(creditLedgerTable)
-      .where(eq(creditLedgerTable.workspaceId, ws!));
+    const ledger = await unwrap(
+      getDataClient().from("credit_ledger").select("entry_type").eq("workspace_id", ws!),
+    );
     expect(ledger.length).toBe(0);
 
     // ModuleCancelled event fired with the keep option.
@@ -156,23 +138,20 @@ describe.skipIf(!HAS_DB)("cancellation engine integration (requires DATABASE_URL
 
   it("finalizeModuleCancellations disables rows whose pendingCancellationAt has lapsed", async () => {
     // Force the scheduled timestamp into the past.
-    const db = getDb();
-    await db
-      .update(moduleInstallationsTable)
-      .set({ pendingCancellationAt: new Date(Date.now() - 86_400_000) })
-      .where(
-        and(
-          eq(moduleInstallationsTable.workspaceId, ws!),
-          eq(moduleInstallationsTable.moduleKey, "invoices" as never),
-        ),
-      );
+    await unwrapVoid(
+      getDataClient()
+        .from("module_installations")
+        .update({ pending_cancellation_at: new Date(Date.now() - 86_400_000).toISOString() })
+        .eq("workspace_id", ws!)
+        .eq("module_key", "invoices" as never),
+    );
 
     const count = await finalizeModuleCancellations(new Date());
     expect(count).toBeGreaterThanOrEqual(1);
 
     const row = await getInstallation("invoices");
     expect(row?.status).toBe("cancelled");
-    expect(row?.cancelledAt).not.toBeNull();
+    expect(row?.cancelled_at).not.toBeNull();
     // The finalize step calls the (mocked) Stripe item removal.
     expect(removeModuleSubscriptionItem).toHaveBeenCalled();
   });
@@ -186,19 +165,17 @@ describe.skipIf(!HAS_DB)("cancellation engine integration (requires DATABASE_URL
 
     const row = await getInstallation("books");
     expect(row?.status).toBe("cancelled");
-    expect(row?.cancelledAt).not.toBeNull();
+    expect(row?.cancelled_at).not.toBeNull();
 
     // Ledger balance increased by the refund (append-only ledger).
     const after = await getCreditBalance(ws!);
     expect(after).toBe(before + res.refundCents);
 
     // A refund ledger row exists.
-    const db = getDb();
-    const ledger = await db
-      .select({ entryType: creditLedgerTable.entryType, reason: creditLedgerTable.reason })
-      .from(creditLedgerTable)
-      .where(eq(creditLedgerTable.workspaceId, ws!));
-    expect(ledger.some((r) => r.entryType === "refund")).toBe(true);
+    const ledger = await unwrap(
+      getDataClient().from("credit_ledger").select("entry_type, reason").eq("workspace_id", ws!),
+    );
+    expect(ledger.some((r) => r.entry_type === "refund")).toBe(true);
   });
 
   it("immediate_refund disables the module and issues a card refund (no ledger entry)", async () => {

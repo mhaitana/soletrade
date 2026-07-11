@@ -1,15 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  customers as customersTable,
-  invoiceLineItems,
-  invoices as invoicesTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type CustomerId, type InvoiceId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createCustomer } from "@/platform/customers";
@@ -41,12 +31,7 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values({
-      id: actor,
-      email: "pub-actor@soletrade-test.local",
-      fullName: "Pub Actor",
-    });
+    await seedUsers([{ id: actor, email: "pub-actor@soletrade-test.local", fullName: "Pub Actor" }]);
     ws = await createWorkspace(actor, "Pub Test", `pub-test-${Date.now()}`);
     customer = await createCustomer(
       ws,
@@ -76,17 +61,18 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     const workspaceIds = [ws!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    await db.delete(invoicesTable).where(inArray(invoicesTable.workspaceId, workspaceIds));
-    await db.delete(invoiceLineItems).where(inArray(invoiceLineItems.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor]));
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor],
+      [
+        { table: "invoices" },
+        { table: "invoice_line_items" },
+        { table: "customers" },
+        { table: "audit_logs" },
+      ],
+    );
   });
 
   async function createSentInvoice(opts?: {

@@ -1,14 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { count, eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  aiConversations,
-  aiMessages,
-  auditLogs,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type AiConversationId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import {
@@ -47,8 +40,7 @@ describe.skipIf(!HAS_DB)("ai conversations integration (requires DATABASE_URL)",
   const createdConversationIds: AiConversationId[] = [];
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "ai-actor@soletrade-test.local", fullName: "AI Actor" },
       { id: otherActor, email: "ai-other@soletrade-test.local", fullName: "AI Other" },
     ]);
@@ -57,16 +49,15 @@ describe.skipIf(!HAS_DB)("ai conversations integration (requires DATABASE_URL)",
   });
 
   afterAll(async () => {
-    const db = getDb();
-    const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    // Messages cascade from conversations, but clean both explicitly for safety.
-    await db.delete(aiMessages).where(inArray(aiMessages.conversationId, createdConversationIds));
-    await db.delete(aiConversations).where(inArray(aiConversations.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    const workspaceIds = [ws1, ws2].filter(Boolean) as WorkspaceId[];
+    // ai_messages cascade-delete with their parent conversation (ON DELETE CASCADE), so
+    // deleting ai_conversations by workspace_id removes the messages too. audit_logs is
+    // workspace-scoped and goes before the workspace_members + workspaces tail.
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor, otherActor],
+      [{ table: "ai_conversations" }, { table: "audit_logs" }],
+    );
   });
 
   it("creates a conversation with the default title and lists it", async () => {
@@ -137,27 +128,24 @@ describe.skipIf(!HAS_DB)("ai conversations integration (requires DATABASE_URL)",
   });
 
   it("hard-deletes a conversation and cascades its messages", async () => {
-    const db = getDb();
     const id = await createConversation(ws1!, actor, "Cascade target");
     await appendMessage(ws1!, actor, id, { role: "user", content: "bye" });
     await appendMessage(ws1!, actor, id, { role: "assistant", content: "ok" });
 
     // Confirm the messages exist.
-    const [before] = await db
-      .select({ n: count() })
-      .from(aiMessages)
-      .where(eq(aiMessages.conversationId, id));
-    expect(before?.n).toBe(2);
+    const beforeRows = await unwrap(
+      getDataClient().from("ai_messages").select("id").eq("conversation_id", id),
+    );
+    expect(beforeRows.length).toBe(2);
 
     await deleteConversation(ws1!, actor, id);
     expect(await getConversation(ws1!, actor, id)).toBeNull();
 
     // Cascade: the messages are gone with the conversation.
-    const [after] = await db
-      .select({ n: count() })
-      .from(aiMessages)
-      .where(eq(aiMessages.conversationId, id));
-    expect(after?.n).toBe(0);
+    const afterRows = await unwrap(
+      getDataClient().from("ai_messages").select("id").eq("conversation_id", id),
+    );
+    expect(afterRows.length).toBe(0);
   });
 
   it("renameConversation updates the title (owner only)", async () => {

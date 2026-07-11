@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "credit_ledger_stripe_invoice_unique" ON "credit_ledger" USING btree ("workspace_id","stripe_invoice_id") WHERE stripe_invoice_id IS NOT NULL;

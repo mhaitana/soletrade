@@ -1,18 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  activityEvents,
-  auditLogs,
-  bookTransactions as bookTransactionsTable,
-  customers as customersTable,
-  invoiceLineItems,
-  invoices as invoicesTable,
-  moduleInstallations,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapMaybe, parsePgTimestamp } from "@/server/db/helpers";
+import type { Database } from "@/server/db/types";
 import { branded, type CustomerId, type InvoiceId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createCustomer, deleteCustomer } from "@/platform/customers";
@@ -38,10 +28,7 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db
-      .insert(usersTable)
-      .values([{ id: actor, email: "books-int@soletrade-test.local", fullName: "Books Int" }]);
+    await seedUsers([{ id: actor, email: "books-int@soletrade-test.local", fullName: "Books Int" }]);
     ws1 = await createWorkspace(actor, "Books Int One", `books-int-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Books Int Two", `books-int-two-${Date.now()}`);
     // Only ws1 has Books enabled — ws2 exercises the module-gate no-op.
@@ -56,61 +43,72 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     clearEventBus();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    // bookTransactions reference workspace + customer (no cascade) — delete first.
-    await db
-      .delete(bookTransactionsTable)
-      .where(inArray(bookTransactionsTable.workspaceId, workspaceIds));
-    // Invoices cascade their line items via FK ON DELETE cascade.
-    await db.delete(invoicesTable).where(inArray(invoicesTable.workspaceId, workspaceIds));
-    await db.delete(invoiceLineItems).where(inArray(invoiceLineItems.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(activityEvents).where(inArray(activityEvents.workspaceId, workspaceIds));
-    await db
-      .delete(moduleInstallations)
-      .where(inArray(moduleInstallations.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor]));
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor],
+      [
+        { table: "book_transactions" },
+        { table: "invoices" },
+        { table: "invoice_line_items" },
+        { table: "customers" },
+        { table: "audit_logs" },
+        { table: "activity_events" },
+        { table: "module_installations" },
+      ],
+    );
   });
+
+  /** CamelCase + branded-id + Date mapper for book_transactions rows (keeps assertions unchanged). */
+  type BookTxRow = Database["public"]["Tables"]["book_transactions"]["Row"];
+
+  function mapBookTx(r: BookTxRow) {
+    return {
+      id: r.id,
+      type: r.type,
+      category: r.category,
+      amountCents: r.amount_cents,
+      gstCents: r.gst_cents,
+      currency: r.currency,
+      customerId: r.customer_id,
+      sourceInvoiceId: r.source_invoice_id,
+      sourceEarningId: r.source_earning_id,
+      description: r.description,
+      notes: r.notes,
+      date: parsePgTimestamp(r.date),
+      receiptFileId: r.receipt_file_id,
+    };
+  }
 
   /** Count Books income rows linked to a given invoice in a workspace. */
   async function countIncomeForInvoice(
     workspaceId: WorkspaceId,
     invoiceId: InvoiceId,
   ): Promise<number> {
-    const db = getDb();
-    const rows = await db
-      .select({ id: bookTransactionsTable.id })
-      .from(bookTransactionsTable)
-      .where(
-        and(
-          eq(bookTransactionsTable.workspaceId, workspaceId),
-          eq(bookTransactionsTable.sourceInvoiceId, invoiceId),
-        ),
-      );
+    const rows = await unwrap(
+      getDataClient()
+        .from("book_transactions")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("source_invoice_id", invoiceId),
+    );
     return rows.length;
   }
 
   /** Fetch the (single) Books income row linked to an invoice, or null. */
   async function getIncomeForInvoice(workspaceId: WorkspaceId, invoiceId: InvoiceId) {
-    const db = getDb();
-    const rows = await db
-      .select()
-      .from(bookTransactionsTable)
-      .where(
-        and(
-          eq(bookTransactionsTable.workspaceId, workspaceId),
-          eq(bookTransactionsTable.sourceInvoiceId, invoiceId),
-        ),
-      )
-      .limit(1);
-    return rows[0] ?? null;
+    const row = await unwrapMaybe(
+      getDataClient()
+        .from("book_transactions")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("source_invoice_id", invoiceId)
+        .limit(1)
+        .maybeSingle(),
+    );
+    return row ? mapBookTx(row) : null;
   }
 
   it("records Books income when an invoice is paid (happy path)", async () => {
@@ -227,10 +225,8 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
 
 /** Total book_transactions row count for a workspace (used by the missing-metadata test). */
 async function dbRowCountForWorkspace(workspaceId: WorkspaceId): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .select({ id: bookTransactionsTable.id })
-    .from(bookTransactionsTable)
-    .where(eq(bookTransactionsTable.workspaceId, workspaceId));
+  const rows = await unwrap(
+    getDataClient().from("book_transactions").select("id").eq("workspace_id", workspaceId),
+  );
   return rows.length;
 }

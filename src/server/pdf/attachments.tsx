@@ -1,14 +1,6 @@
 import "server-only";
-import { and, eq, asc } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  customers,
-  invoices,
-  invoiceLineItems,
-  quotes,
-  quoteLineItems,
-  quoteSections,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrap, unwrapMaybe } from "@/server/db/helpers";
 import type { WorkspaceId } from "@/shared/types/ids";
 import { branded } from "@/shared/types/ids";
 import { renderPdf } from "./index";
@@ -18,10 +10,10 @@ import { QuoteDocument, type QuotePdfData } from "./documents/quote-document";
 /**
  * PDF email attachments (Wave 4 G5). Renders an invoice/quote to a base64 PDF for attachment to
  * the `InvoiceSent` / `QuoteSent` emails. The notifications platform can't import `@/modules/*`, so
- * this helper fetches the document + line items directly from the DB schema (`@/server/db`) and
- * maps them to the local `InvoicePdfData` / `QuotePdfData` shapes the document components accept
- * (no module coupling). Best-effort: any error returns `null` and the caller sends the email
- * without an attachment rather than dropping it.
+ * this helper fetches the document + line items directly from the DB (PostgREST) and maps them to
+ * the local `InvoicePdfData` / `QuotePdfData` shapes the document components accept (no module
+ * coupling). Best-effort: any error returns `null` and the caller sends the email without an
+ * attachment rather than dropping it.
  */
 
 export interface PdfAttachment {
@@ -30,73 +22,116 @@ export interface PdfAttachment {
   content: string;
 }
 
+/** Raw snake_case shape PostgREST returns for the invoice columns we read here. */
+interface InvoiceRaw {
+  id: string;
+  number: string;
+  status: string;
+  issue_date: string;
+  due_date: string | null;
+  currency: string;
+  tax_rate: number;
+  prices_include_tax: boolean;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  notes: string | null;
+  customers: { name: string } | null;
+}
+
+interface InvoiceLineRaw {
+  id: string;
+  description: string;
+  /** numeric(12,2) — generated type `number`, runtime string; `Number()` coerces both. */
+  quantity: number;
+  unit_price_cents: number;
+  amount_cents: number;
+}
+
+interface QuoteRaw {
+  id: string;
+  number: string;
+  status: string;
+  issue_date: string;
+  valid_until: string | null;
+  currency: string;
+  tax_rate: number;
+  prices_include_tax: boolean;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  notes: string | null;
+  terms_conditions: string | null;
+  customers: { name: string } | null;
+}
+
+interface QuoteLineRaw {
+  id: string;
+  description: string;
+  quantity: number;
+  unit_price_cents: number;
+  amount_cents: number;
+}
+
+interface QuoteSectionRaw {
+  id: string;
+  title: string;
+  body: string;
+  optional: boolean;
+}
+
 /** Render an invoice PDF attachment, or null on any failure (best-effort). */
 export async function renderInvoiceAttachment(
   workspaceId: WorkspaceId,
   invoiceId: string,
 ): Promise<PdfAttachment | null> {
   try {
-    const db = getDb();
-    const invRows = await db
-      .select({
-        id: invoices.id,
-        number: invoices.number,
-        status: invoices.status,
-        issueDate: invoices.issueDate,
-        dueDate: invoices.dueDate,
-        currency: invoices.currency,
-        taxRate: invoices.taxRate,
-        pricesIncludeTax: invoices.pricesIncludeTax,
-        subtotalCents: invoices.subtotalCents,
-        taxCents: invoices.taxCents,
-        totalCents: invoices.totalCents,
-        notes: invoices.notes,
-        customerName: customers.name,
-      })
-      .from(invoices)
-      .leftJoin(customers, eq(invoices.customerId, customers.id))
-      .where(
-        and(
-          eq(invoices.id, branded<"InvoiceId">(invoiceId)),
-          eq(invoices.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-    const inv = invRows[0];
+    const supabase = getDataClient();
+    const inv = await unwrapMaybe(
+      supabase
+        .from("invoices")
+        .select(
+          "id, number, status, issue_date, due_date, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, customers!left ( name )",
+        )
+        .eq("id", branded<"InvoiceId">(invoiceId))
+        .eq("workspace_id", workspaceId)
+        .limit(1)
+        .maybeSingle(),
+    );
     if (!inv) return null;
+    const r = inv as InvoiceRaw;
 
-    const itemRows = await db
-      .select({
-        id: invoiceLineItems.id,
-        description: invoiceLineItems.description,
-        quantity: invoiceLineItems.quantity,
-        unitPriceCents: invoiceLineItems.unitPriceCents,
-        amountCents: invoiceLineItems.amountCents,
-      })
-      .from(invoiceLineItems)
-      .where(eq(invoiceLineItems.invoiceId, branded<"InvoiceId">(invoiceId)))
-      .orderBy(asc(invoiceLineItems.position));
+    const itemRows = await unwrap(
+      supabase
+        .from("invoice_line_items")
+        .select("id, description, quantity, unit_price_cents, amount_cents")
+        .eq("invoice_id", branded<"InvoiceId">(invoiceId))
+        .order("position", { ascending: true }),
+    );
 
     const data: InvoicePdfData = {
-      number: inv.number,
-      status: inv.status,
-      issueDate: inv.issueDate,
-      dueDate: inv.dueDate,
-      currency: inv.currency,
-      taxRate: inv.taxRate,
-      pricesIncludeTax: inv.pricesIncludeTax,
-      subtotalCents: inv.subtotalCents,
-      taxCents: inv.taxCents,
-      totalCents: inv.totalCents,
-      notes: inv.notes,
-      customerName: inv.customerName ?? null,
-      lineItems: itemRows.map((it) => ({
-        id: it.id,
-        description: it.description,
-        quantity: Number(it.quantity),
-        unitPriceCents: it.unitPriceCents,
-        amountCents: it.amountCents,
-      })),
+      number: r.number,
+      status: r.status,
+      issueDate: parsePgTimestamp(r.issue_date),
+      dueDate: r.due_date ? parsePgTimestamp(r.due_date) : null,
+      currency: r.currency,
+      taxRate: r.tax_rate,
+      pricesIncludeTax: r.prices_include_tax,
+      subtotalCents: r.subtotal_cents,
+      taxCents: r.tax_cents,
+      totalCents: r.total_cents,
+      notes: r.notes,
+      customerName: r.customers?.name ?? null,
+      lineItems: itemRows.map((it) => {
+        const li = it as InvoiceLineRaw;
+        return {
+          id: li.id,
+          description: li.description,
+          quantity: Number(li.quantity),
+          unitPriceCents: li.unit_price_cents,
+          amountCents: li.amount_cents,
+        };
+      }),
     };
     const buffer = await renderPdf(<InvoiceDocument invoice={data} workspaceName={null} />);
     return { filename: `${data.number}.pdf`, content: buffer.toString("base64") };
@@ -112,82 +147,66 @@ export async function renderQuoteAttachment(
   quoteId: string,
 ): Promise<PdfAttachment | null> {
   try {
-    const db = getDb();
-    const qRows = await db
-      .select({
-        id: quotes.id,
-        number: quotes.number,
-        status: quotes.status,
-        issueDate: quotes.issueDate,
-        validUntil: quotes.validUntil,
-        currency: quotes.currency,
-        taxRate: quotes.taxRate,
-        pricesIncludeTax: quotes.pricesIncludeTax,
-        subtotalCents: quotes.subtotalCents,
-        taxCents: quotes.taxCents,
-        totalCents: quotes.totalCents,
-        notes: quotes.notes,
-        termsConditions: quotes.termsConditions,
-        customerName: customers.name,
-      })
-      .from(quotes)
-      .leftJoin(customers, eq(quotes.customerId, customers.id))
-      .where(and(eq(quotes.id, branded<"QuoteId">(quoteId)), eq(quotes.workspaceId, workspaceId)))
-      .limit(1);
-    const q = qRows[0];
+    const supabase = getDataClient();
+    const q = await unwrapMaybe(
+      supabase
+        .from("quotes")
+        .select(
+          "id, number, status, issue_date, valid_until, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, terms_conditions, customers!left ( name )",
+        )
+        .eq("id", branded<"QuoteId">(quoteId))
+        .eq("workspace_id", workspaceId)
+        .limit(1)
+        .maybeSingle(),
+    );
     if (!q) return null;
+    const r = q as QuoteRaw;
 
     const [itemRows, sectionRows] = await Promise.all([
-      db
-        .select({
-          id: quoteLineItems.id,
-          description: quoteLineItems.description,
-          quantity: quoteLineItems.quantity,
-          unitPriceCents: quoteLineItems.unitPriceCents,
-          amountCents: quoteLineItems.amountCents,
-        })
-        .from(quoteLineItems)
-        .where(eq(quoteLineItems.quoteId, branded<"QuoteId">(quoteId)))
-        .orderBy(asc(quoteLineItems.position)),
-      db
-        .select({
-          id: quoteSections.id,
-          title: quoteSections.title,
-          body: quoteSections.body,
-          optional: quoteSections.optional,
-        })
-        .from(quoteSections)
-        .where(eq(quoteSections.quoteId, branded<"QuoteId">(quoteId)))
-        .orderBy(asc(quoteSections.position)),
+      unwrap(
+        supabase
+          .from("quote_line_items")
+          .select("id, description, quantity, unit_price_cents, amount_cents")
+          .eq("quote_id", branded<"QuoteId">(quoteId))
+          .order("position", { ascending: true }),
+      ),
+      unwrap(
+        supabase
+          .from("quote_sections")
+          .select("id, title, body, optional")
+          .eq("quote_id", branded<"QuoteId">(quoteId))
+          .order("position", { ascending: true }),
+      ),
     ]);
 
     const data: QuotePdfData = {
-      number: q.number,
-      status: q.status,
-      issueDate: q.issueDate,
-      validUntil: q.validUntil,
-      currency: q.currency,
-      taxRate: q.taxRate,
-      pricesIncludeTax: q.pricesIncludeTax,
-      subtotalCents: q.subtotalCents,
-      taxCents: q.taxCents,
-      totalCents: q.totalCents,
-      notes: q.notes,
-      termsConditions: q.termsConditions,
-      customerName: q.customerName ?? null,
-      lineItems: itemRows.map((it) => ({
-        id: it.id,
-        description: it.description,
-        quantity: Number(it.quantity),
-        unitPriceCents: it.unitPriceCents,
-        amountCents: it.amountCents,
-      })),
-      sections: sectionRows.map((s) => ({
-        id: s.id,
-        title: s.title,
-        body: s.body,
-        optional: s.optional,
-      })),
+      number: r.number,
+      status: r.status,
+      issueDate: parsePgTimestamp(r.issue_date),
+      validUntil: r.valid_until ? parsePgTimestamp(r.valid_until) : null,
+      currency: r.currency,
+      taxRate: r.tax_rate,
+      pricesIncludeTax: r.prices_include_tax,
+      subtotalCents: r.subtotal_cents,
+      taxCents: r.tax_cents,
+      totalCents: r.total_cents,
+      notes: r.notes,
+      termsConditions: r.terms_conditions,
+      customerName: r.customers?.name ?? null,
+      lineItems: itemRows.map((it) => {
+        const li = it as QuoteLineRaw;
+        return {
+          id: li.id,
+          description: li.description,
+          quantity: Number(li.quantity),
+          unitPriceCents: li.unit_price_cents,
+          amountCents: li.amount_cents,
+        };
+      }),
+      sections: sectionRows.map((s) => {
+        const sec = s as QuoteSectionRaw;
+        return { id: sec.id, title: sec.title, body: sec.body, optional: sec.optional };
+      }),
     };
     const buffer = await renderPdf(<QuoteDocument quote={data} workspaceName={null} />);
     return { filename: `${data.number}.pdf`, content: buffer.toString("base64") };

@@ -1,8 +1,7 @@
 import "server-only";
-import { and, desc, eq, ilike, isNull, or, type SQL } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { customers } from "@/server/db/schema";
-import type { CustomerId, UserId, WorkspaceId } from "@/shared/types/ids";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, pgQuote, unwrap, unwrapMaybe } from "@/server/db/helpers";
+import { branded, type CustomerId, type UserId, type WorkspaceId } from "@/shared/types/ids";
 import { publishEvent } from "@/server/events";
 
 export interface CustomerInput {
@@ -27,17 +26,33 @@ export interface CustomerRow {
   updatedAt: Date;
 }
 
-const selectRow = {
-  id: customers.id,
-  workspaceId: customers.workspaceId,
-  name: customers.name,
-  email: customers.email,
-  phone: customers.phone,
-  company: customers.company,
-  notes: customers.notes,
-  createdAt: customers.createdAt,
-  updatedAt: customers.updatedAt,
-} as const;
+/** Maps a snake_case PostgREST customers row to the camelCase `CustomerRow`. */
+function toCustomerRow(r: {
+  id: string;
+  workspace_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}): CustomerRow {
+  return {
+    id: branded<"CustomerId">(r.id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    name: r.name,
+    email: r.email,
+    phone: r.phone,
+    company: r.company,
+    notes: r.notes,
+    createdAt: parsePgTimestamp(r.created_at),
+    updatedAt: parsePgTimestamp(r.updated_at),
+  };
+}
+
+const CUSTOMER_COLUMNS =
+  "id, workspace_id, name, email, phone, company, notes, created_at, updated_at";
 
 /** Trim + lowercase emails; empty string → null. `undefined` means "leave unchanged". */
 function normalizeEmail(value: string | null | undefined): string | null | undefined {
@@ -59,29 +74,32 @@ export async function createCustomer(
   input: CustomerInput,
   actorId: UserId,
 ): Promise<CustomerId> {
-  const db = getDb();
-  const rows = await db
-    .insert(customers)
-    .values({
-      workspaceId,
-      name: input.name.trim(),
-      email: normalizeEmail(input.email) ?? null,
-      phone: cleanOptional(input.phone),
-      company: cleanOptional(input.company),
-      notes: cleanOptional(input.notes),
-    })
-    .returning({ id: customers.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("customers")
+      .insert({
+        workspace_id: workspaceId,
+        name: input.name.trim(),
+        email: normalizeEmail(input.email) ?? null,
+        phone: cleanOptional(input.phone),
+        company: cleanOptional(input.company),
+        notes: cleanOptional(input.notes),
+      })
+      .select("id"),
+  );
   const row = rows[0];
   if (!row) throw new Error("Failed to create customer.");
+  const id = branded<"CustomerId">(row.id);
   await publishEvent({
     type: "CustomerCreated",
     workspaceId,
     actorUserId: actorId,
     entityType: "customer",
-    entityId: row.id,
+    entityId: id,
     metadata: { name: input.name },
   });
-  return row.id;
+  return id;
 }
 
 /** List active customers for a workspace, optionally filtered by a search term. */
@@ -89,25 +107,23 @@ export async function listCustomers(
   workspaceId: WorkspaceId,
   opts?: { search?: string; limit?: number },
 ): Promise<CustomerRow[]> {
-  const db = getDb();
+  const supabase = getDataClient();
   const limit = Math.min(opts?.limit ?? 100, 200);
-  const conditions: (SQL | undefined)[] = [
-    eq(customers.workspaceId, workspaceId),
-    isNull(customers.deletedAt),
-  ];
+  let query = supabase
+    .from("customers")
+    .select(CUSTOMER_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null);
   const search = opts?.search?.trim();
   if (search) {
-    const term = `%${search}%`;
-    conditions.push(
-      or(ilike(customers.name, term), ilike(customers.email, term), ilike(customers.company, term)),
-    );
+    // ILIKE across name/email/company — the original ORd three parameterized ilike
+    // calls. PostgREST expresses this as an `or` filter; the term is pgQuote'd so
+    // commas/parens/quotes in the search don't break the expression structure.
+    const term = pgQuote(`%${search}%`);
+    query = query.or(`name.ilike.${term},email.ilike.${term},company.ilike.${term}`);
   }
-  return db
-    .select(selectRow)
-    .from(customers)
-    .where(and(...conditions))
-    .orderBy(desc(customers.createdAt))
-    .limit(limit);
+  const rows = await unwrap(query.order("created_at", { ascending: false }).limit(limit));
+  return rows.map(toCustomerRow);
 }
 
 /**
@@ -118,19 +134,17 @@ export async function getCustomer(
   workspaceId: WorkspaceId,
   customerId: CustomerId,
 ): Promise<CustomerRow | null> {
-  const db = getDb();
-  const rows = await db
-    .select(selectRow)
-    .from(customers)
-    .where(
-      and(
-        eq(customers.id, customerId),
-        eq(customers.workspaceId, workspaceId),
-        isNull(customers.deletedAt),
-      ),
-    )
-    .limit(1);
-  return rows[0] ?? null;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("customers")
+      .select(CUSTOMER_COLUMNS)
+      .eq("id", customerId)
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+  );
+  return row ? toCustomerRow(row) : null;
 }
 
 /**
@@ -148,19 +162,17 @@ export async function getCustomerByEmail(
 ): Promise<CustomerRow | null> {
   const normalized = normalizeEmail(email);
   if (!normalized) return null;
-  const db = getDb();
-  const rows = await db
-    .select(selectRow)
-    .from(customers)
-    .where(
-      and(
-        eq(customers.workspaceId, workspaceId),
-        eq(customers.email, normalized),
-        isNull(customers.deletedAt),
-      ),
-    )
-    .limit(1);
-  return rows[0] ?? null;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("customers")
+      .select(CUSTOMER_COLUMNS)
+      .eq("workspace_id", workspaceId)
+      .eq("email", normalized)
+      .is("deleted_at", null)
+      .maybeSingle(),
+  );
+  return row ? toCustomerRow(row) : null;
 }
 
 /** Update a customer (workspace-isolated). Throws if not found. */
@@ -170,25 +182,33 @@ export async function updateCustomer(
   patch: CustomerPatch,
   actorId: UserId,
 ): Promise<void> {
-  const db = getDb();
-  const set: Record<string, unknown> = { updatedAt: new Date() };
+  const supabase = getDataClient();
+  // Explicit column-keyed shape (not a loose Record<string, unknown>) so the typed
+  // `.update()` payload accepts it — the generated Update type rejects an `unknown`
+  // index signature. `updated_at` is always set; the rest are conditional on the patch.
+  const set: {
+    updated_at: string;
+    name?: string;
+    email?: string | null;
+    phone?: string | null;
+    company?: string | null;
+    notes?: string | null;
+  } = { updated_at: new Date().toISOString() };
   if (patch.name !== undefined) set.name = patch.name.trim();
   if (patch.email !== undefined) set.email = normalizeEmail(patch.email) ?? null;
   if (patch.phone !== undefined) set.phone = cleanOptional(patch.phone);
   if (patch.company !== undefined) set.company = cleanOptional(patch.company);
   if (patch.notes !== undefined) set.notes = cleanOptional(patch.notes);
 
-  const rows = await db
-    .update(customers)
-    .set(set)
-    .where(
-      and(
-        eq(customers.id, customerId),
-        eq(customers.workspaceId, workspaceId),
-        isNull(customers.deletedAt),
-      ),
-    )
-    .returning({ id: customers.id });
+  const rows = await unwrap(
+    supabase
+      .from("customers")
+      .update(set)
+      .eq("id", customerId)
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .select("id"),
+  );
   if (!rows[0]) throw new Error("Customer not found.");
   await publishEvent({
     type: "CustomerUpdated",
@@ -206,18 +226,17 @@ export async function deleteCustomer(
   customerId: CustomerId,
   actorId: UserId,
 ): Promise<void> {
-  const db = getDb();
-  const rows = await db
-    .update(customers)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(customers.id, customerId),
-        eq(customers.workspaceId, workspaceId),
-        isNull(customers.deletedAt),
-      ),
-    )
-    .returning({ id: customers.id });
+  const supabase = getDataClient();
+  const nowIso = new Date().toISOString();
+  const rows = await unwrap(
+    supabase
+      .from("customers")
+      .update({ deleted_at: nowIso, updated_at: nowIso })
+      .eq("id", customerId)
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .select("id"),
+  );
   if (!rows[0]) throw new Error("Customer not found.");
   await publishEvent({
     type: "CustomerDeleted",

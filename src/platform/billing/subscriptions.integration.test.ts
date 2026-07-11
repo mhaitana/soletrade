@@ -1,13 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  subscriptions as subscriptionsTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus } from "@/server/events";
@@ -31,29 +23,21 @@ describe.skipIf(!HAS_DB)("subscription service integration (requires DATABASE_UR
   let ws2: WorkspaceId;
 
   beforeAll(async () => {
-    const db = getDb();
     clearEventBus();
-    await db
-      .insert(usersTable)
-      .values({ id: actor, email: "sub-actor@soletrade-test.local", fullName: "Sub Actor" });
+    await seedUsers([{ id: actor, email: "sub-actor@soletrade-test.local", fullName: "Sub Actor" }]);
     ws1 = await createWorkspace(actor, "Sub Test One", `sub-test-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Sub Test Two", `sub-test-two-${Date.now()}`);
   });
 
   afterAll(async () => {
-    const db = getDb();
     const workspaceIds = [ws1, ws2].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) {
-      await db.delete(usersTable).where(eq(usersTable.id, actor));
-      return;
-    }
-    await db
-      .delete(subscriptionsTable)
-      .where(inArray(subscriptionsTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    // The helper deletes users even when workspaceIds is empty, covering the
+    // original no-workspace branch that deleted only the user.
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor],
+      [{ table: "subscriptions" }, { table: "audit_logs" }],
+    );
     clearEventBus();
   });
 

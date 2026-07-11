@@ -4,7 +4,7 @@ import { env } from "@/shared/lib/env";
 
 /**
  * Stripe server client (brief §4). Boundary-asserting: throws a clear error if
- * `STRIPE_SECRET_KEY` is unset, matching the `getDb()` convention. The app still
+ * `STRIPE_SECRET_KEY` is unset, matching the `getDataClient()` convention. The app still
  * boots without Stripe configured (4a's flows never call this); routes/handlers
  * that need Stripe call `getStripe()` at their top, which surfaces the missing
  * secret as an actionable error rather than a cryptic Stripe SDK failure.

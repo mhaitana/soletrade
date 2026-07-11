@@ -1,1 +1,0 @@
-ALTER TABLE "workspaces" ADD COLUMN "fy_start_month" integer DEFAULT 7 NOT NULL;

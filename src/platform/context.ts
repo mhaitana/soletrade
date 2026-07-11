@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { getCurrentUser, type SessionUser } from "@/server/auth/session";
-import type { WorkspaceRole } from "@/server/db/schema/enums";
+import type { WorkspaceRole } from "@/server/db/enums";
 import {
   getActiveWorkspaceId,
   getMembershipRole,

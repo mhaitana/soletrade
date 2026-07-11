@@ -1,7 +1,6 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { subscriptions, moduleInstallations } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import { getSubscription, ensureSubscription } from "@/platform/billing/subscriptions";
 import { getInstalledModules } from "@/platform/module-installations";
 import { selectAnchor, MODULE_PRICES, type Interval } from "@/platform/billing/pricing";
@@ -36,19 +35,18 @@ async function getStoredItemId(
   workspaceId: WorkspaceId,
   moduleKey: ModuleKey,
 ): Promise<string | null> {
-  const db = getDb();
-  const rows = await db
-    .select({ itemId: moduleInstallations.stripeSubscriptionItemId })
-    .from(moduleInstallations)
-    .where(
-      and(
-        eq(moduleInstallations.workspaceId, workspaceId),
-        eq(moduleInstallations.moduleKey, moduleKey),
-        isNull(moduleInstallations.cancelledAt),
-      ),
-    )
-    .limit(1);
-  return rows[0]?.itemId ?? null;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("module_installations")
+      .select("stripe_subscription_item_id")
+      .eq("workspace_id", workspaceId)
+      .eq("module_key", moduleKey)
+      .is("cancelled_at", null)
+      .limit(1)
+      .maybeSingle(),
+  );
+  return row?.stripe_subscription_item_id ?? null;
 }
 
 /**
@@ -70,11 +68,13 @@ export async function ensureStripeCustomer(
     metadata: { workspaceId: String(workspaceId) },
   });
 
-  const db = getDb();
-  await db
-    .update(subscriptions)
-    .set({ stripeCustomerId: customer.id, updatedAt: new Date() })
-    .where(eq(subscriptions.workspaceId, workspaceId));
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("subscriptions")
+      .update({ stripe_customer_id: customer.id, updated_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId),
+  );
 
   return customer.id;
 }

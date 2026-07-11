@@ -1,8 +1,7 @@
 import "server-only";
-import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
-import { getDb } from "@/server/db";
-import { processedWebhookEvents } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import { getStripe } from "@/server/stripe/client";
 import { buildPriceIdToModuleMap } from "@/server/stripe/prices";
 import {
@@ -14,7 +13,7 @@ import {
 } from "@/platform/billing/reconcile";
 import { markInvoicePaidByStripe } from "@/modules/invoices";
 import { branded } from "@/shared/types/ids";
-import type { BillingInterval } from "@/server/db/schema/enums";
+import type { BillingInterval } from "@/server/db/enums";
 
 /**
  * Stripe webhook dispatcher (brief §4 — signature verification on every webhook,
@@ -34,13 +33,16 @@ import type { BillingInterval } from "@/server/db/schema/enums";
  * returns 500 before recording, so Stripe retries.
  */
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
-  const db = getDb();
-  const existing = await db
-    .select({ id: processedWebhookEvents.id })
-    .from(processedWebhookEvents)
-    .where(eq(processedWebhookEvents.stripeEventId, event.id))
-    .limit(1);
-  if (existing[0]) {
+  const supabase = getDataClient();
+  const existing = await unwrapMaybe(
+    supabase
+      .from("processed_webhook_events")
+      .select("id")
+      .eq("stripe_event_id", event.id)
+      .limit(1)
+      .maybeSingle(),
+  );
+  if (existing) {
     console.log("[stripe] duplicate event skipped", { id: event.id, type: event.type });
     return;
   }
@@ -78,11 +80,17 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
 
 /** Record a processed event idempotently (called by the route after handler success). */
 export async function recordProcessedEvent(eventId: string, eventType: string): Promise<void> {
-  const db = getDb();
-  await db
-    .insert(processedWebhookEvents)
-    .values({ stripeEventId: eventId, stripeEventType: eventType })
-    .onConflictDoNothing({ target: processedWebhookEvents.stripeEventId });
+  const supabase = getDataClient();
+  // Idempotent: the partial-unique index on `stripe_event_id` is the guard;
+  // `ignoreDuplicates:true` makes a retried event a no-op rather than an error.
+  await unwrapVoid(
+    supabase
+      .from("processed_webhook_events")
+      .upsert(
+        { stripe_event_id: eventId, stripe_event_type: eventType },
+        { onConflict: "stripe_event_id", ignoreDuplicates: true },
+      ),
+  );
 }
 
 /**

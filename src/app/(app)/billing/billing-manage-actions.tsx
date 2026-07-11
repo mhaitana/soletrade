@@ -20,7 +20,7 @@ import {
   type CancelSubscriptionPreviewResult,
 } from "./actions";
 import { CancellationModal, type CancelOptionChoice } from "./cancellation-modal";
-import type { BillingInterval } from "@/server/db/schema/enums";
+import type { BillingInterval } from "@/server/db/enums";
 
 interface BillingManageActionsProps {
   /** Current interval (null = not started, but this component only renders when active). */

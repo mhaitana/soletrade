@@ -7,7 +7,7 @@ import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed
 import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
 import { loadQuotesPage } from "./actions";
-import type { QuoteStatus } from "@/server/db/schema/enums";
+import type { QuoteStatus } from "@/server/db/enums";
 
 export const metadata = { title: "Quotes" };
 

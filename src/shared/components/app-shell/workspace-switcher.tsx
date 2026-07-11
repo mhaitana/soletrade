@@ -14,7 +14,7 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { switchWorkspaceAction } from "@/app/(app)/actions/workspaces";
 import { cn } from "@/shared/lib/utils";
-import type { WorkspaceRole } from "@/server/db/schema/enums";
+import type { WorkspaceRole } from "@/server/db/enums";
 import type { WorkspaceId } from "@/shared/types/ids";
 
 export type WorkspaceOption = {

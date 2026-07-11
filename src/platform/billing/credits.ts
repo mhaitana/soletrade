@@ -1,8 +1,9 @@
 import "server-only";
-import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { creditLedger } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, rpc, unwrap, unwrapMaybe } from "@/server/db/helpers";
+import type { Json } from "@/server/db/types";
 import type { CreditLedgerEntryId, UserId, WorkspaceId } from "@/shared/types/ids";
+import { branded } from "@/shared/types/ids";
 import type { ModuleKey } from "@/shared/constants/modules";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
@@ -62,7 +63,7 @@ export interface CreditLedgerRow {
   stripeInvoiceId: string | null;
   stripeRefundId: string | null;
   expiresAt: Date | null;
-  /** Drizzle infers jsonb columns as `unknown`; callers cast at the use site. */
+  /** PostgREST returns jsonb as the generated `Json` union; callers cast at the use site. */
   metadata: unknown;
   createdAt: Date;
 }
@@ -73,37 +74,63 @@ export interface CreditEntryResult {
   balanceCents: number;
 }
 
-const selectRow = {
-  id: creditLedger.id,
-  workspaceId: creditLedger.workspaceId,
-  entryType: creditLedger.entryType,
-  amountCents: creditLedger.amountCents,
-  currency: creditLedger.currency,
-  reason: creditLedger.reason,
-  moduleKey: creditLedger.moduleKey,
-  actorUserId: creditLedger.actorUserId,
-  stripeInvoiceId: creditLedger.stripeInvoiceId,
-  stripeRefundId: creditLedger.stripeRefundId,
-  expiresAt: creditLedger.expiresAt,
-  metadata: creditLedger.metadata,
-  createdAt: creditLedger.createdAt,
-} as const;
+const LEDGER_COLUMNS =
+  "id, workspace_id, entry_type, amount_cents, currency, reason, module_key, actor_user_id, stripe_invoice_id, stripe_refund_id, expires_at, metadata, created_at";
+
+/** Maps a snake_case PostgREST credit_ledger row to the camelCase `CreditLedgerRow`. */
+function toLedgerRow(r: {
+  id: string;
+  workspace_id: string;
+  entry_type: CreditLedgerRow["entryType"];
+  amount_cents: number;
+  currency: string;
+  reason: string;
+  module_key: string | null;
+  actor_user_id: string | null;
+  stripe_invoice_id: string | null;
+  stripe_refund_id: string | null;
+  expires_at: string | null;
+  metadata: Json | null;
+  created_at: string;
+}): CreditLedgerRow {
+  return {
+    id: branded<"CreditLedgerEntryId">(r.id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    entryType: r.entry_type,
+    amountCents: r.amount_cents,
+    currency: r.currency,
+    reason: r.reason,
+    moduleKey: (r.module_key ?? null) as ModuleKey | null,
+    actorUserId: r.actor_user_id ? branded<"UserId">(r.actor_user_id) : null,
+    stripeInvoiceId: r.stripe_invoice_id,
+    stripeRefundId: r.stripe_refund_id,
+    expiresAt: r.expires_at ? parsePgTimestamp(r.expires_at) : null,
+    metadata: r.metadata,
+    createdAt: parsePgTimestamp(r.created_at),
+  };
+}
 
 /**
  * The derived credit balance for a workspace (in cents). Always computed — never
- * stored. Returns 0 when no ledger rows exist.
+ * stored. Returns 0 when no ledger rows exist. PostgREST exposes no `SUM` aggregate
+ * (only `count` via `head`), so the balance is reduced client-side over the
+ * `amount_cents` column — the ledger is append-only with integer cents, so this is
+ * an exact sum (and the authoritative atomic balance check lives in the
+ * `consume_credit` RPC, not here).
  */
 export async function getCreditBalance(
   workspaceId: WorkspaceId,
   currency = "AUD",
 ): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .select({ balance: sql<number>`coalesce(sum(${creditLedger.amountCents}), 0)::int` })
-    .from(creditLedger)
-    .where(and(eq(creditLedger.workspaceId, workspaceId), eq(creditLedger.currency, currency)))
-    .limit(1);
-  return Number(rows[0]?.balance ?? 0);
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("credit_ledger")
+      .select("amount_cents")
+      .eq("workspace_id", workspaceId)
+      .eq("currency", currency),
+  );
+  return rows.reduce((sum, r) => sum + r.amount_cents, 0);
 }
 
 /** Internal: append a ledger row. The only mutator; never exposed publicly. */
@@ -112,26 +139,28 @@ async function appendCreditEntry(
   entryType: "grant" | "consumption" | "refund" | "adjustment" | "promotion" | "expired",
   input: CreditEntryInput,
 ): Promise<CreditLedgerEntryId> {
-  const db = getDb();
-  const rows = await db
-    .insert(creditLedger)
-    .values({
-      workspaceId,
-      entryType,
-      amountCents: input.amountCents,
-      currency: input.currency ?? "AUD",
-      reason: input.reason,
-      moduleKey: input.moduleKey ?? null,
-      actorUserId: input.actorUserId ?? null,
-      stripeInvoiceId: input.stripeInvoiceId ?? null,
-      stripeRefundId: input.stripeRefundId ?? null,
-      expiresAt: input.expiresAt ?? null,
-      metadata: input.metadata ?? null,
-    })
-    .returning({ id: creditLedger.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("credit_ledger")
+      .insert({
+        workspace_id: workspaceId,
+        entry_type: entryType,
+        amount_cents: input.amountCents,
+        currency: input.currency ?? "AUD",
+        reason: input.reason,
+        module_key: input.moduleKey ?? null,
+        actor_user_id: input.actorUserId ?? null,
+        stripe_invoice_id: input.stripeInvoiceId ?? null,
+        stripe_refund_id: input.stripeRefundId ?? null,
+        expires_at: input.expiresAt ? input.expiresAt.toISOString() : null,
+        metadata: (input.metadata ?? null) as Json,
+      })
+      .select("id"),
+  );
   const row = rows[0];
   if (!row) throw new Error("Failed to append credit ledger entry.");
-  return row.id;
+  return branded<"CreditLedgerEntryId">(row.id);
 }
 
 /** Issue credit to a workspace (Stripe prepayment, etc.). Optional `expiresAt`. */
@@ -208,8 +237,12 @@ export async function grantPromotionalCredit(
 
 /**
  * Consume credit against a charge. Throws `InsufficientCreditError` if the
- * workspace's balance would go below zero. The balance check + insert run in a
- * single transaction so a concurrent consumer can't drive the balance negative.
+ * workspace's balance would go below zero. The balance check + insert run in the
+ * `consume_credit` PL/pgSQL RPC, which locks the workspace row `FOR UPDATE` so a
+ * concurrent consumer can't drive the balance negative: the second waits for the
+ * first to commit, then sees the updated balance. The RPC raises SQLSTATE `45003` on
+ * insufficient credit; on that path we re-read the balance (best available snapshot)
+ * to construct an accurate `InsufficientCreditError`. `writeAudit` runs after the rpc.
  */
 export async function consumeCredit(
   workspaceId: WorkspaceId,
@@ -218,35 +251,30 @@ export async function consumeCredit(
 ): Promise<CreditEntryResult> {
   if (input.amountCents <= 0) throw new Error("consumeCredit requires a positive amount.");
   const currency = input.currency ?? "AUD";
-  const db = getDb();
-  const { entryId, balanceCents } = await db.transaction(async (tx) => {
-    const balanceRows = await tx
-      .select({ balance: sql<number>`coalesce(sum(${creditLedger.amountCents}), 0)::int` })
-      .from(creditLedger)
-      .where(and(eq(creditLedger.workspaceId, workspaceId), eq(creditLedger.currency, currency)))
-      .limit(1);
-    const balance = Number(balanceRows[0]?.balance ?? 0);
-    if (balance - input.amountCents < 0) {
+  const supabase = getDataClient();
+  const { data, error } = await rpc(supabase, "consume_credit", {
+    p_workspace_id: workspaceId,
+    p_amount_cents: input.amountCents,
+    p_currency: currency,
+    p_reason: input.reason,
+    p_module_key: input.moduleKey ?? null,
+    p_actor_user_id: actorUserId ?? null,
+    p_stripe_invoice_id: input.stripeInvoiceId ?? null,
+    p_metadata: input.metadata ?? null,
+  });
+  if (error) {
+    // Overdraft guard tripped (concurrent consume, or the pre-read balance was already
+    // too low). Re-read for an accurate InsufficientCreditError snapshot.
+    if (error.code === "45003") {
+      const balance = await getCreditBalance(workspaceId, currency);
       throw new InsufficientCreditError(workspaceId, balance, input.amountCents);
     }
-    const rows = await tx
-      .insert(creditLedger)
-      .values({
-        workspaceId,
-        entryType: "consumption",
-        amountCents: -input.amountCents,
-        currency,
-        reason: input.reason,
-        moduleKey: input.moduleKey ?? null,
-        actorUserId: actorUserId ?? null,
-        stripeInvoiceId: input.stripeInvoiceId ?? null,
-        metadata: input.metadata ?? null,
-      })
-      .returning({ id: creditLedger.id });
-    const id = rows[0]?.id;
-    if (!id) throw new Error("Failed to append credit ledger entry.");
-    return { entryId: id, balanceCents: balance - input.amountCents };
-  });
+    throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  }
+  const row = data?.[0];
+  if (!row) throw new Error("Failed to append credit ledger entry.");
+  const entryId = branded<"CreditLedgerEntryId">(row.entry_id);
+  const balanceCents = row.balance_cents;
   await writeAudit({
     workspaceId,
     actorUserId,
@@ -337,14 +365,18 @@ export async function listCreditLedger(
   workspaceId: WorkspaceId,
   opts?: { limit?: number },
 ): Promise<CreditLedgerRow[]> {
-  const db = getDb();
+  const supabase = getDataClient();
   const limit = Math.min(opts?.limit ?? 50, 200);
-  return db
-    .select(selectRow)
-    .from(creditLedger)
-    .where(eq(creditLedger.workspaceId, workspaceId))
-    .orderBy(desc(creditLedger.createdAt), desc(creditLedger.id))
-    .limit(limit);
+  const rows = await unwrap(
+    supabase
+      .from("credit_ledger")
+      .select(LEDGER_COLUMNS)
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit),
+  );
+  return rows.map(toLedgerRow);
 }
 
 /**
@@ -358,54 +390,54 @@ export async function listCreditLedger(
  * and continues to the next.
  */
 export async function markExpiredCredits(now: Date = new Date()): Promise<number> {
-  const db = getDb();
-  const due = await db
-    .select(selectRow)
-    .from(creditLedger)
-    .where(
-      and(
-        inArray(creditLedger.entryType, ["grant", "promotion"]),
-        lte(creditLedger.expiresAt, now),
-      ),
-    );
+  const supabase = getDataClient();
+  const due = await unwrap(
+    supabase
+      .from("credit_ledger")
+      .select(LEDGER_COLUMNS)
+      .in("entry_type", ["grant", "promotion"])
+      .lte("expires_at", now.toISOString()),
+  );
 
   let expired = 0;
   for (const entry of due) {
-    const originalEntryId = String(entry.id);
+    const row = toLedgerRow(entry);
+    const originalEntryId = String(row.id);
     // Idempotency pre-check: skip if an `expired` row already references this grant.
-    const existing = await db
-      .select({ id: creditLedger.id })
-      .from(creditLedger)
-      .where(
-        and(
-          eq(creditLedger.workspaceId, entry.workspaceId),
-          eq(creditLedger.entryType, "expired"),
-          sql`${creditLedger.metadata}->>'originalEntryId' = ${originalEntryId}`,
-        ),
-      )
-      .limit(1);
-    if (existing.length > 0) continue;
+    // PostgREST jsonb access: `metadata->>originalEntryId` extracts the key as text,
+    // compared with `eq` against the original id string.
+    const existing = await unwrapMaybe(
+      supabase
+        .from("credit_ledger")
+        .select("id")
+        .eq("workspace_id", row.workspaceId)
+        .eq("entry_type", "expired")
+        .filter("metadata->>originalEntryId", "eq", originalEntryId)
+        .limit(1)
+        .maybeSingle(),
+    );
+    if (existing) continue;
 
     try {
-      await appendCreditEntry(entry.workspaceId, "expired", {
-        amountCents: -entry.amountCents, // reverse the original grant/promotion
-        currency: entry.currency,
+      await appendCreditEntry(row.workspaceId, "expired", {
+        amountCents: -row.amountCents, // reverse the original grant/promotion
+        currency: row.currency,
         reason: "credit.expired",
         metadata: { originalEntryId },
       });
       await publishEvent({
         type: "CreditExpired",
-        workspaceId: entry.workspaceId,
+        workspaceId: row.workspaceId,
         entityType: "credit",
         entityId: originalEntryId,
-        metadata: { originalEntryId, amountCents: entry.amountCents, currency: entry.currency },
+        metadata: { originalEntryId, amountCents: row.amountCents, currency: row.currency },
       });
       await writeAudit({
-        workspaceId: entry.workspaceId,
+        workspaceId: row.workspaceId,
         action: "credit.expire",
         targetType: "credit",
         targetId: originalEntryId,
-        metadata: { originalEntryId, amountCents: entry.amountCents },
+        metadata: { originalEntryId, amountCents: row.amountCents },
       });
       expired += 1;
     } catch (err) {

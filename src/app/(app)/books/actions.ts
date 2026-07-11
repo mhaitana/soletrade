@@ -20,7 +20,7 @@ import {
 import { summarizeTransactions, type TransactionSummary } from "@/modules/books/calc";
 import { type Period, parsePeriod, periodRange } from "@/shared/utils/periods";
 import { isBookCategory } from "@/shared/constants/books-categories";
-import type { BookType } from "@/server/db/schema/enums";
+import type { BookType } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 
 const forbid = (msg = "You don't have permission to manage books.") => ({

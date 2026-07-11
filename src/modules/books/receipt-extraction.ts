@@ -1,21 +1,22 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { getDb } from "@/server/db";
-import { receiptExtractions } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
+import type { Json } from "@/server/db/types";
 import { getFile, downloadFileBytes } from "@/platform/files";
 import { getAIModel, isMockProvider } from "@/platform/ai/provider";
 import { consumeCredit } from "@/platform/billing/credits";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { env } from "@/shared/lib/env";
-import type {
-  BookTransactionId,
-  FileId,
-  ReceiptExtractionId,
-  UserId,
-  WorkspaceId,
+import {
+  branded,
+  type BookTransactionId,
+  type FileId,
+  type ReceiptExtractionId,
+  type UserId,
+  type WorkspaceId,
 } from "@/shared/types/ids";
 import { createTransaction } from "./index";
 
@@ -117,6 +118,23 @@ export interface ExtractionRow {
   updatedAt: Date;
 }
 
+const EXTRACTION_COLUMNS =
+  "id, workspace_id, file_id, status, extracted_data, transaction_id, error_message, model_used, created_at, updated_at";
+
+/** Raw snake_case shape PostgREST returns for a `receipt_extractions` row. */
+interface ExtractionRaw {
+  id: string;
+  workspace_id: string;
+  file_id: string;
+  status: string;
+  extracted_data: Json | null;
+  transaction_id: string | null;
+  error_message: string | null;
+  model_used: string;
+  created_at: string;
+  updated_at: string;
+}
+
 function coerceExtractedData(raw: unknown): ExtractedReceiptData {
   // The schema-validated object from generateObject; the jsonb round-trip may loosen
   // types, so re-coerce defensively for callers (UI/apply).
@@ -137,6 +155,22 @@ function coerceExtractedData(raw: unknown): ExtractedReceiptData {
         }))
       : [],
     confidence: Math.min(1, Math.max(0, Number(r.confidence ?? 0))) || 0,
+  };
+}
+
+/** Maps a snake_case PostgREST row to the camelCase `ExtractionRow`. */
+function toExtractionRow(r: ExtractionRaw): ExtractionRow {
+  return {
+    id: branded<"ReceiptExtractionId">(r.id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    fileId: branded<"FileId">(r.file_id),
+    status: r.status as ExtractionRow["status"],
+    extractedData: r.extracted_data ? coerceExtractedData(r.extracted_data) : null,
+    transactionId: r.transaction_id ? branded<"BookTransactionId">(r.transaction_id) : null,
+    errorMessage: r.error_message,
+    modelUsed: r.model_used,
+    createdAt: parsePgTimestamp(r.created_at),
+    updatedAt: parsePgTimestamp(r.updated_at),
   };
 }
 
@@ -201,28 +235,33 @@ export async function extractReceipt(
     extracted = coerceExtractedData({});
   }
 
-  const db = getDb();
-  const rows = await db
-    .insert(receiptExtractions)
-    .values({
-      workspaceId,
-      fileId,
-      status: errorMessage ? "rejected" : "pending",
-      extractedData: errorMessage ? null : (extracted as unknown as Record<string, unknown>),
-      errorMessage,
-      modelUsed,
-      actorUserId: actorId,
-    })
-    .returning({ id: receiptExtractions.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("receipt_extractions")
+      .insert({
+        workspace_id: workspaceId,
+        file_id: fileId,
+        status: errorMessage ? "rejected" : "pending",
+        // jsonb column: cast the typed object to `Json` (Record<string,unknown> is not
+        // assignable to Json's object arm `{[key:string]:Json}`).
+        extracted_data: errorMessage ? null : (extracted as unknown as Json),
+        error_message: errorMessage,
+        model_used: modelUsed,
+        actor_user_id: actorId,
+      })
+      .select("id"),
+  );
   const row = rows[0];
   if (!row) throw new Error("Failed to create receipt extraction.");
+  const id = branded<"ReceiptExtractionId">(row.id);
 
   await publishEvent({
     type: "ReceiptProcessed",
     workspaceId,
     actorUserId: actorId,
     entityType: "receipt_extraction",
-    entityId: row.id,
+    entityId: id,
     metadata: {
       fileId,
       status: errorMessage ? "rejected" : "pending",
@@ -236,10 +275,10 @@ export async function extractReceipt(
     actorUserId: actorId,
     action: "books.receipt.extract",
     targetType: "receipt_extraction",
-    targetId: row.id,
+    targetId: id,
     metadata: { fileId, modelUsed, status: errorMessage ? "rejected" : "pending" },
   });
-  return row.id;
+  return id;
 }
 
 /** Overrides a human reviewer applies on top of the extracted data before creating a tx. */
@@ -266,20 +305,22 @@ export async function applyExtraction(
   patch: ApplyExtractionPatch,
   actorId: UserId,
 ): Promise<BookTransactionId> {
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(receiptExtractions)
-    .where(
-      and(eq(receiptExtractions.id, extractionId), eq(receiptExtractions.workspaceId, workspaceId)),
-    )
-    .limit(1);
-  const ext = rows[0];
+  const supabase = getDataClient();
+  const ext = await unwrapMaybe(
+    supabase
+      .from("receipt_extractions")
+      .select(EXTRACTION_COLUMNS)
+      .eq("id", extractionId)
+      .eq("workspace_id", workspaceId)
+      .limit(1)
+      .maybeSingle(),
+  );
   if (!ext) throw new Error("Receipt extraction not found.");
-  if (ext.status === "applied") throw new Error("Receipt extraction already applied.");
-  if (!ext.extractedData) throw new Error("Receipt extraction has no extracted data.");
+  const row = ext as ExtractionRaw;
+  if (row.status === "applied") throw new Error("Receipt extraction already applied.");
+  if (!row.extracted_data) throw new Error("Receipt extraction has no extracted data.");
 
-  const data = coerceExtractedData(ext.extractedData);
+  const data = coerceExtractedData(row.extracted_data);
   const type = patch.type ?? "expense";
   const amountCents = patch.amountCents ?? data.totalCents;
   const gstCents = patch.gstCents ?? data.taxCents;
@@ -299,15 +340,22 @@ export async function applyExtraction(
       category,
       customerId: (patch.customerId as never) ?? null,
       notes: patch.notes ?? null,
-      receiptFileId: ext.fileId,
+      receiptFileId: branded<"FileId">(row.file_id),
     },
     actorId,
   );
 
-  await db
-    .update(receiptExtractions)
-    .set({ status: "applied", transactionId, updatedAt: new Date() })
-    .where(eq(receiptExtractions.id, extractionId));
+  await unwrapVoid(
+    supabase
+      .from("receipt_extractions")
+      .update({
+        status: "applied",
+        transaction_id: transactionId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", extractionId)
+      .eq("workspace_id", workspaceId),
+  );
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -325,14 +373,15 @@ export async function rejectExtraction(
   extractionId: ReceiptExtractionId,
   actorId: UserId,
 ): Promise<void> {
-  const db = getDb();
-  const rows = await db
-    .update(receiptExtractions)
-    .set({ status: "rejected", updatedAt: new Date() })
-    .where(
-      and(eq(receiptExtractions.id, extractionId), eq(receiptExtractions.workspaceId, workspaceId)),
-    )
-    .returning({ id: receiptExtractions.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("receipt_extractions")
+      .update({ status: "rejected", updated_at: new Date().toISOString() })
+      .eq("id", extractionId)
+      .eq("workspace_id", workspaceId)
+      .select("id"),
+  );
   if (!rows[0]) throw new Error("Receipt extraction not found.");
   await writeAudit({
     workspaceId,
@@ -349,31 +398,15 @@ export async function listExtractions(
   workspaceId: WorkspaceId,
   opts?: { status?: "pending" | "reviewed" | "applied" | "rejected"; limit?: number },
 ): Promise<ExtractionRow[]> {
-  const db = getDb();
+  const supabase = getDataClient();
   const limit = Math.min(opts?.limit ?? 100, 500);
-  const conditions = [eq(receiptExtractions.workspaceId, workspaceId)];
-  if (opts?.status) conditions.push(eq(receiptExtractions.status, opts.status));
-  const rows = await db
-    .select({
-      id: receiptExtractions.id,
-      workspaceId: receiptExtractions.workspaceId,
-      fileId: receiptExtractions.fileId,
-      status: receiptExtractions.status,
-      extractedData: receiptExtractions.extractedData,
-      transactionId: receiptExtractions.transactionId,
-      errorMessage: receiptExtractions.errorMessage,
-      modelUsed: receiptExtractions.modelUsed,
-      createdAt: receiptExtractions.createdAt,
-      updatedAt: receiptExtractions.updatedAt,
-    })
-    .from(receiptExtractions)
-    .where(and(...conditions))
-    .orderBy(desc(receiptExtractions.createdAt))
-    .limit(limit);
-  return rows.map((r) => ({
-    ...r,
-    extractedData: r.extractedData ? coerceExtractedData(r.extractedData) : null,
-  })) as ExtractionRow[];
+  let query = supabase
+    .from("receipt_extractions")
+    .select(EXTRACTION_COLUMNS)
+    .eq("workspace_id", workspaceId);
+  if (opts?.status) query = query.eq("status", opts.status);
+  const rows = await unwrap(query.order("created_at", { ascending: false }).limit(limit));
+  return rows.map((r) => toExtractionRow(r as ExtractionRaw));
 }
 
 /** Fetch a single extraction, workspace-scoped (IDOR-safe). */
@@ -381,31 +414,17 @@ export async function getExtraction(
   workspaceId: WorkspaceId,
   extractionId: ReceiptExtractionId,
 ): Promise<ExtractionRow | null> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: receiptExtractions.id,
-      workspaceId: receiptExtractions.workspaceId,
-      fileId: receiptExtractions.fileId,
-      status: receiptExtractions.status,
-      extractedData: receiptExtractions.extractedData,
-      transactionId: receiptExtractions.transactionId,
-      errorMessage: receiptExtractions.errorMessage,
-      modelUsed: receiptExtractions.modelUsed,
-      createdAt: receiptExtractions.createdAt,
-      updatedAt: receiptExtractions.updatedAt,
-    })
-    .from(receiptExtractions)
-    .where(
-      and(eq(receiptExtractions.id, extractionId), eq(receiptExtractions.workspaceId, workspaceId)),
-    )
-    .limit(1);
-  const r = rows[0];
-  if (!r) return null;
-  return {
-    ...r,
-    extractedData: r.extractedData ? coerceExtractedData(r.extractedData) : null,
-  } as ExtractionRow;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("receipt_extractions")
+      .select(EXTRACTION_COLUMNS)
+      .eq("id", extractionId)
+      .eq("workspace_id", workspaceId)
+      .limit(1)
+      .maybeSingle(),
+  );
+  return row ? toExtractionRow(row as ExtractionRaw) : null;
 }
 
 /** Parse an ISO date string defensively — returns null if invalid. */

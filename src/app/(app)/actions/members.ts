@@ -14,7 +14,7 @@ import {
   revokeInvitation,
   updateMemberRole,
 } from "@/platform/members";
-import type { WorkspaceRole } from "@/server/db/schema/enums";
+import type { WorkspaceRole } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 
 const INVITABLE_ROLES = ["admin", "manager", "accountant", "employee", "readonly"] as const;

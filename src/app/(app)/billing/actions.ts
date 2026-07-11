@@ -20,7 +20,7 @@ import type { CreditLedgerRow } from "@/platform/billing";
 import { getInstalledModules } from "@/platform/module-installations";
 import { getSubscription } from "@/platform/billing/subscriptions";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
-import type { BillingInterval } from "@/server/db/schema/enums";
+import type { BillingInterval } from "@/server/db/enums";
 import { env } from "@/shared/lib/env";
 import { createCheckoutSession } from "@/server/stripe/stripe-lifecycle";
 import { moduleRefundCents } from "@/platform/billing/pricing";

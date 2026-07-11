@@ -17,7 +17,7 @@
  * the acceptedCount delta; `acceptedValueCents` comes from the current call only.
  */
 
-import type { QuoteStatus } from "@/server/db/schema/enums";
+import type { QuoteStatus } from "@/server/db/enums";
 
 /** A quote reduced to the fields `summarizeQuotes` needs. */
 export interface QuoteSummaryInput {

@@ -16,7 +16,7 @@ import {
 import { ReceiptUpload } from "./receipt-upload";
 import type { CustomerRow } from "@/platform/customers";
 import type { TransactionRow } from "@/modules/books";
-import type { BookType } from "@/server/db/schema/enums";
+import type { BookType } from "@/server/db/enums";
 import type { FileId } from "@/shared/types/ids";
 
 type Result = CreateTransactionResult | UpdateTransactionResult;

@@ -1,9 +1,8 @@
 import "server-only";
-import { and, desc, eq, ilike, inArray, lt, or, type SQL } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { files, users } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import type { FileId, UserId, WorkspaceId } from "@/shared/types/ids";
-import { newId } from "@/shared/types/ids";
+import { branded, newId } from "@/shared/types/ids";
 import { writeAudit } from "@/platform/audit";
 import { getStorageAdminClient, storageBucket } from "@/server/storage";
 
@@ -47,9 +46,46 @@ export interface FileRecord {
   createdAt: Date;
 }
 
+/** Maps a PostgREST files row (+ embedded uploader) to the camelCase `FileRecord`. */
+function toFileRecord(r: {
+  id: string;
+  workspace_id: string;
+  uploaded_by_user_id: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string;
+  size_bytes: number;
+  entity_type: string | null;
+  entity_id: string | null;
+  created_at: string;
+  users: { full_name: string | null } | null;
+}): FileRecord {
+  return {
+    id: branded<"FileId">(r.id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    uploadedByUserId: branded<"UserId">(r.uploaded_by_user_id),
+    uploadedByFullName: r.users?.full_name ?? null,
+    fileName: r.file_name,
+    storagePath: r.storage_path,
+    mimeType: r.mime_type,
+    sizeBytes: r.size_bytes,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    createdAt: parsePgTimestamp(r.created_at),
+  };
+}
+
+const FILE_COLUMNS =
+  "id, workspace_id, uploaded_by_user_id, file_name, storage_path, mime_type, size_bytes, entity_type, entity_id, created_at, users ( full_name )";
+
 /** Cursor for keyset pagination (createdAt desc + id desc tiebreaker). */
 export interface FileCursor {
-  createdAt: Date;
+  /**
+   * Raw PostgREST ISO string for `created_at` — preserves full µs precision
+   * (`now()` is µs-precise; a JS `Date` truncates to ms, breaking the keyset
+   * `eq`/`lt` when rows share a millisecond). Kept as a string, never a `Date`.
+   */
+  createdAt: string;
   id: FileId;
 }
 
@@ -96,7 +132,7 @@ export function buildStoragePath(input: {
 export async function createFileRecord(
   input: CreateFileRecordInput,
 ): Promise<{ id: FileId; storagePath: string }> {
-  const db = getDb();
+  const supabase = getDataClient();
   const id = newId<"FileId">();
   const storagePath = buildStoragePath({
     workspaceId: input.workspaceId,
@@ -105,17 +141,19 @@ export async function createFileRecord(
     entityType: input.entityType,
     entityId: input.entityId,
   });
-  await db.insert(files).values({
-    id,
-    workspaceId: input.workspaceId,
-    uploadedByUserId: input.uploadedByUserId,
-    fileName: input.fileName,
-    storagePath,
-    mimeType: input.mimeType,
-    sizeBytes: input.sizeBytes,
-    entityType: input.entityType,
-    entityId: input.entityId,
-  });
+  await unwrapVoid(
+    supabase.from("files").insert({
+      id,
+      workspace_id: input.workspaceId,
+      uploaded_by_user_id: input.uploadedByUserId,
+      file_name: input.fileName,
+      storage_path: storagePath,
+      mime_type: input.mimeType,
+      size_bytes: input.sizeBytes,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+    }),
+  );
   return { id, storagePath };
 }
 
@@ -127,49 +165,35 @@ export async function listFiles(
   workspaceId: WorkspaceId,
   opts: FileListOptions = {},
 ): Promise<FilePage> {
-  const db = getDb();
+  const supabase = getDataClient();
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
 
-  const conditions: (SQL | undefined)[] = [eq(files.workspaceId, workspaceId)];
-  if (opts.entityType) conditions.push(eq(files.entityType, opts.entityType));
-  if (opts.entityId) conditions.push(eq(files.entityId, opts.entityId));
+  let query = supabase.from("files").select(FILE_COLUMNS).eq("workspace_id", workspaceId);
+  if (opts.entityType) query = query.eq("entity_type", opts.entityType);
+  if (opts.entityId) query = query.eq("entity_id", opts.entityId);
   const search = opts.search?.trim();
-  if (search) conditions.push(ilike(files.fileName, `%${search}%`));
+  if (search) query = query.ilike("file_name", `%${search}%`);
   if (opts.before) {
-    conditions.push(
-      or(
-        lt(files.createdAt, opts.before.createdAt),
-        and(eq(files.createdAt, opts.before.createdAt), lt(files.id, opts.before.id)),
-      ),
-    );
+    // Keyset: (created_at, id) strictly < before — i.e. created_at < cursor OR
+    // (created_at = cursor AND id < cursor). PostgREST expresses this as an `or`
+    // with a nested `and(...)` for the tiebreaker. `opts.before.createdAt` is the
+    // raw µs-precision ISO string (see FileCursor) so the comparison is exact.
+    const iso = opts.before.createdAt;
+    query = query.or(`created_at.lt.${iso},and(created_at.eq.${iso},id.lt.${opts.before.id})`);
   }
-
-  const rows = await db
-    .select({
-      id: files.id,
-      workspaceId: files.workspaceId,
-      uploadedByUserId: files.uploadedByUserId,
-      uploadedByFullName: users.fullName,
-      fileName: files.fileName,
-      storagePath: files.storagePath,
-      mimeType: files.mimeType,
-      sizeBytes: files.sizeBytes,
-      entityType: files.entityType,
-      entityId: files.entityId,
-      createdAt: files.createdAt,
-    })
-    .from(files)
-    .leftJoin(users, eq(users.id, files.uploadedByUserId))
-    .where(and(...conditions))
-    .orderBy(desc(files.createdAt), desc(files.id))
+  query = query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit + 1);
 
+  const rows = await unwrap(query);
   const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
-  const last = items[items.length - 1];
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const last = pageRows[pageRows.length - 1];
+  // Cursor carries the raw `created_at` string (µs precision) — NOT a Date.
   const nextCursor: FileCursor | null =
-    hasMore && last ? { createdAt: last.createdAt, id: last.id } : null;
-  return { items, nextCursor };
+    hasMore && last ? { createdAt: last.created_at, id: branded<"FileId">(last.id) } : null;
+  return { items: pageRows.map(toFileRecord), nextCursor };
 }
 
 /**
@@ -177,26 +201,16 @@ export async function listFiles(
  * exists but belongs to another workspace).
  */
 export async function getFile(workspaceId: WorkspaceId, id: FileId): Promise<FileRecord | null> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: files.id,
-      workspaceId: files.workspaceId,
-      uploadedByUserId: files.uploadedByUserId,
-      uploadedByFullName: users.fullName,
-      fileName: files.fileName,
-      storagePath: files.storagePath,
-      mimeType: files.mimeType,
-      sizeBytes: files.sizeBytes,
-      entityType: files.entityType,
-      entityId: files.entityId,
-      createdAt: files.createdAt,
-    })
-    .from(files)
-    .leftJoin(users, eq(users.id, files.uploadedByUserId))
-    .where(and(eq(files.id, id), eq(files.workspaceId, workspaceId)))
-    .limit(1);
-  return rows[0] ?? null;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("files")
+      .select(FILE_COLUMNS)
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle(),
+  );
+  return row ? toFileRecord(row) : null;
 }
 
 /**
@@ -268,8 +282,9 @@ export async function deleteFile(
     // Storage miss shouldn't strand the row — log + proceed to delete metadata.
     console.warn(`Storage delete failed for ${record.storagePath}: ${error.message}`);
   }
-  const db = getDb();
-  await db.delete(files).where(and(eq(files.id, id), eq(files.workspaceId, workspaceId)));
+  await unwrapVoid(
+    getDataClient().from("files").delete().eq("id", id).eq("workspace_id", workspaceId),
+  );
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -286,23 +301,9 @@ export async function listFilesByIds(
   ids: FileId[],
 ): Promise<FileRecord[]> {
   if (ids.length === 0) return [];
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: files.id,
-      workspaceId: files.workspaceId,
-      uploadedByUserId: files.uploadedByUserId,
-      uploadedByFullName: users.fullName,
-      fileName: files.fileName,
-      storagePath: files.storagePath,
-      mimeType: files.mimeType,
-      sizeBytes: files.sizeBytes,
-      entityType: files.entityType,
-      entityId: files.entityId,
-      createdAt: files.createdAt,
-    })
-    .from(files)
-    .leftJoin(users, eq(users.id, files.uploadedByUserId))
-    .where(and(eq(files.workspaceId, workspaceId), inArray(files.id, ids)));
-  return rows;
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase.from("files").select(FILE_COLUMNS).eq("workspace_id", workspaceId).in("id", ids),
+  );
+  return rows.map(toFileRecord);
 }

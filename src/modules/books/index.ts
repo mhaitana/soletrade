@@ -1,30 +1,29 @@
 import "server-only";
-import { and, desc, eq, gte, ilike, lte, or, type SQL } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { bookTransactions, customers } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, pgQuote, unwrap, unwrapMaybe } from "@/server/db/helpers";
 import { getCustomer } from "@/platform/customers";
 import { getWorkspace } from "@/platform/workspaces";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { isBookCategory } from "@/shared/constants/books-categories";
-import type { BookType } from "@/server/db/schema/enums";
-import type {
-  BookTransactionId,
-  CustomerId,
-  DriveEarningId,
-  DriveExpenseId,
-  DriveTripId,
-  FileId,
-  InvoiceId,
-  UserId,
-  WorkspaceId,
+import type { BookType } from "@/server/db/enums";
+import {
+  branded,
+  type BookTransactionId,
+  type CustomerId,
+  type DriveEarningId,
+  type DriveExpenseId,
+  type DriveTripId,
+  type FileId,
+  type InvoiceId,
+  type UserId,
+  type WorkspaceId,
 } from "@/shared/types/ids";
 
 /**
  * Books module service (Phase 6). Workspace-scoped CRUD for flat income/expense
- * transactions. All queries filter `eq(bookTransactions.workspaceId, workspaceId)` —
- * never trust a client workspace id; the caller resolves it from the session
- * (`requireWorkspaceContext`).
+ * transactions. All queries filter `.eq("workspace_id", workspaceId)` — never trust a
+ * client workspace id; the caller resolves it from the session (`requireWorkspaceContext`).
  *
  * Unlike invoices, transactions have no lifecycle / status: a row is a dated ledger
  * entry (income adds to net, expense subtracts). Money is integer cents. Categories are
@@ -113,26 +112,63 @@ export interface TransactionRow {
   updatedAt: Date;
 }
 
-const selectTransaction = {
-  id: bookTransactions.id,
-  workspaceId: bookTransactions.workspaceId,
-  type: bookTransactions.type,
-  amountCents: bookTransactions.amountCents,
-  gstCents: bookTransactions.gstCents,
-  currency: bookTransactions.currency,
-  date: bookTransactions.date,
-  description: bookTransactions.description,
-  category: bookTransactions.category,
-  customerId: bookTransactions.customerId,
-  sourceInvoiceId: bookTransactions.sourceInvoiceId,
-  sourceEarningId: bookTransactions.sourceEarningId,
-  sourceExpenseId: bookTransactions.sourceExpenseId,
-  sourceTripId: bookTransactions.sourceTripId,
-  receiptFileId: bookTransactions.receiptFileId,
-  notes: bookTransactions.notes,
-  createdAt: bookTransactions.createdAt,
-  updatedAt: bookTransactions.updatedAt,
-} as const;
+/**
+ * Columns selected from `book_transactions`, with the `customers` parent embedded via a
+ * LEFT join (`!left`) so transactions with no customer still return with `customers: null`
+ * — matching the original Drizzle `leftJoin`. `customerName` is read from the embedded
+ * `customers.name`. The `date` column is `timestamp without time zone`; `parsePgTimestamp`
+ * re-interprets the no-offset PostgREST string as UTC (matching node-postgres/Drizzle).
+ */
+const TRANSACTION_COLUMNS =
+  "id, workspace_id, type, amount_cents, gst_cents, currency, date, description, category, customer_id, source_invoice_id, source_earning_id, source_expense_id, source_trip_id, receipt_file_id, notes, created_at, updated_at, customers!left ( name )";
+
+/** Raw snake_case shape PostgREST returns for a `book_transactions` row + embedded customer. */
+interface TransactionRaw {
+  id: string;
+  workspace_id: string;
+  type: string;
+  amount_cents: number;
+  gst_cents: number;
+  currency: string;
+  date: string;
+  description: string;
+  category: string;
+  customer_id: string | null;
+  source_invoice_id: string | null;
+  source_earning_id: string | null;
+  source_expense_id: string | null;
+  source_trip_id: string | null;
+  receipt_file_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  customers: { name: string | null } | null;
+}
+
+/** Maps a snake_case PostgREST row to the camelCase `TransactionRow`. */
+function toTransactionRow(r: TransactionRaw): TransactionRow {
+  return {
+    id: branded<"BookTransactionId">(r.id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    type: r.type as BookType,
+    amountCents: r.amount_cents,
+    gstCents: r.gst_cents,
+    currency: r.currency,
+    date: parsePgTimestamp(r.date),
+    description: r.description,
+    category: r.category,
+    customerId: r.customer_id ? branded<"CustomerId">(r.customer_id) : null,
+    customerName: r.customers?.name ?? null,
+    sourceInvoiceId: r.source_invoice_id ? branded<"InvoiceId">(r.source_invoice_id) : null,
+    sourceEarningId: r.source_earning_id ? branded<"DriveEarningId">(r.source_earning_id) : null,
+    sourceExpenseId: r.source_expense_id ? branded<"DriveExpenseId">(r.source_expense_id) : null,
+    sourceTripId: r.source_trip_id ? branded<"DriveTripId">(r.source_trip_id) : null,
+    receiptFileId: r.receipt_file_id ? branded<"FileId">(r.receipt_file_id) : null,
+    notes: r.notes,
+    createdAt: parsePgTimestamp(r.created_at),
+    updatedAt: parsePgTimestamp(r.updated_at),
+  };
+}
 
 /** Verify a category slug is in the catalog for the given `type`. */
 function assertCategoryForType(type: BookType, category: string): void {
@@ -167,39 +203,45 @@ export async function createTransaction(
   assertCategoryForType(input.type, input.category);
   await assertCustomerInWorkspace(workspaceId, input.customerId ?? null);
 
-  const db = getDb();
+  const supabase = getDataClient();
   // Default currency from the workspace row (migration 0018); fall back to AUD if missing.
   const workspace = await getWorkspace(workspaceId);
   const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
-  const rows = await db
-    .insert(bookTransactions)
-    .values({
-      workspaceId,
-      type: input.type,
-      amountCents: input.amountCents,
-      gstCents: input.gstCents ?? 0,
-      currency: input.currency ?? defaultCurrency,
-      date: input.date,
-      description: input.description.trim(),
-      category: input.category,
-      customerId: input.customerId ?? null,
-      sourceInvoiceId: input.sourceInvoiceId ?? null,
-      sourceEarningId: input.sourceEarningId ?? null,
-      sourceExpenseId: input.sourceExpenseId ?? null,
-      sourceTripId: input.sourceTripId ?? null,
-      receiptFileId: input.receiptFileId ?? null,
-      notes: input.notes ?? null,
-    })
-    .returning({ id: bookTransactions.id });
+  // `date` is `timestamp without time zone`; `toISOString()` (UTC) round-trips exactly —
+  // PostgREST casts the Z-string to the no-tz type by keeping the UTC wall-time literal,
+  // which is what node-postgres/Drizzle stored for the same Date.
+  const rows = await unwrap(
+    supabase
+      .from("book_transactions")
+      .insert({
+        workspace_id: workspaceId,
+        type: input.type,
+        amount_cents: input.amountCents,
+        gst_cents: input.gstCents ?? 0,
+        currency: input.currency ?? defaultCurrency,
+        date: input.date.toISOString(),
+        description: input.description.trim(),
+        category: input.category,
+        customer_id: input.customerId ?? null,
+        source_invoice_id: input.sourceInvoiceId ?? null,
+        source_earning_id: input.sourceEarningId ?? null,
+        source_expense_id: input.sourceExpenseId ?? null,
+        source_trip_id: input.sourceTripId ?? null,
+        receipt_file_id: input.receiptFileId ?? null,
+        notes: input.notes ?? null,
+      })
+      .select("id"),
+  );
   const row = rows[0];
   if (!row) throw new Error("Failed to create transaction.");
+  const id = branded<"BookTransactionId">(row.id);
 
   await publishEvent({
     type: "TransactionCreated",
     workspaceId,
     actorUserId: actorId,
     entityType: "transaction",
-    entityId: row.id,
+    entityId: id,
     metadata: {
       type: input.type,
       amountCents: input.amountCents,
@@ -221,7 +263,7 @@ export async function createTransaction(
       actorUserId: actorId,
       entityType: "file",
       entityId: input.receiptFileId,
-      metadata: { transactionId: row.id },
+      metadata: { transactionId: id },
     });
   }
   await writeAudit({
@@ -229,7 +271,7 @@ export async function createTransaction(
     actorUserId: actorId,
     action: "transaction.create",
     targetType: "transaction",
-    targetId: row.id,
+    targetId: id,
     metadata: {
       type: input.type,
       amountCents: input.amountCents,
@@ -242,7 +284,7 @@ export async function createTransaction(
       ...(input.sourceTripId ? { sourceTripId: input.sourceTripId, source: "drive" } : {}),
     },
   });
-  return row.id;
+  return id;
 }
 
 /** Update a transaction (workspace-isolated). Throws if not found. */
@@ -260,39 +302,62 @@ export async function updateTransaction(
     throw new Error("Category is required when changing transaction type.");
   } else if (patch.category !== undefined) {
     // Category is changing without a type — validate against the EXISTING type.
-    const db = getDb();
-    const existing = await db
-      .select({ type: bookTransactions.type })
-      .from(bookTransactions)
-      .where(and(eq(bookTransactions.id, txId), eq(bookTransactions.workspaceId, workspaceId)))
-      .limit(1);
-    const row = existing[0];
-    if (!row) throw new Error("Transaction not found.");
-    assertCategoryForType(row.type, patch.category);
+    const supabase = getDataClient();
+    const existing = await unwrapMaybe(
+      supabase
+        .from("book_transactions")
+        .select("type")
+        .eq("id", txId)
+        .eq("workspace_id", workspaceId)
+        .limit(1)
+        .maybeSingle(),
+    );
+    if (!existing) throw new Error("Transaction not found.");
+    assertCategoryForType(existing.type as BookType, patch.category);
   }
   if (patch.amountCents !== undefined && patch.amountCents <= 0) {
     throw new Error("Amount must be greater than 0.");
   }
   await assertCustomerInWorkspace(workspaceId, patch.customerId ?? null);
 
-  const db = getDb();
-  const set: Record<string, unknown> = { updatedAt: new Date() };
+  const supabase = getDataClient();
+  // Explicit column-keyed shape (not a loose Record<string, unknown>) so the typed
+  // `.update()` payload accepts it — the generated Update type rejects an `unknown`
+  // index signature. `updated_at` is always set; the rest are conditional on the patch.
+  // Source-link columns (source_invoice_id etc.) are deliberately NOT mutable here,
+  // matching the original Drizzle update set.
+  const set: {
+    updated_at: string;
+    type?: BookType;
+    amount_cents?: number;
+    gst_cents?: number;
+    currency?: string;
+    date?: string;
+    description?: string;
+    category?: string;
+    customer_id?: CustomerId | null;
+    notes?: string | null;
+    receipt_file_id?: FileId | null;
+  } = { updated_at: new Date().toISOString() };
   if (patch.type !== undefined) set.type = patch.type;
-  if (patch.amountCents !== undefined) set.amountCents = patch.amountCents;
-  if (patch.gstCents !== undefined) set.gstCents = patch.gstCents;
+  if (patch.amountCents !== undefined) set.amount_cents = patch.amountCents;
+  if (patch.gstCents !== undefined) set.gst_cents = patch.gstCents;
   if (patch.currency !== undefined) set.currency = patch.currency;
-  if (patch.date !== undefined) set.date = patch.date;
+  if (patch.date !== undefined) set.date = patch.date.toISOString();
   if (patch.description !== undefined) set.description = patch.description.trim();
   if (patch.category !== undefined) set.category = patch.category;
-  if (patch.customerId !== undefined) set.customerId = patch.customerId ?? null;
+  if (patch.customerId !== undefined) set.customer_id = patch.customerId ?? null;
   if (patch.notes !== undefined) set.notes = patch.notes ?? null;
-  if (patch.receiptFileId !== undefined) set.receiptFileId = patch.receiptFileId ?? null;
+  if (patch.receiptFileId !== undefined) set.receipt_file_id = patch.receiptFileId ?? null;
 
-  const rows = await db
-    .update(bookTransactions)
-    .set(set)
-    .where(and(eq(bookTransactions.id, txId), eq(bookTransactions.workspaceId, workspaceId)))
-    .returning({ id: bookTransactions.id });
+  const rows = await unwrap(
+    supabase
+      .from("book_transactions")
+      .update(set)
+      .eq("id", txId)
+      .eq("workspace_id", workspaceId)
+      .select("id"),
+  );
   if (!rows[0]) throw new Error("Transaction not found.");
 
   await publishEvent({
@@ -319,17 +384,18 @@ export async function deleteTransaction(
   txId: BookTransactionId,
   actorId?: UserId,
 ): Promise<boolean> {
-  const db = getDb();
-  const rows = await db
-    .delete(bookTransactions)
-    .where(and(eq(bookTransactions.id, txId), eq(bookTransactions.workspaceId, workspaceId)))
-    .returning({
-      id: bookTransactions.id,
-      type: bookTransactions.type,
-      amountCents: bookTransactions.amountCents,
-    });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("book_transactions")
+      .delete()
+      .eq("id", txId)
+      .eq("workspace_id", workspaceId)
+      .select("id, type, amount_cents"),
+  );
   const row = rows[0];
   if (!row) return false;
+  const type = row.type as BookType;
 
   await publishEvent({
     type: "TransactionDeleted",
@@ -337,7 +403,7 @@ export async function deleteTransaction(
     actorUserId: actorId,
     entityType: "transaction",
     entityId: txId,
-    metadata: { type: row.type, amountCents: row.amountCents },
+    metadata: { type, amountCents: row.amount_cents },
   });
   await writeAudit({
     workspaceId,
@@ -345,7 +411,7 @@ export async function deleteTransaction(
     action: "transaction.delete",
     targetType: "transaction",
     targetId: txId,
-    metadata: { type: row.type, amountCents: row.amountCents },
+    metadata: { type, amountCents: row.amount_cents },
   });
   return true;
 }
@@ -364,40 +430,55 @@ export async function listTransactions(
     limit?: number;
   },
 ): Promise<TransactionRow[]> {
-  const db = getDb();
+  const supabase = getDataClient();
   // Default 100 (the page list view); clamped to 2000 so the summary loader can fetch a full
   // period. A workspace with >2000 transactions in a period gets an approximate summary —
   // DB-side aggregation is a later optimization.
   const limit = Math.min(opts?.limit ?? 100, 2000);
-  const conditions: (SQL | undefined)[] = [eq(bookTransactions.workspaceId, workspaceId)];
-  if (opts?.type) conditions.push(eq(bookTransactions.type, opts.type));
-  if (opts?.customerId) conditions.push(eq(bookTransactions.customerId, opts.customerId));
-  if (opts?.dateFrom) conditions.push(gte(bookTransactions.date, opts.dateFrom));
-  if (opts?.dateTo) conditions.push(lte(bookTransactions.date, opts.dateTo));
+  let query = supabase
+    .from("book_transactions")
+    .select(TRANSACTION_COLUMNS)
+    .eq("workspace_id", workspaceId);
+  if (opts?.type) query = query.eq("type", opts.type);
+  if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
+  // `date` is `timestamp without time zone`; pass ISO-with-Z (UTC) for the bounds —
+  // PostgREST casts to the no-tz type keeping the UTC wall-time literal, matching Drizzle.
+  if (opts?.dateFrom) query = query.gte("date", opts.dateFrom.toISOString());
+  if (opts?.dateTo) query = query.lte("date", opts.dateTo.toISOString());
   const search = opts?.search?.trim();
   if (search) {
-    const term = `%${search}%`;
-    conditions.push(
-      or(
-        ilike(bookTransactions.description, term),
-        ilike(customers.name, term),
-        ilike(customers.company, term),
-      ),
+    // ILIKE across description + the joined customer's name/company — the original ORd
+    // three parameterized ilike calls over a `leftJoin customers`. PostgREST's `or`
+    // filter can't reference embedded/foreign columns, so replicate the leftJoin OR in
+    // two local-column-only steps (both ORs are on columns PostgREST's `or` supports):
+    //   (1) find customer ids in the workspace whose name OR company ILIKE the term — no
+    //       `deleted_at` filter, matching the original leftJoin (it didn't exclude
+    //       soft-deleted customers);
+    //   (2) match transactions whose description ILIKE the term OR whose `customer_id` is
+    //       in that set. A no-customer transaction still matches via the description
+    //       branch. UUIDs carry no commas/parens so the `in.(...)` list is parser-safe.
+    const term = pgQuote(`%${search}%`);
+    const matchingCustomers = await unwrap(
+      supabase
+        .from("customers")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .or(`name.ilike.${term},company.ilike.${term}`),
     );
+    const customerIds = matchingCustomers.map((c) => c.id);
+    query =
+      customerIds.length > 0
+        ? query.or(`description.ilike.${term},customer_id.in.(${customerIds.join(",")})`)
+        : query.or(`description.ilike.${term}`);
   }
 
-  const rows = await db
-    .select({
-      ...selectTransaction,
-      customerName: customers.name,
-    })
-    .from(bookTransactions)
-    .leftJoin(customers, eq(bookTransactions.customerId, customers.id))
-    .where(and(...conditions))
-    .orderBy(desc(bookTransactions.date), desc(bookTransactions.createdAt))
-    .limit(limit);
-
-  return rows.map(({ customerName, ...tx }) => ({ ...tx, customerName: customerName ?? null }));
+  const rows = await unwrap(
+    query
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(limit),
+  );
+  return rows.map((r) => toTransactionRow(r as TransactionRaw));
 }
 
 /**
@@ -408,17 +489,17 @@ export async function getTransaction(
   workspaceId: WorkspaceId,
   txId: BookTransactionId,
 ): Promise<TransactionRow | null> {
-  const db = getDb();
-  const rows = await db
-    .select({ ...selectTransaction, customerName: customers.name })
-    .from(bookTransactions)
-    .leftJoin(customers, eq(bookTransactions.customerId, customers.id))
-    .where(and(eq(bookTransactions.id, txId), eq(bookTransactions.workspaceId, workspaceId)))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
-  const { customerName, ...tx } = row;
-  return { ...tx, customerName: customerName ?? null };
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("book_transactions")
+      .select(TRANSACTION_COLUMNS)
+      .eq("id", txId)
+      .eq("workspace_id", workspaceId)
+      .limit(1)
+      .maybeSingle(),
+  );
+  return row ? toTransactionRow(row as TransactionRaw) : null;
 }
 
 /**
@@ -438,30 +519,34 @@ export async function findTransactionIdBySource(
     sourceTripId?: DriveTripId | null;
   },
 ): Promise<BookTransactionId | null> {
-  const db = getDb();
-  let column;
-  let value;
+  const supabase = getDataClient();
+  let column: "source_invoice_id" | "source_earning_id" | "source_expense_id" | "source_trip_id";
+  let value: string;
   if (source.sourceInvoiceId) {
-    column = bookTransactions.sourceInvoiceId;
+    column = "source_invoice_id";
     value = source.sourceInvoiceId;
   } else if (source.sourceEarningId) {
-    column = bookTransactions.sourceEarningId;
+    column = "source_earning_id";
     value = source.sourceEarningId;
   } else if (source.sourceExpenseId) {
-    column = bookTransactions.sourceExpenseId;
+    column = "source_expense_id";
     value = source.sourceExpenseId;
   } else if (source.sourceTripId) {
-    column = bookTransactions.sourceTripId;
+    column = "source_trip_id";
     value = source.sourceTripId;
   } else {
     return null;
   }
-  const rows = await db
-    .select({ id: bookTransactions.id })
-    .from(bookTransactions)
-    .where(and(eq(bookTransactions.workspaceId, workspaceId), eq(column, value)))
-    .limit(1);
-  return rows[0]?.id ?? null;
+  const row = await unwrapMaybe(
+    supabase
+      .from("book_transactions")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq(column, value)
+      .limit(1)
+      .maybeSingle(),
+  );
+  return row ? branded<"BookTransactionId">(row.id) : null;
 }
 
 // Re-export the pure aggregator (Phase 9 cross-module dashboard loader uses it).

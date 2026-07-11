@@ -1,14 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  bookTransactions as bookTransactionsTable,
-  customers as customersTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import {
   branded,
   type BookTransactionId,
@@ -48,8 +39,7 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "books-actor@soletrade-test.local", fullName: "Books Actor" },
       { id: otherActor, email: "books-other@soletrade-test.local", fullName: "Books Other" },
     ]);
@@ -82,18 +72,13 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    await db
-      .delete(bookTransactionsTable)
-      .where(inArray(bookTransactionsTable.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor, otherActor],
+      [{ table: "book_transactions" }, { table: "customers" }, { table: "audit_logs" }],
+    );
   });
 
   it("creates an income transaction with the stored fields", async () => {

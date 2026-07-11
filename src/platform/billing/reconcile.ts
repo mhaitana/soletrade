@@ -1,18 +1,17 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
-import { getDb } from "@/server/db";
-import { creditLedger, subscriptions } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import { getSubscription } from "@/platform/billing/subscriptions";
 import { enableModule, disableModule, getInstalledModules } from "@/platform/module-installations";
 import { grantCredit, refundCredit } from "@/platform/billing/credits";
 import { priceSubscription, prorateRefundCents } from "@/platform/billing/pricing";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
-import type { SubscriptionStatus, BillingInterval } from "@/server/db/schema/enums";
+import type { SubscriptionStatus, BillingInterval } from "@/server/db/enums";
 import type { ModuleKey } from "@/shared/constants/modules";
 import type { Role } from "@/platform/billing/pricing";
-import type { WorkspaceId } from "@/shared/types/ids";
+import { branded, type WorkspaceId } from "@/shared/types/ids";
 
 /**
  * Webhook reconcile functions (brief §10). Maps Stripe events onto the local
@@ -106,21 +105,24 @@ export async function reconcileFromCheckoutSession(
   }
 
   const patch = mapCheckoutSessionToUpdate(session);
-  const db = getDb();
-  const rows = await db
-    .update(subscriptions)
-    .set({
-      billingInterval: payload.interval,
-      status: patch.status,
-      stripeCustomerId: patch.stripeCustomerId,
-      stripeSubscriptionId: patch.stripeSubscriptionId,
-      anchorBillingDate: current.anchorBillingDate ?? new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(subscriptions.workspaceId, workspaceId))
-    .returning({ id: subscriptions.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("subscriptions")
+      .update({
+        billing_interval: payload.interval,
+        status: patch.status,
+        stripe_customer_id: patch.stripeCustomerId,
+        stripe_subscription_id: patch.stripeSubscriptionId,
+        anchor_billing_date: (current.anchorBillingDate ?? new Date()).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("workspace_id", workspaceId)
+      .select("id"),
+  );
   const updated = rows[0];
   if (!updated) throw new Error(`Failed to update subscription for workspace ${workspaceId}.`);
+  const updatedId = branded<"SubscriptionId">(updated.id);
 
   // Enable each chosen module locally with its subscription item id (actorless webhook upsert).
   for (const item of payload.items) {
@@ -131,7 +133,7 @@ export async function reconcileFromCheckoutSession(
     type: "SubscriptionChanged",
     workspaceId,
     entityType: "subscription",
-    entityId: updated.id,
+    entityId: updatedId,
     metadata: {
       from: current.billingInterval ?? "unbilled",
       to: payload.interval,
@@ -142,7 +144,7 @@ export async function reconcileFromCheckoutSession(
     workspaceId,
     action: "billing.subscription.update",
     targetType: "subscription",
-    targetId: updated.id,
+    targetId: updatedId,
     metadata: {
       from: current.billingInterval ?? "unbilled",
       to: payload.interval,
@@ -169,11 +171,13 @@ export async function reconcileSubscription(stripeSub: Stripe.Subscription): Pro
   if (!current) return;
   if (current.status === newStatus) return; // idempotent: no-op on no change
 
-  const db = getDb();
-  await db
-    .update(subscriptions)
-    .set({ status: newStatus, updatedAt: new Date() })
-    .where(eq(subscriptions.workspaceId, workspaceId));
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("subscriptions")
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId),
+  );
 
   await writeAudit({
     workspaceId,
@@ -257,11 +261,13 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
     }
   }
 
-  const db = getDb();
-  await db
-    .update(subscriptions)
-    .set({ status: "canceled", billingInterval: null, updatedAt: now })
-    .where(eq(subscriptions.workspaceId, workspaceId));
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("subscriptions")
+      .update({ status: "canceled", billing_interval: null, updated_at: now.toISOString() })
+      .eq("workspace_id", workspaceId),
+  );
 
   // Cascade-disable active modules (the subscription that billed them is gone).
   const active = await getInstalledModules(workspaceId);
@@ -312,16 +318,19 @@ export async function recordInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
   const customerId =
     typeof invoice.customer === "string" ? invoice.customer : (invoice.customer?.id ?? null);
   if (!customerId) return; // not all invoices carry a customer
-  const db = getDb();
-  const rows = await db
-    .select({ workspaceId: subscriptions.workspaceId })
-    .from(subscriptions)
-    .where(eq(subscriptions.stripeCustomerId, customerId))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return; // customer not known to us (e.g. test/legacy)
+  const supabase = getDataClient();
+  const sub = await unwrapMaybe(
+    supabase
+      .from("subscriptions")
+      .select("workspace_id")
+      .eq("stripe_customer_id", customerId)
+      .limit(1)
+      .maybeSingle(),
+  );
+  if (!sub) return; // customer not known to us (e.g. test/legacy)
+  const workspaceId = branded<"WorkspaceId">(sub.workspace_id);
   await writeAudit({
-    workspaceId: row.workspaceId,
+    workspaceId,
     action: "billing.invoice.paid",
     targetType: "invoice",
     targetId: invoice.id,
@@ -335,22 +344,21 @@ export async function recordInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
   // (idempotency — the processed_webhook_events pre-check guards by event id; this guards
   // by invoice id for the rare same-invoice/different-event case).
   if (invoice.amount_paid > 0) {
-    const existing = await db
-      .select({ id: creditLedger.id })
-      .from(creditLedger)
-      .where(
-        and(
-          eq(creditLedger.workspaceId, row.workspaceId),
-          eq(creditLedger.stripeInvoiceId, invoice.id),
-        ),
-      )
-      .limit(1);
-    if (existing[0]) return; // already granted
+    const existing = await unwrapMaybe(
+      supabase
+        .from("credit_ledger")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("stripe_invoice_id", invoice.id)
+        .limit(1)
+        .maybeSingle(),
+    );
+    if (existing) return; // already granted
     // Stripe returns lowercase ISO currency codes (e.g. "aud"); our ledger convention
     // is uppercase. Normalize so balance queries (which filter by currency) don't
     // fragment across cases.
     const currency = invoice.currency.toUpperCase();
-    await grantCredit(row.workspaceId, {
+    await grantCredit(workspaceId, {
       amountCents: invoice.amount_paid,
       currency,
       reason: "invoice.paid",

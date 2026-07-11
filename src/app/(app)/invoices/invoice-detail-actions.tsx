@@ -19,7 +19,7 @@ import {
   sendInvoiceAction,
   voidInvoiceAction,
 } from "./actions";
-import type { InvoiceStatus } from "@/server/db/schema/enums";
+import type { InvoiceStatus } from "@/server/db/enums";
 
 type Action = { kind: "send" } | { kind: "markPaid" } | { kind: "void" } | { kind: "delete" };
 

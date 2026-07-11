@@ -19,7 +19,7 @@ design system and `pages/*.md` for per-surface overrides.
 ## Stack
 - Next.js 16 (App Router) · React 19 · TypeScript strict (+ `noUncheckedIndexedAccess`)
 - Tailwind v4 (CSS-based config in `src/app/globals.css`) · shadcn/ui (new-york, Radix)
-- Drizzle ORM + Supabase Auth + Stripe Billing + Resend · Vitest + Testing Library
+- Supabase JS client (PostgREST `.from().select()` + service-role admin client) + Supabase CLI migrations · Supabase Auth + Stripe Billing + Resend · Vitest + Testing Library
 - Package manager: **pnpm**
 
 ## Commands

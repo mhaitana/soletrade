@@ -1,4 +1,4 @@
-import type { WorkspaceRole } from "@/server/db/schema/enums";
+import type { WorkspaceRole } from "@/server/db/enums";
 
 /**
  * Platform permission model (brief §11).

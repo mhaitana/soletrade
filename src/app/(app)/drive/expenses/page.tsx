@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
-import { type VehicleExpenseType } from "@/server/db/schema/enums";
+import { type VehicleExpenseType } from "@/server/db/enums";
 import { loadExpensesPage } from "./actions";
 import { ExpenseForm } from "./expense-form";
 

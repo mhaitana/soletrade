@@ -1,9 +1,8 @@
 import "server-only";
-import { and, count, desc, eq, isNull, lt, or, type SQL } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { notifications, workspaceMembers } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrap, unwrapCount } from "@/server/db/helpers";
 import { can, type Permission } from "@/platform/permissions";
-import type { NotificationId, UserId, WorkspaceId } from "@/shared/types/ids";
+import { branded, type NotificationId, type UserId, type WorkspaceId } from "@/shared/types/ids";
 
 /**
  * In-app notification store (Phase 11c). Per-user within a workspace: every query
@@ -31,7 +30,12 @@ export interface NotificationRow {
 
 /** Cursor for keyset pagination (createdAt desc + id desc tiebreaker). */
 export interface NotificationCursor {
-  createdAt: Date;
+  /**
+   * Raw PostgREST ISO string for `created_at` — preserves full µs precision
+   * (`now()` is µs-precise; a JS `Date` truncates to ms, breaking the keyset
+   * `eq`/`lt` when rows share a millisecond). Kept as a string, never a `Date`.
+   */
+  createdAt: string;
   id: NotificationId;
 }
 
@@ -58,42 +62,62 @@ export interface CreateNotificationInput {
   entityId?: string;
 }
 
+const NOTIFICATION_COLUMNS =
+  "id, workspace_id, user_id, type, title, body, entity_type, entity_id, read_at, created_at";
+
+/** Maps a snake_case PostgREST notifications row to the camelCase `NotificationRow`. */
+function toNotificationRow(r: {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}): NotificationRow {
+  return {
+    id: branded<"NotificationId">(r.id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    userId: branded<"UserId">(r.user_id),
+    type: r.type,
+    title: r.title,
+    body: r.body,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    // PostgREST returns timestamptz as ISO `string`; convert to Date to preserve
+    // the `Date | null` contract consumers (the bell + /notifications) rely on.
+    readAt: r.read_at ? parsePgTimestamp(r.read_at) : null,
+    createdAt: parsePgTimestamp(r.created_at),
+  };
+}
+
 /**
  * Insert one in-app notification addressed to a single recipient. Used by the
  * event subscribers (one row per qualifying member). Best-effort: the caller
  * wraps in try/catch so a DB hiccup can't break the event bus.
  */
 export async function createNotification(input: CreateNotificationInput): Promise<NotificationId> {
-  const db = getDb();
-  const [row] = await db
-    .insert(notifications)
-    .values({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      type: input.type,
-      title: input.title,
-      body: input.body ?? null,
-      entityType: input.entityType,
-      entityId: input.entityId,
-    })
-    .returning({ id: notifications.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("notifications")
+      .insert({
+        workspace_id: input.workspaceId,
+        user_id: input.userId,
+        type: input.type,
+        title: input.title,
+        body: input.body ?? null,
+        entity_type: input.entityType,
+        entity_id: input.entityId,
+      })
+      .select("id"),
+  );
+  const row = rows[0];
   if (!row) throw new Error("Failed to create notification.");
-  return row.id;
-}
-
-function toRow(r: typeof notifications.$inferSelect): NotificationRow {
-  return {
-    id: r.id,
-    workspaceId: r.workspaceId,
-    userId: r.userId,
-    type: r.type,
-    title: r.title,
-    body: r.body,
-    entityType: r.entityType,
-    entityId: r.entityId,
-    readAt: r.readAt,
-    createdAt: r.createdAt,
-  };
+  return branded<"NotificationId">(row.id);
 }
 
 /**
@@ -105,55 +129,51 @@ export async function listNotifications(
   userId: UserId,
   opts: NotificationListOptions = {},
 ): Promise<NotificationPage> {
-  const db = getDb();
+  const supabase = getDataClient();
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
 
-  const conditions: (SQL | undefined)[] = [
-    eq(notifications.workspaceId, workspaceId),
-    eq(notifications.userId, userId),
-  ];
-  if (opts.unreadOnly) conditions.push(isNull(notifications.readAt));
+  let query = supabase
+    .from("notifications")
+    .select(NOTIFICATION_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId);
+  if (opts.unreadOnly) query = query.is("read_at", null);
   if (opts.before) {
-    conditions.push(
-      or(
-        lt(notifications.createdAt, opts.before.createdAt),
-        and(
-          eq(notifications.createdAt, opts.before.createdAt),
-          lt(notifications.id, opts.before.id),
-        ),
-      ),
-    );
+    // Keyset: (created_at, id) strictly < before — created_at < cursor OR
+    // (created_at = cursor AND id < cursor). PostgREST expresses this as an `or`
+    // with a nested `and(...)` for the tiebreaker. `opts.before.createdAt` is the
+    // raw µs-precision ISO string (see NotificationCursor) so the comparison is exact.
+    const iso = opts.before.createdAt;
+    query = query.or(`created_at.lt.${iso},and(created_at.eq.${iso},id.lt.${opts.before.id})`);
   }
 
-  const rows = await db
-    .select()
-    .from(notifications)
-    .where(and(...conditions))
-    .orderBy(desc(notifications.createdAt), desc(notifications.id))
-    .limit(limit + 1);
-
+  const rows = await unwrap(
+    query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit + 1),
+  );
   const hasMore = rows.length > limit;
-  const items = (hasMore ? rows.slice(0, limit) : rows).map(toRow);
-  const last = items[items.length - 1];
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const items = pageRows.map(toNotificationRow);
+  const last = pageRows[pageRows.length - 1];
+  // Cursor carries the raw `created_at` string (µs precision) — NOT a Date.
   const nextCursor: NotificationCursor | null =
-    hasMore && last ? { createdAt: last.createdAt, id: last.id } : null;
+    hasMore && last ? { createdAt: last.created_at, id: branded<"NotificationId">(last.id) } : null;
   return { items, nextCursor };
 }
 
 /** Count a user's unread notifications in a workspace (bell badge). */
 export async function unreadCount(workspaceId: WorkspaceId, userId: UserId): Promise<number> {
-  const db = getDb();
-  const [row] = await db
-    .select({ n: count() })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.workspaceId, workspaceId),
-        eq(notifications.userId, userId),
-        isNull(notifications.readAt),
-      ),
-    );
-  return row?.n ?? 0;
+  const supabase = getDataClient();
+  return unwrapCount(
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .is("read_at", null),
+  );
 }
 
 /**
@@ -165,36 +185,32 @@ export async function markRead(
   userId: UserId,
   id: NotificationId,
 ): Promise<boolean> {
-  const db = getDb();
-  const rows = await db
-    .update(notifications)
-    .set({ readAt: new Date() })
-    .where(
-      and(
-        eq(notifications.id, id),
-        eq(notifications.workspaceId, workspaceId),
-        eq(notifications.userId, userId),
-        isNull(notifications.readAt),
-      ),
-    )
-    .returning({ id: notifications.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .is("read_at", null)
+      .select("id"),
+  );
   return rows.length > 0;
 }
 
 /** Mark all of a user's unread notifications in a workspace as read. */
 export async function markAllRead(workspaceId: WorkspaceId, userId: UserId): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .update(notifications)
-    .set({ readAt: new Date() })
-    .where(
-      and(
-        eq(notifications.workspaceId, workspaceId),
-        eq(notifications.userId, userId),
-        isNull(notifications.readAt),
-      ),
-    )
-    .returning({ id: notifications.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .is("read_at", null)
+      .select("id"),
+  );
   return rows.length;
 }
 
@@ -208,10 +224,13 @@ export async function memberIdsWithPermission(
   workspaceId: WorkspaceId,
   permission: Permission,
 ): Promise<UserId[]> {
-  const db = getDb();
-  const rows = await db
-    .select({ id: workspaceMembers.userId, role: workspaceMembers.role })
-    .from(workspaceMembers)
-    .where(and(eq(workspaceMembers.workspaceId, workspaceId), isNull(workspaceMembers.deletedAt)));
-  return rows.filter((r) => can(r.role, permission)).map((r) => r.id);
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("workspace_members")
+      .select("user_id, role")
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null),
+  );
+  return rows.filter((r) => can(r.role, permission)).map((r) => branded<"UserId">(r.user_id));
 }

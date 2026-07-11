@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus } from "@/server/events";
@@ -36,27 +31,18 @@ describe.skipIf(!HAS_DB)("authorizeOrAudit integration (requires DATABASE_URL)",
   let ws: WorkspaceId;
 
   beforeAll(async () => {
-    const db = getDb();
     clearEventBus();
     mockHeaders.mockResolvedValue({
       get: (name: string) => (name === "x-forwarded-for" ? "203.0.113.99" : null),
     });
-    await db
-      .insert(usersTable)
-      .values({ id: actor, email: "authz-actor@soletrade-test.local", fullName: "Authz Actor" });
+    await seedUsers([
+      { id: actor, email: "authz-actor@soletrade-test.local", fullName: "Authz Actor" },
+    ]);
     ws = await createWorkspace(actor, "Authz Test", `authz-test-${Date.now()}`);
   });
 
   afterAll(async () => {
-    const db = getDb();
-    if (!ws) {
-      await db.delete(usersTable).where(eq(usersTable.id, actor));
-      return;
-    }
-    await db.delete(auditLogs).where(eq(auditLogs.workspaceId, ws));
-    await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws));
-    await db.delete(workspacesTable).where(eq(workspacesTable.id, ws));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    await cleanupWorkspaces(ws ? [ws] : [], [actor], [{ table: "audit_logs" }]);
     clearEventBus();
   });
 
@@ -73,19 +59,17 @@ describe.skipIf(!HAS_DB)("authorizeOrAudit integration (requires DATABASE_URL)",
     const after = await countAuthzDenied(ws!);
     expect(after).toBe(before + 1);
     // The newest denial row references the permission and actor.
-    const db = getDb();
-    const rows = await db
-      .select({
-        action: auditLogs.action,
-        targetId: auditLogs.targetId,
-        actorUserId: auditLogs.actorUserId,
-        ip: auditLogs.ip,
-      })
-      .from(auditLogs)
-      .where(eq(auditLogs.workspaceId, ws!));
-    const denial = rows.find((r) => r.action === "authz.denied" && r.targetId === "manage:billing");
+    const rows = await unwrap(
+      getDataClient()
+        .from("audit_logs")
+        .select("action, target_id, actor_user_id, ip")
+        .eq("workspace_id", ws!),
+    );
+    const denial = rows.find(
+      (r) => r.action === "authz.denied" && r.target_id === "manage:billing",
+    );
     expect(denial).toBeDefined();
-    expect(denial?.actorUserId).toBe(actor);
+    expect(denial?.actor_user_id).toBe(actor);
   });
 
   it("writes nothing on an allow", async () => {
@@ -118,10 +102,8 @@ describe.skipIf(!HAS_DB)("authorizeOrAudit integration (requires DATABASE_URL)",
 });
 
 async function countAuthzDenied(workspaceId: WorkspaceId): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .select({ action: auditLogs.action })
-    .from(auditLogs)
-    .where(eq(auditLogs.workspaceId, workspaceId));
+  const rows = await unwrap(
+    getDataClient().from("audit_logs").select("action").eq("workspace_id", workspaceId),
+  );
   return rows.filter((r) => r.action === "authz.denied").length;
 }

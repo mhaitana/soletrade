@@ -1,6 +1,7 @@
 import { onEvent, setEventPersister } from "@/server/events";
-import { getDb } from "@/server/db";
-import { activityEvents } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrapVoid } from "@/server/db/helpers";
+import type { Json } from "@/server/db/types";
 import { ensureSubscription } from "@/platform/billing";
 import { registerNotifications } from "@/platform/notifications";
 import { registerBooksIntegration } from "@/modules/books/integration";
@@ -14,15 +15,19 @@ import { replayDriveEventsForBooks } from "@/modules/drive";
  */
 export async function register(): Promise<void> {
   setEventPersister(async (event) => {
-    const db = getDb();
-    await db.insert(activityEvents).values({
-      type: event.type,
-      workspaceId: event.workspaceId,
-      actorUserId: event.actorUserId,
-      entityType: event.entityType,
-      entityId: event.entityId,
-      metadata: event.metadata,
-    });
+    const supabase = getDataClient();
+    await unwrapVoid(
+      supabase.from("activity_events").insert({
+        type: event.type,
+        workspace_id: event.workspaceId,
+        actor_user_id: event.actorUserId ?? null,
+        entity_type: event.entityType,
+        entity_id: event.entityId,
+        // jsonb column: the event metadata is a plain object; cast through `unknown`
+        // to `Json` (Record<string,unknown> isn't assignable to Json's object arm).
+        metadata: (event.metadata ?? null) as unknown as Json,
+      }),
+    );
   });
 
   // Provision a free-tier subscription for every new workspace. `createWorkspace`

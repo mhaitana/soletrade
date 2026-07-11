@@ -9,17 +9,17 @@ export const metadata = { title: "Notifications" };
 
 const DEFAULT_LIMIT = 25;
 
-/** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip. */
+/** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip.
+ *  `createdAt` is the raw µs-precision ISO string (never a Date) so the keyset
+ *  comparison stays exact — see `NotificationCursor`. */
 function encodeCursor(cursor: NotificationCursor): string {
-  return `${cursor.createdAt.toISOString()}|${cursor.id}`;
+  return `${cursor.createdAt}|${cursor.id}`;
 }
 
 function parseCursor(raw: string): NotificationCursor | null {
   const [iso, id] = raw.split("|");
   if (!iso || !id) return null;
-  const createdAt = new Date(iso);
-  if (Number.isNaN(createdAt.getTime())) return null;
-  return { createdAt, id: branded<"NotificationId">(id) };
+  return { createdAt: iso, id: branded<"NotificationId">(id) };
 }
 
 export default async function NotificationsPage({

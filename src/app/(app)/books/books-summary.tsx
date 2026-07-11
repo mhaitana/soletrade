@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/shared/ui/card";
 import { Sparkline } from "@/shared/components/sparkline";
 import type { CategoryBreakdown, MonthlyNetPoint, TransactionSummary } from "@/modules/books/calc";
 import type { Period } from "@/shared/utils/periods";
-import type { BookType } from "@/server/db/schema/enums";
+import type { BookType } from "@/server/db/enums";
 
 /**
  * Books summary header + per-category breakdown + monthly-net sparkline (Phase 6b).

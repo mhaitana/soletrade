@@ -1,11 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapVoid } from "@/server/db/helpers";
 import { branded, type UserId } from "@/shared/types/ids";
 import { ensureUserMirror, getUser } from "@/platform/users";
 
@@ -23,12 +18,12 @@ describe.skipIf(!HAS_DB)("users mirror integration (requires DATABASE_URL)", () 
   const secondEmail = `mirror2-${actor.replace(/-/g, "").slice(0, 12)}@soletrade-test.local`;
 
   afterAll(async () => {
-    const db = getDb();
+    const supabase = getDataClient();
     // Clean up any stray workspaces/memberships that might reference the user,
     // then the user row itself.
-    await db.delete(workspaceMembers).where(eq(workspaceMembers.userId, actor));
-    await db.delete(workspacesTable).where(eq(workspacesTable.ownerId, actor));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    await unwrapVoid(supabase.from("workspace_members").delete().eq("user_id", actor));
+    await unwrapVoid(supabase.from("workspaces").delete().eq("owner_user_id", actor));
+    await unwrapVoid(supabase.from("users").delete().eq("id", actor));
   });
 
   it("inserts a row on first call (with full name)", async () => {
@@ -40,11 +35,8 @@ describe.skipIf(!HAS_DB)("users mirror integration (requires DATABASE_URL)", () 
 
   it("upserts on a second call — updates email + name without duplicating", async () => {
     await ensureUserMirror({ id: actor, email: secondEmail, fullName: "Mirror Updated" });
-    const db = getDb();
-    const rows = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(eq(usersTable.id, actor));
+    const supabase = getDataClient();
+    const rows = await unwrap(supabase.from("users").select("id").eq("id", actor));
     expect(rows).toHaveLength(1);
     const row = await getUser(actor);
     expect(row?.email).toBe(secondEmail);
@@ -66,8 +58,8 @@ describe.skipIf(!HAS_DB)("users mirror integration (requires DATABASE_URL)", () 
     expect(row?.email).toBe(freshEmail);
     expect(row?.fullName).toBeNull();
     // cleanup
-    const db = getDb();
-    await db.delete(usersTable).where(eq(usersTable.id, fresh));
+    const supabase = getDataClient();
+    await unwrapVoid(supabase.from("users").delete().eq("id", fresh));
   });
 
   it("returns null from getUser for a non-existent user", async () => {

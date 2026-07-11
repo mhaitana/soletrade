@@ -1,9 +1,8 @@
 import "server-only";
-import { eq } from "drizzle-orm";
 import { env } from "@/shared/lib/env";
 import { onEvent, type BusEvent } from "@/server/events";
-import { getDb } from "@/server/db";
-import { users, workspaceMembers, workspaces } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapMaybe } from "@/server/db/helpers";
 import type { WorkspaceId } from "@/shared/types/ids";
 import { sendEmail } from "@/server/email";
 import {
@@ -105,22 +104,18 @@ async function onQuoteSent(event: BusEvent): Promise<void> {
 async function onMemberInvited(event: BusEvent): Promise<void> {
   const m = coerceMemberInvitedMeta(event.metadata);
   if (!m) return;
-  const db = getDb();
+  const supabase = getDataClient();
   // Resolve workspace name + inviter full name in one round trip each.
-  const wsRows = await db
-    .select({ name: workspaces.name })
-    .from(workspaces)
-    .where(eq(workspaces.id, event.workspaceId))
-    .limit(1);
-  const workspaceName = wsRows[0]?.name ?? "soletrade labs";
+  const wsRow = await unwrapMaybe(
+    supabase.from("workspaces").select("name").eq("id", event.workspaceId).maybeSingle(),
+  );
+  const workspaceName = wsRow?.name ?? "soletrade labs";
   let inviterName: string | null = null;
   if (event.actorUserId) {
-    const uRows = await db
-      .select({ fullName: users.fullName })
-      .from(users)
-      .where(eq(users.id, event.actorUserId))
-      .limit(1);
-    inviterName = uRows[0]?.fullName ?? null;
+    const uRow = await unwrapMaybe(
+      supabase.from("users").select("full_name").eq("id", event.actorUserId).maybeSingle(),
+    );
+    inviterName = uRow?.full_name ?? null;
   }
   const { subject, html, text } = memberInvitedEmail(
     { email: m.email, role: m.role, token: m.token, workspaceName, inviterName },
@@ -131,13 +126,15 @@ async function onMemberInvited(event: BusEvent): Promise<void> {
 
 /** Resolve the email addresses of all members of a workspace (for merchant notifications). */
 async function membersEmails(workspaceId: WorkspaceId): Promise<string[]> {
-  const db = getDb();
-  const rows = await db
-    .select({ email: users.email })
-    .from(workspaceMembers)
-    .innerJoin(users, eq(workspaceMembers.userId, users.id))
-    .where(eq(workspaceMembers.workspaceId, workspaceId));
-  return rows.map((r) => r.email);
+  const supabase = getDataClient();
+  // Resource embedding: workspace_members → users (m:1) gives each member's email
+  // in one query. Embedding is a left join, so a member whose user row is missing
+  // yields `users: null` — filtered out below (equivalent to the original inner join,
+  // since every member has a user row by FK).
+  const rows = await unwrap(
+    supabase.from("workspace_members").select("users ( email )").eq("workspace_id", workspaceId),
+  );
+  return rows.map((r) => r.users?.email ?? null).filter((email): email is string => email !== null);
 }
 
 /** Notify all workspace members a quote was accepted. */

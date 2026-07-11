@@ -1,8 +1,8 @@
 import "server-only";
-import { and, desc, eq, inArray, lt, or, type SQL } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { activityEvents, users } from "@/server/db/schema";
-import type { ActivityEventId, UserId, WorkspaceId } from "@/shared/types/ids";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrap } from "@/server/db/helpers";
+import { branded, type ActivityEventId, type UserId, type WorkspaceId } from "@/shared/types/ids";
+import type { Json } from "@/server/db/types";
 
 export interface ActivityInput {
   type: string;
@@ -18,7 +18,7 @@ export interface ActivityRow {
   type: string;
   workspaceId: WorkspaceId;
   actorUserId: UserId | null;
-  /** Actor display name (resolved via left join on users). null when no actor. */
+  /** Actor display name (resolved via resource embedding on users). null when no actor. */
   actorFullName: string | null;
   actorEmail: string | null;
   entityType: string | null;
@@ -29,7 +29,14 @@ export interface ActivityRow {
 
 /** Cursor for keyset pagination (createdAt desc + id desc tiebreaker). */
 export interface ActivityCursor {
-  createdAt: Date;
+  /**
+   * Raw PostgREST ISO string for `created_at` — MUST preserve the full microsecond
+   * precision Postgres stores (`now()` is µs-precise). A JS `Date` only keeps
+   * milliseconds, so round-tripping `new Date(iso).toISOString()` truncates the
+   * sub-ms digits and the keyset `created_at.eq`/`.lt` then matches nothing when
+   * rows share a millisecond. Kept as a string, never converted to `Date`.
+   */
+  createdAt: string;
   id: ActivityEventId;
 }
 
@@ -50,6 +57,36 @@ export interface ActivityPage {
   nextCursor: ActivityCursor | null;
 }
 
+const ACTIVITY_COLUMNS =
+  "id, type, workspace_id, actor_user_id, entity_type, entity_id, metadata, created_at, users ( full_name, email )";
+
+/** Maps a snake_case PostgREST activity_events row (+ embedded actor) to `ActivityRow`. */
+function toActivityRow(r: {
+  id: string;
+  type: string;
+  workspace_id: string;
+  actor_user_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Json | null;
+  created_at: string;
+  users: { full_name: string | null; email: string } | null;
+}): ActivityRow {
+  return {
+    id: branded<"ActivityEventId">(r.id),
+    type: r.type,
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    actorUserId: r.actor_user_id ? branded<"UserId">(r.actor_user_id) : null,
+    actorFullName: r.users?.full_name ?? null,
+    actorEmail: r.users?.email ?? null,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    // PostgREST returns jsonb as the generated `Json` union; cast to the row contract.
+    metadata: r.metadata as Record<string, unknown> | null,
+    createdAt: parsePgTimestamp(r.created_at),
+  };
+}
+
 /**
  * Write an activity feed event directly. Most activity should be emitted via
  * the event bus (`server/events` `publishEvent`), which persists automatically
@@ -57,21 +94,23 @@ export interface ActivityPage {
  * the rare case where an activity row is needed without dispatching subscribers.
  */
 export async function writeActivity(input: ActivityInput): Promise<ActivityEventId> {
-  const db = getDb();
-  const rows = await db
-    .insert(activityEvents)
-    .values({
-      type: input.type,
-      workspaceId: input.workspaceId,
-      actorUserId: input.actorUserId,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      metadata: input.metadata,
-    })
-    .returning({ id: activityEvents.id });
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("activity_events")
+      .insert({
+        type: input.type,
+        workspace_id: input.workspaceId,
+        actor_user_id: input.actorUserId ?? null,
+        entity_type: input.entityType,
+        entity_id: input.entityId,
+        metadata: (input.metadata ?? null) as Json,
+      })
+      .select("id"),
+  );
   const row = rows[0];
   if (!row) throw new Error("Failed to write activity event");
-  return row.id;
+  return branded<"ActivityEventId">(row.id);
 }
 
 /**
@@ -83,70 +122,46 @@ export async function listActivity(
   workspaceId: WorkspaceId,
   opts: ActivityListOptions = {},
 ): Promise<ActivityPage> {
-  const db = getDb();
+  const supabase = getDataClient();
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
 
-  const conditions: (SQL | undefined)[] = [eq(activityEvents.workspaceId, workspaceId)];
+  let query = supabase
+    .from("activity_events")
+    .select(ACTIVITY_COLUMNS)
+    .eq("workspace_id", workspaceId);
 
   if (opts.types && opts.types.length > 0) {
-    conditions.push(inArray(activityEvents.type, opts.types));
+    query = query.in("type", opts.types);
   }
   if (opts.entityType) {
-    conditions.push(eq(activityEvents.entityType, opts.entityType));
+    query = query.eq("entity_type", opts.entityType);
   }
   if (opts.entityId) {
-    conditions.push(eq(activityEvents.entityId, opts.entityId));
+    query = query.eq("entity_id", opts.entityId);
   }
   if (opts.before) {
-    // Keyset: createdAt < cursor OR (createdAt = cursor AND id < cursor.id)
-    conditions.push(
-      or(
-        lt(activityEvents.createdAt, opts.before.createdAt),
-        and(
-          eq(activityEvents.createdAt, opts.before.createdAt),
-          lt(activityEvents.id, opts.before.id),
-        ),
-      ),
-    );
+    // Keyset: (created_at, id) strictly < before — created_at < cursor OR
+    // (created_at = cursor AND id < cursor). PostgREST expresses this as an `or`
+    // with a nested `and(...)` for the tiebreaker. `opts.before.createdAt` is the
+    // raw µs-precision ISO string (see ActivityCursor) so the comparison is exact.
+    const iso = opts.before.createdAt;
+    query = query.or(`created_at.lt.${iso},and(created_at.eq.${iso},id.lt.${opts.before.id})`);
   }
 
-  const rows = await db
-    .select({
-      id: activityEvents.id,
-      type: activityEvents.type,
-      workspaceId: activityEvents.workspaceId,
-      actorUserId: activityEvents.actorUserId,
-      actorFullName: users.fullName,
-      actorEmail: users.email,
-      entityType: activityEvents.entityType,
-      entityId: activityEvents.entityId,
-      metadata: activityEvents.metadata,
-      createdAt: activityEvents.createdAt,
-    })
-    .from(activityEvents)
-    .leftJoin(users, eq(users.id, activityEvents.actorUserId))
-    .where(and(...conditions))
-    .orderBy(desc(activityEvents.createdAt), desc(activityEvents.id))
-    .limit(limit + 1); // +1 to detect a next page without a separate count query.
-
+  const rows = await unwrap(
+    query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit + 1),
+  );
   const hasMore = rows.length > limit;
-  const items = (hasMore ? rows.slice(0, limit) : rows).map((r) => ({
-    id: r.id,
-    type: r.type,
-    workspaceId: r.workspaceId,
-    actorUserId: r.actorUserId,
-    actorFullName: r.actorFullName,
-    actorEmail: r.actorEmail,
-    entityType: r.entityType,
-    entityId: r.entityId,
-    // drizzle's jsonb column infers as `unknown`; cast to the row contract.
-    metadata: r.metadata as Record<string, unknown> | null,
-    createdAt: r.createdAt,
-  }));
-
-  const last = items[items.length - 1];
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const items = pageRows.map(toActivityRow);
+  const last = pageRows[pageRows.length - 1];
+  // Cursor carries the raw `created_at` string (µs precision) — NOT a Date.
   const nextCursor: ActivityCursor | null =
-    hasMore && last ? { createdAt: last.createdAt, id: last.id } : null;
-
+    hasMore && last
+      ? { createdAt: last.created_at, id: branded<"ActivityEventId">(last.id) }
+      : null;
   return { items, nextCursor };
 }

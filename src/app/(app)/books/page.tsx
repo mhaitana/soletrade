@@ -10,7 +10,7 @@ import { categoryLabel } from "@/shared/constants/books-categories";
 import { PERIODS, parsePeriod, type Period } from "@/shared/utils/periods";
 import { loadBooksPage } from "./actions";
 import { BooksSummary } from "./books-summary";
-import type { BookType } from "@/server/db/schema/enums";
+import type { BookType } from "@/server/db/enums";
 
 export const metadata = { title: "Books" };
 

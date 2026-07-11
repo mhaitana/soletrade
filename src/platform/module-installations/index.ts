@@ -1,9 +1,8 @@
 import "server-only";
-import { and, eq, isNull, isNotNull, lte } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { moduleInstallations } from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrap, unwrapVoid } from "@/server/db/helpers";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
-import type { UserId, WorkspaceId } from "@/shared/types/ids";
+import { branded, type UserId, type WorkspaceId } from "@/shared/types/ids";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 
@@ -27,21 +26,21 @@ export function resolveActiveModules(
 
 /** List active (installed) modules for a workspace. */
 export async function getInstalledModules(workspaceId: WorkspaceId): Promise<ModuleKey[]> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      moduleKey: moduleInstallations.moduleKey,
-      status: moduleInstallations.status,
-      cancelledAt: moduleInstallations.cancelledAt,
-    })
-    .from(moduleInstallations)
-    .where(
-      and(
-        eq(moduleInstallations.workspaceId, workspaceId),
-        isNull(moduleInstallations.cancelledAt),
-      ),
-    );
-  return resolveActiveModules(rows);
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("module_installations")
+      .select("module_key, status, cancelled_at")
+      .eq("workspace_id", workspaceId)
+      .is("cancelled_at", null),
+  );
+  return resolveActiveModules(
+    rows.map((r) => ({
+      moduleKey: r.module_key,
+      status: r.status,
+      cancelledAt: r.cancelled_at ? parsePgTimestamp(r.cancelled_at) : null,
+    })),
+  );
 }
 
 export async function isModuleEnabled(workspaceId: WorkspaceId, key: ModuleKey): Promise<boolean> {
@@ -70,26 +69,21 @@ export async function getModuleInstallations(workspaceId: WorkspaceId): Promise<
     cancelledAt: Date | null;
   }>
 > {
-  const db = getDb();
-  const rows = await db
-    .select({
-      moduleKey: moduleInstallations.moduleKey,
-      status: moduleInstallations.status,
-      pendingCancellationAt: moduleInstallations.pendingCancellationAt,
-      cancelledAt: moduleInstallations.cancelledAt,
-    })
-    .from(moduleInstallations)
-    .where(
-      and(
-        eq(moduleInstallations.workspaceId, workspaceId),
-        isNull(moduleInstallations.cancelledAt),
-      ),
-    );
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("module_installations")
+      .select("module_key, status, pending_cancellation_at, cancelled_at")
+      .eq("workspace_id", workspaceId)
+      .is("cancelled_at", null),
+  );
   return rows.map((r) => ({
-    moduleKey: r.moduleKey,
+    moduleKey: r.module_key,
     status: r.status,
-    pendingCancellationAt: r.pendingCancellationAt,
-    cancelledAt: r.cancelledAt,
+    pendingCancellationAt: r.pending_cancellation_at
+      ? parsePgTimestamp(r.pending_cancellation_at)
+      : null,
+    cancelledAt: r.cancelled_at ? parsePgTimestamp(r.cancelled_at) : null,
   }));
 }
 
@@ -112,24 +106,31 @@ export async function enableModule(
   stripeSubscriptionItemId?: string,
 ): Promise<void> {
   if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
-  const db = getDb();
-  await db
-    .insert(moduleInstallations)
-    .values({
-      workspaceId,
-      moduleKey: key,
-      status: "active",
-      ...(stripeSubscriptionItemId ? { stripeSubscriptionItemId } : {}),
-    })
-    .onConflictDoUpdate({
-      target: [moduleInstallations.workspaceId, moduleInstallations.moduleKey],
-      set: {
-        status: "active",
-        cancelledAt: null,
-        updatedAt: new Date(),
-        ...(stripeSubscriptionItemId ? { stripeSubscriptionItemId } : {}),
-      },
-    });
+  const supabase = getDataClient();
+  // PostgREST `.upsert` updates only payload columns on conflict. Including
+  // cancelled_at:null clears it on re-enable; omitting stripe_subscription_item_id
+  // when not supplied leaves the prior value untouched (backward-compat). The
+  // composite unique (workspace_id, module_key) is the conflict target.
+  const payload: {
+    workspace_id: WorkspaceId;
+    module_key: ModuleKey;
+    status: "active";
+    cancelled_at: null;
+    updated_at: string;
+    stripe_subscription_item_id?: string;
+  } = {
+    workspace_id: workspaceId,
+    module_key: key,
+    status: "active",
+    cancelled_at: null,
+    updated_at: new Date().toISOString(),
+  };
+  if (stripeSubscriptionItemId) payload.stripe_subscription_item_id = stripeSubscriptionItemId;
+  await unwrapVoid(
+    supabase
+      .from("module_installations")
+      .upsert(payload, { onConflict: "workspace_id,module_key" }),
+  );
   await publishEvent({
     type: "ModuleEnabled",
     workspaceId,
@@ -161,17 +162,16 @@ export async function disableModule(
   actorId?: UserId,
 ): Promise<void> {
   if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
-  const db = getDb();
-  await db
-    .update(moduleInstallations)
-    .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(moduleInstallations.workspaceId, workspaceId),
-        eq(moduleInstallations.moduleKey, key),
-        isNull(moduleInstallations.cancelledAt),
-      ),
-    );
+  const supabase = getDataClient();
+  const nowIso = new Date().toISOString();
+  await unwrapVoid(
+    supabase
+      .from("module_installations")
+      .update({ status: "cancelled", cancelled_at: nowIso, updated_at: nowIso })
+      .eq("workspace_id", workspaceId)
+      .eq("module_key", key)
+      .is("cancelled_at", null),
+  );
   await publishEvent({
     type: "ModuleDisabled",
     workspaceId,
@@ -205,17 +205,18 @@ export async function scheduleModuleCancellation(
   actorId?: UserId,
 ): Promise<void> {
   if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
-  const db = getDb();
-  await db
-    .update(moduleInstallations)
-    .set({ pendingCancellationAt: effectiveAt, updatedAt: new Date() })
-    .where(
-      and(
-        eq(moduleInstallations.workspaceId, workspaceId),
-        eq(moduleInstallations.moduleKey, key),
-        isNull(moduleInstallations.cancelledAt),
-      ),
-    );
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("module_installations")
+      .update({
+        pending_cancellation_at: effectiveAt.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("module_key", key)
+      .is("cancelled_at", null),
+  );
   await publishEvent({
     type: "ModuleCancelled",
     workspaceId,
@@ -247,17 +248,15 @@ export async function clearPendingModuleCancellation(
   key: ModuleKey,
 ): Promise<void> {
   if (!MODULE_KEYS.includes(key)) throw new Error(`Unknown module key: ${key}`);
-  const db = getDb();
-  await db
-    .update(moduleInstallations)
-    .set({ pendingCancellationAt: null, updatedAt: new Date() })
-    .where(
-      and(
-        eq(moduleInstallations.workspaceId, workspaceId),
-        eq(moduleInstallations.moduleKey, key),
-        isNull(moduleInstallations.cancelledAt),
-      ),
-    );
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("module_installations")
+      .update({ pending_cancellation_at: null, updated_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId)
+      .eq("module_key", key)
+      .is("cancelled_at", null),
+  );
 }
 
 /**
@@ -271,20 +270,19 @@ export async function listPendingCancellationsDue(
 ): Promise<
   Array<{ workspaceId: WorkspaceId; moduleKey: ModuleKey; stripeSubscriptionItemId: string | null }>
 > {
-  const db = getDb();
-  return db
-    .select({
-      workspaceId: moduleInstallations.workspaceId,
-      moduleKey: moduleInstallations.moduleKey,
-      stripeSubscriptionItemId: moduleInstallations.stripeSubscriptionItemId,
-    })
-    .from(moduleInstallations)
-    .where(
-      and(
-        eq(moduleInstallations.status, "active"),
-        isNull(moduleInstallations.cancelledAt),
-        isNotNull(moduleInstallations.pendingCancellationAt),
-        lte(moduleInstallations.pendingCancellationAt, now),
-      ),
-    );
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("module_installations")
+      .select("workspace_id, module_key, stripe_subscription_item_id")
+      .eq("status", "active")
+      .is("cancelled_at", null)
+      .not("pending_cancellation_at", "is", null)
+      .lte("pending_cancellation_at", now.toISOString()),
+  );
+  return rows.map((r) => ({
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    moduleKey: r.module_key,
+    stripeSubscriptionItemId: r.stripe_subscription_item_id,
+  }));
 }

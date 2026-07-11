@@ -1,8 +1,7 @@
 import "server-only";
-import { eq } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { users } from "@/server/db/schema";
-import type { UserId } from "@/shared/types/ids";
+import { getDataClient } from "@/server/db/client";
+import { unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
+import { branded, type UserId } from "@/shared/types/ids";
 
 export interface UserMirrorRow {
   id: UserId;
@@ -24,43 +23,38 @@ export interface EnsureUserMirrorInput {
  * session-establishment point (signup, magic-link callback, defensively before
  * workspace creation). When `fullName` is omitted on an update, the existing
  * value is preserved rather than overwritten with NULL.
+ *
+ * PostgREST `.upsert()` with `onConflict: 'id'` updates only the columns present
+ * in the payload on conflict, so omitting `full_name` when it isn't supplied
+ * preserves the existing value — matching the old Drizzle conditional spread.
  */
 export async function ensureUserMirror(input: EnsureUserMirrorInput): Promise<void> {
-  const db = getDb();
+  const supabase = getDataClient();
   const fullName = input.fullName?.trim() || null;
-  await db
-    .insert(users)
-    .values({
-      id: input.id,
-      email: input.email,
-      fullName,
-    })
-    .onConflictDoUpdate({
-      target: users.id,
-      set: {
-        email: input.email,
-        updatedAt: new Date(),
-        // Only overwrite full_name when a value was supplied; preserves the
-        // existing name on defensive calls that only pass id + email.
-        ...(fullName ? { fullName } : {}),
-      },
-    });
+  const payload: { id: string; email: string; updated_at: string; full_name?: string | null } = {
+    id: input.id,
+    email: input.email,
+    updated_at: new Date().toISOString(),
+  };
+  // Only include full_name in the payload when a value was supplied; on a conflict
+  // the column is left untouched (preserved), on an insert it defaults to NULL.
+  if (fullName) payload.full_name = fullName;
+  await unwrapVoid(supabase.from("users").upsert(payload, { onConflict: "id" }));
 }
 
 /** Fetch the public profile mirror for a user, or `null` if none exists. */
 export async function getUser(id: UserId): Promise<UserMirrorRow | null> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      fullName: users.fullName,
-      avatarUrl: users.avatarUrl,
-    })
-    .from(users)
-    .where(eq(users.id, id))
-    .limit(1);
-  return rows[0] ?? null;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase.from("users").select("id, email, full_name, avatar_url").eq("id", id).maybeSingle(),
+  );
+  if (!row) return null;
+  return {
+    id: branded<"UserId">(row.id),
+    email: row.email,
+    fullName: row.full_name,
+    avatarUrl: row.avatar_url,
+  };
 }
 
 /**
@@ -71,7 +65,12 @@ export async function getUser(id: UserId): Promise<UserMirrorRow | null> {
  * schema; this trims + stores `null` if somehow empty.
  */
 export async function updateUserFullName(id: UserId, fullName: string): Promise<void> {
-  const db = getDb();
+  const supabase = getDataClient();
   const trimmed = fullName.trim() || null;
-  await db.update(users).set({ fullName: trimmed, updatedAt: new Date() }).where(eq(users.id, id));
+  await unwrapVoid(
+    supabase
+      .from("users")
+      .update({ full_name: trimmed, updated_at: new Date().toISOString() })
+      .eq("id", id),
+  );
 }

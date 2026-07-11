@@ -14,7 +14,7 @@
  * `byCategory` slugs via `categoryLabel`.
  */
 
-import type { BookType } from "@/server/db/schema/enums";
+import type { BookType } from "@/server/db/enums";
 
 /** A transaction reduced to the fields `summarizeTransactions` needs. */
 export interface TransactionSummaryInput {

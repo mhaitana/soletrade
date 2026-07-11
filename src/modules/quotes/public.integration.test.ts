@@ -1,15 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  customers as customersTable,
-  invoices as invoicesTable,
-  quotes as quotesTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers, type CleanupTable } from "@/tests/db-helpers";
 import {
   branded,
   type CustomerId,
@@ -64,12 +54,9 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db
-      .insert(usersTable)
-      .values([
-        { id: actor, email: "quotes-public@soletrade-test.local", fullName: "Quotes Public" },
-      ]);
+    await seedUsers([
+      { id: actor, email: "quotes-public@soletrade-test.local", fullName: "Quotes Public" },
+    ]);
     ws = await createWorkspace(actor, "Quotes Public", `quotes-public-${Date.now()}`);
     cust = await createCustomer(ws, { name: "Globex Corp", email: "buyer@globex.com" }, actor);
 
@@ -94,19 +81,17 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     clearEventBus();
     const workspaceIds = [ws!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
     // invoice_line_items cascade on invoices; quotes' line items cascade on quotes.
-    await db.delete(invoicesTable).where(inArray(invoicesTable.workspaceId, workspaceIds));
-    await db.delete(quotesTable).where(inArray(quotesTable.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor]));
+    const tables: CleanupTable[] = [
+      { table: "invoices" },
+      { table: "quotes" },
+      { table: "customers" },
+      { table: "audit_logs" },
+    ];
+    await cleanupWorkspaces(workspaceIds, [actor], tables);
   });
 
   function capturedOf(type: string, entityId?: string) {

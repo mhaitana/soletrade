@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  notifications as notificationsTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrapVoid } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus, publishEvent } from "@/server/events";
@@ -28,21 +23,22 @@ import {
  *
  *   DATABASE_URL="postgresql://..." pnpm test:ci
  *
- * UUID suffixes `...0000f1`/`...0000f2`/`...0000f3` are unique to this file.
+ * UUID suffixes `...0000f3`/`...0000f7`/`...0000f8` are unique to this file (f1 is used by
+ * the workspace-settings test and f2 by the books/tax test — sharing them caused cross-file
+ * FK collisions under parallel execution, so this file moved off them).
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!HAS_DB)("notifications integration (requires DATABASE_URL)", () => {
-  const owner = branded<"UserId">("00000000-0000-4000-8000-0000000000f1");
-  const employee = branded<"UserId">("00000000-0000-4000-8000-0000000000f2");
+  const owner = branded<"UserId">("00000000-0000-4000-8000-0000000000f7");
+  const employee = branded<"UserId">("00000000-0000-4000-8000-0000000000f8");
   const otherOwner = branded<"UserId">("00000000-0000-4000-8000-0000000000f3");
   let ws1: WorkspaceId;
   let ws2: WorkspaceId;
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: owner, email: "notif-owner@soletrade-test.local", fullName: "Notif Owner" },
       { id: employee, email: "notif-emp@soletrade-test.local", fullName: "Notif Employee" },
       { id: otherOwner, email: "notif-other@soletrade-test.local", fullName: "Notif Other" },
@@ -50,25 +46,25 @@ describe.skipIf(!HAS_DB)("notifications integration (requires DATABASE_URL)", ()
     ws1 = await createWorkspace(owner, "Notif Test One", `notif-test-one-${Date.now()}`);
     ws2 = await createWorkspace(otherOwner, "Notif Test Two", `notif-test-two-${Date.now()}`);
     // Add an employee to ws1 (createWorkspace only adds the owner).
-    await db
-      .insert(workspaceMembers)
-      .values([{ workspaceId: ws1, userId: employee, role: "employee" }]);
+    await unwrapVoid(
+      getDataClient()
+        .from("workspace_members")
+        .insert([{ workspace_id: ws1, user_id: employee, role: "employee" }]),
+    );
     unsub = registerNotifications();
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     clearEventBus();
-    const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length > 0) {
-      await db
-        .delete(notificationsTable)
-        .where(inArray(notificationsTable.workspaceId, workspaceIds));
-      await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-      await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    }
-    await db.delete(usersTable).where(inArray(usersTable.id, [owner, employee, otherOwner]));
+    const workspaceIds = [ws1, ws2].filter(Boolean) as WorkspaceId[];
+    // The helper deletes users even when workspaceIds is empty, covering the
+    // original no-workspace branch that deleted only the users.
+    await cleanupWorkspaces(
+      workspaceIds,
+      [owner, employee, otherOwner],
+      [{ table: "notifications" }],
+    );
   });
 
   it("memberIdsWithPermission resolves only members whose role grants it", async () => {

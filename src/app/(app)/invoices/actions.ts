@@ -20,7 +20,7 @@ import {
   type InvoiceWithItems,
   type LineItemInput,
 } from "@/modules/invoices";
-import type { InvoiceStatus } from "@/server/db/schema/enums";
+import type { InvoiceStatus } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 
 const forbid = (msg = "You don't have permission to manage invoices.") => ({

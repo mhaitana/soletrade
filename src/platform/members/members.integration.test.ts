@@ -1,12 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapVoid } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus, onEvent } from "@/server/events";
@@ -30,29 +25,27 @@ describe.skipIf(!HAS_DB)("updateMemberRole integration (requires DATABASE_URL)",
   let ws: WorkspaceId;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: owner, email: "role-owner@soletrade-test.local", fullName: "Role Owner" },
       { id: admin, email: "role-admin@soletrade-test.local", fullName: "Role Admin" },
       { id: employee, email: "role-emp@soletrade-test.local", fullName: "Role Employee" },
     ]);
     ws = await createWorkspace(owner, "Role Test", `role-test-${Date.now()}`);
     // Add an admin + an employee directly (createWorkspace only adds the owner).
-    await db.insert(workspaceMembers).values([
-      { workspaceId: ws, userId: admin, role: "admin" },
-      { workspaceId: ws, userId: employee, role: "employee" },
-    ]);
+    await unwrapVoid(
+      getDataClient()
+        .from("workspace_members")
+        .insert([
+          { workspace_id: ws, user_id: admin, role: "admin" },
+          { workspace_id: ws, user_id: employee, role: "employee" },
+        ]),
+    );
   });
 
   afterEach(() => clearEventBus());
 
   afterAll(async () => {
-    const db = getDb();
-    if (!ws) return;
-    await db.delete(auditLogs).where(eq(auditLogs.workspaceId, ws));
-    await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws));
-    await db.delete(workspacesTable).where(eq(workspacesTable.id, ws));
-    await db.delete(usersTable).where(inArray(usersTable.id, [owner, admin, employee]));
+    await cleanupWorkspaces(ws ? [ws] : [], [owner, admin, employee], [{ table: "audit_logs" }]);
   });
 
   it("refuses to change the owner's role", async () => {
@@ -92,18 +85,15 @@ describe.skipIf(!HAS_DB)("updateMemberRole integration (requires DATABASE_URL)",
 
       // Audit row written with from/to. Order desc so [0] is the happy-path
       // row (earlier tests in this file also write member.role.change rows).
-      const db = getDb();
-      const auditRows = await db
-        .select()
-        .from(auditLogs)
-        .where(
-          and(
-            eq(auditLogs.workspaceId, ws!),
-            eq(auditLogs.targetId, employee),
-            eq(auditLogs.action, "member.role.change"),
-          ),
-        )
-        .orderBy(desc(auditLogs.createdAt));
+      const auditRows = await unwrap(
+        getDataClient()
+          .from("audit_logs")
+          .select("metadata")
+          .eq("workspace_id", ws!)
+          .eq("target_id", employee)
+          .eq("action", "member.role.change")
+          .order("created_at", { ascending: false }),
+      );
       expect(auditRows.length).toBeGreaterThan(0);
       const meta = auditRows[0]?.metadata as { from?: string; to?: string } | null;
       expect(meta?.to).toBe("accountant");

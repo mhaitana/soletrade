@@ -14,7 +14,7 @@ import {
 } from "./actions";
 import { ExpenseReceiptUpload } from "./expense-receipt-upload";
 import type { ExpenseRow, VehicleRow } from "@/modules/drive";
-import type { VehicleExpenseType } from "@/server/db/schema/enums";
+import type { VehicleExpenseType } from "@/server/db/enums";
 import type { FileId } from "@/shared/types/ids";
 
 type Result = CreateExpenseResult | UpdateExpenseResult;

@@ -1,14 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  customers as customersTable,
-  quotes as quotesTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers, type CleanupTable } from "@/tests/db-helpers";
 import { branded, type CustomerId, type QuoteId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createCustomer } from "@/platform/customers";
@@ -35,8 +28,7 @@ describe.skipIf(!HAS_DB)("quotes integration (requires DATABASE_URL)", () => {
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "quotes-actor@soletrade-test.local", fullName: "Quotes Actor" },
       { id: otherActor, email: "quotes-other@soletrade-test.local", fullName: "Quotes Other" },
     ]);
@@ -54,18 +46,16 @@ describe.skipIf(!HAS_DB)("quotes integration (requires DATABASE_URL)", () => {
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     clearEventBus();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    // quoteLineItems cascade on quotes; delete quotes first.
-    await db.delete(quotesTable).where(inArray(quotesTable.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    const tables: CleanupTable[] = [
+      // quote_line_items + quote_sections cascade from quotes (FK ON DELETE CASCADE).
+      { table: "quotes" },
+      { table: "customers" },
+      { table: "audit_logs" },
+    ];
+    await cleanupWorkspaces(workspaceIds, [actor, otherActor], tables);
   });
 
   it("creates a draft quote with the stored fields + line items (no event — audit only)", async () => {
@@ -237,11 +227,9 @@ describe.skipIf(!HAS_DB)("quotes integration (requires DATABASE_URL)", () => {
 
 /** Helper used by the missing-customer-flow test below — kept outside the suite. */
 async function countQuotesForWorkspace(workspaceId: WorkspaceId): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .select({ id: quotesTable.id })
-    .from(quotesTable)
-    .where(eq(quotesTable.workspaceId, workspaceId));
+  const rows = await unwrap(
+    getDataClient().from("quotes").select("id").eq("workspace_id", workspaceId),
+  );
   return rows.length;
 }
 
@@ -250,24 +238,16 @@ describe.skipIf(!HAS_DB)("quotes walk-in + numbering (requires DATABASE_URL)", (
   let ws: WorkspaceId;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db
-      .insert(usersTable)
-      .values([
-        { id: actor, email: "quotes-walkin@soletrade-test.local", fullName: "Quotes Walkin" },
-      ]);
+    await seedUsers([
+      { id: actor, email: "quotes-walkin@soletrade-test.local", fullName: "Quotes Walkin" },
+    ]);
     ws = await createWorkspace(actor, "Quotes Walkin", `quotes-walkin-${Date.now()}`);
   });
 
   afterAll(async () => {
-    const db = getDb();
     const workspaceIds = [ws!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    await db.delete(quotesTable).where(inArray(quotesTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor]));
+    const tables: CleanupTable[] = [{ table: "quotes" }, { table: "audit_logs" }];
+    await cleanupWorkspaces(workspaceIds, [actor], tables);
   });
 
   it("creates a walk-in quote (no customer)", async () => {
@@ -326,25 +306,17 @@ describe.skipIf(!HAS_DB)("quotes sections + terms & conditions (requires DATABAS
   let ws: WorkspaceId;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db
-      .insert(usersTable)
-      .values([
-        { id: actor, email: "quotes-sections@soletrade-test.local", fullName: "Quotes Sections" },
-      ]);
+    await seedUsers([
+      { id: actor, email: "quotes-sections@soletrade-test.local", fullName: "Quotes Sections" },
+    ]);
     ws = await createWorkspace(actor, "Quotes Sections", `quotes-sections-${Date.now()}`);
   });
 
   afterAll(async () => {
-    const db = getDb();
     const workspaceIds = [ws!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
     // quote_sections + quote_acceptances cascade from quotes (FK ON DELETE CASCADE).
-    await db.delete(quotesTable).where(inArray(quotesTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    const tables: CleanupTable[] = [{ table: "quotes" }, { table: "audit_logs" }];
+    await cleanupWorkspaces(workspaceIds, [actor], tables);
   });
 
   it("persists sections (in position order) + terms & conditions on create", async () => {

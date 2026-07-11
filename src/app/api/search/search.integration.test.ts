@@ -1,16 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  bookTransactions,
-  customers as customersTable,
-  invoices as invoicesTable,
-  moduleInstallations,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrapVoid } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers, type CleanupTable } from "@/tests/db-helpers";
 import { branded, type CustomerId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createCustomer } from "@/platform/customers";
@@ -40,8 +31,7 @@ describe.skipIf(!HAS_DB)("searchWorkspace integration (requires DATABASE_URL)", 
   let ws2Customer: CustomerId;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "search-actor@soletrade-test.local", fullName: "Search Actor" },
       { id: otherActor, email: "search-other@soletrade-test.local", fullName: "Search Other" },
     ]);
@@ -50,14 +40,20 @@ describe.skipIf(!HAS_DB)("searchWorkspace integration (requires DATABASE_URL)", 
 
     // ws1: install ONLY `books` (not invoices/quotes/drive). Used to prove the module gate —
     // we'll create an invoice in ws1 anyway and confirm it doesn't surface without the module.
-    await db
-      .insert(moduleInstallations)
-      .values([{ workspaceId: ws1, moduleKey: "books", status: "active" }]);
+    await unwrapVoid(
+      getDataClient()
+        .from("module_installations")
+        .insert([{ workspace_id: ws1, module_key: "books", status: "active" }]),
+    );
     // ws2: install `invoices` + `books`. Used for the invoice-number search + IDOR cross-check.
-    await db.insert(moduleInstallations).values([
-      { workspaceId: ws2, moduleKey: "invoices", status: "active" },
-      { workspaceId: ws2, moduleKey: "books", status: "active" },
-    ]);
+    await unwrapVoid(
+      getDataClient()
+        .from("module_installations")
+        .insert([
+          { workspace_id: ws2, module_key: "invoices", status: "active" },
+          { workspace_id: ws2, module_key: "books", status: "active" },
+        ]),
+    );
 
     // ws1: a customer + a books tx sharing a unique searchable term, plus an invoice (which
     // should NOT surface because `invoices` isn't installed for ws1).
@@ -98,19 +94,16 @@ describe.skipIf(!HAS_DB)("searchWorkspace integration (requires DATABASE_URL)", 
   });
 
   afterAll(async () => {
-    const db = getDb();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    await db.delete(invoicesTable).where(inArray(invoicesTable.workspaceId, workspaceIds));
-    await db.delete(bookTransactions).where(inArray(bookTransactions.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db
-      .delete(moduleInstallations)
-      .where(inArray(moduleInstallations.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    const tables: CleanupTable[] = [
+      { table: "invoices" },
+      { table: "invoice_line_items" },
+      { table: "book_transactions" },
+      { table: "customers" },
+      { table: "module_installations" },
+      { table: "audit_logs" },
+    ];
+    await cleanupWorkspaces(workspaceIds, [actor, otherActor], tables);
   });
 
   it("returns customers + books groups in canonical order (customers first)", async () => {

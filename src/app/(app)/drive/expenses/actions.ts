@@ -18,7 +18,7 @@ import {
   type ExpenseRow,
   type VehicleRow,
 } from "@/modules/drive";
-import type { VehicleExpenseType } from "@/server/db/schema/enums";
+import type { VehicleExpenseType } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 
 const forbid = (msg = "You don't have permission to manage drive.") => ({

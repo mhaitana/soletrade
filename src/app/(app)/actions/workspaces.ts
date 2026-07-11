@@ -45,9 +45,10 @@ export async function createWorkspaceAction(input: unknown): Promise<CreateWorks
     revalidatePath("/", "layout");
     return { ok: true, workspaceId: id };
   } catch (err) {
-    // drizzle 0.45 wraps DB errors in DrizzleQueryError whose `.message` is
-    // "Failed query: …"; the real Postgres error (e.g. unique_violation) lives
-    // on `.cause.message`. Read both so slug-taken detection actually works.
+    // PostgREST surfaces Postgres errors with the real message on `.message`
+    // (e.g. "duplicate key value violates unique constraint …"); supabase-js
+    // may also nest it on `.cause.message`. Read both so slug-taken detection
+    // matches the "duplicate"/"unique" wording regardless of the wrapper.
     const causeMessage = (err as { cause?: { message?: string } })?.cause?.message;
     const message =
       (err instanceof Error ? (causeMessage ?? err.message) : "Failed to create workspace.") ??

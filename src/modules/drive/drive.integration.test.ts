@@ -1,14 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  driveEarnings as driveEarningsTable,
-  driveTrips as driveTripsTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers, type CleanupTable } from "@/tests/db-helpers";
 import {
   branded,
   type DriveEarningId,
@@ -50,8 +41,7 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "drive-actor@soletrade-test.local", fullName: "Drive Actor" },
       { id: otherActor, email: "drive-other@soletrade-test.local", fullName: "Drive Other" },
     ]);
@@ -111,18 +101,14 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsub?.();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    await db
-      .delete(driveEarningsTable)
-      .where(inArray(driveEarningsTable.workspaceId, workspaceIds));
-    await db.delete(driveTripsTable).where(inArray(driveTripsTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    const tables: CleanupTable[] = [
+      { table: "drive_earnings" },
+      { table: "drive_trips" },
+      { table: "audit_logs" },
+    ];
+    await cleanupWorkspaces(workspaceIds, [actor, otherActor], tables);
   });
 
   // ────────────────────────────── Earnings ──────────────────────────────

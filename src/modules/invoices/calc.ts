@@ -17,7 +17,7 @@
  * range) for the Revenue delta; the snapshots come from the current call only.
  */
 
-import type { InvoiceStatus } from "@/server/db/schema/enums";
+import type { InvoiceStatus } from "@/server/db/enums";
 
 /** An invoice reduced to the fields `summarizeInvoices` needs. */
 export interface InvoiceSummaryInput {

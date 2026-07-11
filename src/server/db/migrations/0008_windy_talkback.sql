@@ -1,2 +1,0 @@
-ALTER TABLE "book_transactions" ADD COLUMN "source_invoice_id" uuid;--> statement-breakpoint
-CREATE INDEX "book_transactions_workspace_source_invoice_idx" ON "book_transactions" USING btree ("workspace_id","source_invoice_id");

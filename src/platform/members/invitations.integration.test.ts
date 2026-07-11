@@ -1,13 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceInvitations,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrapMaybe } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus } from "@/server/events";
@@ -22,20 +16,21 @@ import {
 /**
  * Wave 4 Part A integration: the full invitation lifecycle — invite → get-by-token →
  * resend → revoke, plus the accept path (new user joins). DB-gated (skips without DATABASE_URL).
- * UUID suffixes `...0000e1`/`...0000e2` are unique to this file.
+ * UUID suffixes `...0000e5`/`...0000e6` are unique to this file (e1/e2 are used by the
+ * files integration test — sharing them caused a cross-file FK collision under parallel
+ * execution, so this file moved off them).
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!HAS_DB)("member invitations lifecycle (requires DATABASE_URL)", () => {
-  const owner = branded<"UserId">("00000000-0000-4000-8000-0000000000e1");
-  const invitee = branded<"UserId">("00000000-0000-4000-8000-0000000000e2");
+  const owner = branded<"UserId">("00000000-0000-4000-8000-0000000000e5");
+  const invitee = branded<"UserId">("00000000-0000-4000-8000-0000000000e6");
   const inviteeEmail = "invitee-e2@soletrade-test.local";
   let ws: WorkspaceId;
   const createdInvitationIds: string[] = [];
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: owner, email: "invite-owner@soletrade-test.local", fullName: "Invite Owner" },
       { id: invitee, email: inviteeEmail, fullName: "Invitee Two" },
     ]);
@@ -45,13 +40,11 @@ describe.skipIf(!HAS_DB)("member invitations lifecycle (requires DATABASE_URL)",
   afterEach(() => clearEventBus());
 
   afterAll(async () => {
-    const db = getDb();
-    if (!ws) return;
-    await db.delete(workspaceInvitations).where(eq(workspaceInvitations.workspaceId, ws));
-    await db.delete(auditLogs).where(eq(auditLogs.workspaceId, ws));
-    await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws));
-    await db.delete(workspacesTable).where(eq(workspacesTable.id, ws));
-    await db.delete(usersTable).where(inArray(usersTable.id, [owner, invitee]));
+    await cleanupWorkspaces(
+      ws ? [ws] : [],
+      [owner, invitee],
+      [{ table: "workspace_invitations" }, { table: "audit_logs" }],
+    );
   });
 
   it("invite → getInvitationByToken → resend → revoke", async () => {
@@ -91,13 +84,15 @@ describe.skipIf(!HAS_DB)("member invitations lifecycle (requires DATABASE_URL)",
     expect(joinedWs).toBe(ws!);
 
     // The invitee is now a member with the offered role.
-    const db = getDb();
-    const memberRows = await db
-      .select({ role: workspaceMembers.role })
-      .from(workspaceMembers)
-      .where(eq(workspaceMembers.userId, invitee))
-      .limit(1);
-    expect(memberRows[0]?.role).toBe("accountant");
+    const memberRow = await unwrapMaybe(
+      getDataClient()
+        .from("workspace_members")
+        .select("role")
+        .eq("user_id", invitee)
+        .limit(1)
+        .maybeSingle(),
+    );
+    expect(memberRow?.role).toBe("accountant");
 
     // Re-accepting the same token fails (already accepted).
     await expect(acceptInvitation(result.token, invitee, inviteeEmail)).rejects.toThrow(

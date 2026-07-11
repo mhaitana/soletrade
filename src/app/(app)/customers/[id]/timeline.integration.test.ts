@@ -1,19 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  activityEvents,
-  auditLogs,
-  bookTransactions,
-  customers as customersTable,
-  invoiceLineItems,
-  invoices as invoicesTable,
-  quoteLineItems,
-  quotes as quotesTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers, type CleanupTable } from "@/tests/db-helpers";
 import { branded, type CustomerId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createCustomer } from "@/platform/customers";
@@ -50,8 +36,7 @@ describe.skipIf(!HAS_DB)("loadCustomerTimeline integration (requires DATABASE_UR
   let ws2Customer: CustomerId;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "tl-actor@soletrade-test.local", fullName: "TL Actor" },
       { id: otherActor, email: "tl-other@soletrade-test.local", fullName: "TL Other" },
     ]);
@@ -123,20 +108,18 @@ describe.skipIf(!HAS_DB)("loadCustomerTimeline integration (requires DATABASE_UR
   });
 
   afterAll(async () => {
-    const db = getDb();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    await db.delete(activityEvents).where(inArray(activityEvents.workspaceId, workspaceIds));
-    await db.delete(quoteLineItems).where(inArray(quoteLineItems.workspaceId, workspaceIds));
-    await db.delete(quotesTable).where(inArray(quotesTable.workspaceId, workspaceIds));
-    await db.delete(invoiceLineItems).where(inArray(invoiceLineItems.workspaceId, workspaceIds));
-    await db.delete(invoicesTable).where(inArray(invoicesTable.workspaceId, workspaceIds));
-    await db.delete(bookTransactions).where(inArray(bookTransactions.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    const tables: CleanupTable[] = [
+      { table: "activity_events" },
+      { table: "quote_line_items" },
+      { table: "quotes" },
+      { table: "invoice_line_items" },
+      { table: "invoices" },
+      { table: "book_transactions" },
+      { table: "customers" },
+      { table: "audit_logs" },
+    ];
+    await cleanupWorkspaces(workspaceIds, [actor, otherActor], tables);
   });
 
   it("returns a merged desc-sorted timeline (tx → invoice → quote) + the CustomerCreated activity", async () => {

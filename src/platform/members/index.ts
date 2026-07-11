@@ -1,13 +1,14 @@
 import "server-only";
-import { and, count, eq, gt, inArray, isNull } from "drizzle-orm";
-import { getDb } from "@/server/db";
+import { getDataClient } from "@/server/db/client";
 import {
-  users as usersTable,
-  workspaceMembers,
-  workspaceInvitations,
-  workspaces,
-} from "@/server/db/schema";
-import type { WorkspaceRole } from "@/server/db/schema/enums";
+  parsePgTimestamp,
+  rpc,
+  unwrap,
+  unwrapCount,
+  unwrapMaybe,
+  unwrapVoid,
+} from "@/server/db/helpers";
+import type { WorkspaceRole } from "@/server/db/enums";
 import type { UserId, WorkspaceId } from "@/shared/types/ids";
 import { branded, type WorkspaceInvitationId } from "@/shared/types/ids";
 import { publishEvent } from "@/server/events";
@@ -32,20 +33,24 @@ const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** List active members of a workspace with their mirrored email. */
 export async function listMembers(workspaceId: WorkspaceId): Promise<WorkspaceMemberRow[]> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      memberId: workspaceMembers.id,
-      userId: workspaceMembers.userId,
-      workspaceId: workspaceMembers.workspaceId,
-      role: workspaceMembers.role,
-      email: usersTable.email,
-      createdAt: workspaceMembers.createdAt,
-    })
-    .from(workspaceMembers)
-    .innerJoin(usersTable, eq(usersTable.id, workspaceMembers.userId))
-    .where(and(eq(workspaceMembers.workspaceId, workspaceId), isNull(workspaceMembers.deletedAt)));
-  return rows.map((r) => ({ ...r, email: r.email ?? "" }));
+  const supabase = getDataClient();
+  // Embed the parent user (many-to-one → single nested object) for the mirrored email,
+  // matching the old innerJoin. Active memberships only (soft-delete filter in SQL).
+  const rows = await unwrap(
+    supabase
+      .from("workspace_members")
+      .select("id, user_id, workspace_id, role, created_at, users ( email )")
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null),
+  );
+  return rows.map((r) => ({
+    memberId: r.id,
+    userId: branded<"UserId">(r.user_id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    role: r.role,
+    email: r.users?.email ?? "",
+    createdAt: parsePgTimestamp(r.created_at),
+  }));
 }
 
 /** Invite a user by email with a role. Creates a pending, single-use invitation. */
@@ -55,21 +60,23 @@ export async function inviteMember(
   role: WorkspaceRole,
   inviterId: UserId,
 ): Promise<InvitationResult> {
-  const db = getDb();
+  const supabase = getDataClient();
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
-  const rows = await db
-    .insert(workspaceInvitations)
-    .values({
-      workspaceId,
-      email: email.toLowerCase(),
-      role,
-      invitedByUserId: inviterId,
-      token,
-      status: "pending",
-      expiresAt,
-    })
-    .returning({ id: workspaceInvitations.id });
+  const rows = await unwrap(
+    supabase
+      .from("workspace_invitations")
+      .insert({
+        workspace_id: workspaceId,
+        email: email.toLowerCase(),
+        role,
+        invited_by_user_id: inviterId,
+        token,
+        status: "pending",
+        expires_at: expiresAt.toISOString(),
+      })
+      .select("id"),
+  );
   const row = rows[0];
   if (!row) throw new Error("Failed to create invitation");
   await publishEvent({
@@ -100,57 +107,50 @@ export async function acceptInvitation(
   userId: UserId,
   userEmail: string,
 ): Promise<WorkspaceId> {
-  const db = getDb();
-  const invites = await db
-    .select()
-    .from(workspaceInvitations)
-    .where(
-      and(
-        eq(workspaceInvitations.token, token),
-        eq(workspaceInvitations.status, "pending"),
-        isNull(workspaceInvitations.acceptedAt),
-      ),
-    )
-    .limit(1);
-  const invite = invites[0];
-  if (!invite) throw new Error("Invitation not found or already used.");
-  if (invite.expiresAt.getTime() < Date.now()) throw new Error("Invitation has expired.");
-  if (invite.email !== userEmail.toLowerCase()) {
-    throw new Error("This invitation was sent to a different email address.");
-  }
-
-  await db.transaction(async (tx) => {
-    // Upsert membership (idempotent if already a member).
-    await tx
-      .insert(workspaceMembers)
-      .values({ workspaceId: invite.workspaceId, userId, role: invite.role })
-      .onConflictDoUpdate({
-        target: [workspaceMembers.workspaceId, workspaceMembers.userId],
-        set: { role: invite.role, updatedAt: new Date(), deletedAt: null },
-      });
-    await tx
-      .update(workspaceInvitations)
-      .set({ status: "accepted", acceptedAt: new Date(), updatedAt: new Date() })
-      .where(eq(workspaceInvitations.id, invite.id));
+  // The `accept_invitation` RPC does the validation + upsert + mark-accepted atomically
+  // (locking the invitation row FOR UPDATE so two concurrent accepts can't both succeed).
+  // It raises on not-found/expired/wrong-email — PostgREST surfaces those as `error` with
+  // a message. Returns (workspace_id, role, email) so the post-rpc event/audit have the
+  // metadata without a second read.
+  const supabase = getDataClient();
+  const { data, error } = await rpc(supabase, "accept_invitation", {
+    p_token: token,
+    p_user_id: userId,
+    p_user_email: userEmail,
   });
+  if (error) {
+    throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  }
+  // The RPC returns a jsonb object { invitation_id, workspace_id, role, email }.
+  if (!data) throw new Error("Invitation not found or already used.");
+  const result = data as {
+    invitation_id: string;
+    workspace_id: string;
+    role: string;
+    email: string;
+  };
+  const workspaceId = branded<"WorkspaceId">(result.workspace_id);
 
   await publishEvent({
     type: "MemberAdded",
-    workspaceId: invite.workspaceId,
+    workspaceId,
     actorUserId: userId,
     entityType: "member",
     entityId: userId,
-    metadata: { role: invite.role, email: invite.email },
+    metadata: { role: result.role as WorkspaceRole, email: result.email },
   });
   await writeAudit({
-    workspaceId: invite.workspaceId,
+    workspaceId,
     actorUserId: userId,
     action: "member.accept_invite",
     targetType: "member",
     targetId: userId,
-    metadata: { role: invite.role, invitationId: invite.id },
+    metadata: {
+      role: result.role as WorkspaceRole,
+      invitationId: branded<"WorkspaceInvitationId">(result.invitation_id),
+    },
   });
-  return invite.workspaceId;
+  return workspaceId;
 }
 
 /** Soft-delete a membership. Refuses to remove the workspace owner. */
@@ -159,26 +159,22 @@ export async function removeMember(
   targetUserId: UserId,
   actorId: UserId,
 ): Promise<void> {
-  const db = getDb();
+  const supabase = getDataClient();
   // Cannot remove the owner.
-  const ws = await db
-    .select({ ownerId: workspaces.ownerId })
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId))
-    .limit(1);
-  if (ws[0]?.ownerId === targetUserId) {
+  const ws = await unwrapMaybe(
+    supabase.from("workspaces").select("owner_user_id").eq("id", workspaceId).maybeSingle(),
+  );
+  if (ws?.owner_user_id === targetUserId) {
     throw new Error("Cannot remove the workspace owner. Transfer ownership first.");
   }
-  await db
-    .update(workspaceMembers)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, targetUserId),
-        isNull(workspaceMembers.deletedAt),
-      ),
-    );
+  await unwrapVoid(
+    supabase
+      .from("workspace_members")
+      .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", targetUserId)
+      .is("deleted_at", null),
+  );
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -222,29 +218,25 @@ export async function updateMemberRole(
     throw new Error("You can't change your own role.");
   }
 
-  const db = getDb();
-  // Owner check + fetch the target's current role in one round trip.
-  const ws = await db
-    .select({ ownerId: workspaces.ownerId })
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId))
-    .limit(1);
-  if (ws[0]?.ownerId === targetUserId) {
+  const supabase = getDataClient();
+  // Owner check + fetch the target's current role.
+  const ws = await unwrapMaybe(
+    supabase.from("workspaces").select("owner_user_id").eq("id", workspaceId).maybeSingle(),
+  );
+  if (ws?.owner_user_id === targetUserId) {
     throw new Error("Cannot change the workspace owner's role. Transfer ownership first.");
   }
 
-  const targetRows = await db
-    .select({ role: workspaceMembers.role })
-    .from(workspaceMembers)
-    .where(
-      and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, targetUserId),
-        isNull(workspaceMembers.deletedAt),
-      ),
-    )
-    .limit(1);
-  const currentRole = targetRows[0]?.role;
+  const targetRow = await unwrapMaybe(
+    supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", targetUserId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+  );
+  const currentRole = targetRow?.role;
   if (!currentRole) {
     throw new Error("That person isn't an active member of this workspace.");
   }
@@ -257,34 +249,30 @@ export async function updateMemberRole(
     newRole !== "owner" &&
     newRole !== "admin"
   ) {
-    const others = await db
-      .select({ count: count() })
-      .from(workspaceMembers)
-      .where(
-        and(
-          eq(workspaceMembers.workspaceId, workspaceId),
-          isNull(workspaceMembers.deletedAt),
-          inArray(workspaceMembers.role, ["owner", "admin"]),
-        ),
-      );
+    const others = await unwrapCount(
+      supabase
+        .from("workspace_members")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .in("role", ["owner", "admin"]),
+    );
     // `others` includes the target themselves, so we need >1 to leave one behind.
-    if ((others[0]?.count ?? 0) <= 1) {
+    if (others <= 1) {
       throw new Error(
         "This workspace needs at least one owner or admin. Promote another member first.",
       );
     }
   }
 
-  await db
-    .update(workspaceMembers)
-    .set({ role: newRole, updatedAt: new Date() })
-    .where(
-      and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, targetUserId),
-        isNull(workspaceMembers.deletedAt),
-      ),
-    );
+  await unwrapVoid(
+    supabase
+      .from("workspace_members")
+      .update({ role: newRole, updated_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", targetUserId)
+      .is("deleted_at", null),
+  );
 
   await publishEvent({
     type: "MemberRoleChanged",
@@ -306,25 +294,24 @@ export async function updateMemberRole(
 
 /** Pending invitations for a workspace (for the members management UI). */
 export async function listPendingInvitations(workspaceId: WorkspaceId) {
-  const db = getDb();
-  return db
-    .select({
-      id: workspaceInvitations.id,
-      email: workspaceInvitations.email,
-      role: workspaceInvitations.role,
-      status: workspaceInvitations.status,
-      expiresAt: workspaceInvitations.expiresAt,
-      createdAt: workspaceInvitations.createdAt,
-    })
-    .from(workspaceInvitations)
-    .where(
-      and(
-        eq(workspaceInvitations.workspaceId, workspaceId),
-        eq(workspaceInvitations.status, "pending"),
-        isNull(workspaceInvitations.acceptedAt),
-        gt(workspaceInvitations.expiresAt, new Date()), // not expired
-      ),
-    );
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("workspace_invitations")
+      .select("id, email, role, status, expires_at, created_at")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "pending")
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString()), // not expired
+  );
+  return rows.map((r) => ({
+    id: branded<"WorkspaceInvitationId">(r.id),
+    email: r.email,
+    role: r.role,
+    status: r.status,
+    expiresAt: parsePgTimestamp(r.expires_at),
+    createdAt: parsePgTimestamp(r.created_at),
+  }));
 }
 
 /** A public invitation lookup by token (for the `/invite?token=...` accept page). Returns
@@ -346,35 +333,31 @@ export interface PublicInvitation {
 }
 
 export async function getInvitationByToken(token: string): Promise<PublicInvitation | null> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: workspaceInvitations.id,
-      workspaceId: workspaceInvitations.workspaceId,
-      email: workspaceInvitations.email,
-      role: workspaceInvitations.role,
-      expiresAt: workspaceInvitations.expiresAt,
-      status: workspaceInvitations.status,
-      workspaceName: workspaces.name,
-      inviterName: usersTable.fullName,
-    })
-    .from(workspaceInvitations)
-    .innerJoin(workspaces, eq(workspaces.id, workspaceInvitations.workspaceId))
-    .leftJoin(usersTable, eq(usersTable.id, workspaceInvitations.invitedByUserId))
-    .where(eq(workspaceInvitations.token, token))
-    .limit(1);
-  const row = rows[0];
+  const supabase = getDataClient();
+  // Embed the parent workspace (name) and the inviter's user mirror (full_name) — both
+  // many-to-one → single nested objects, matching the old innerJoin(workspaces) +
+  // leftJoin(users).
+  const row = await unwrapMaybe(
+    supabase
+      .from("workspace_invitations")
+      .select(
+        "id, workspace_id, email, role, expires_at, status, workspaces ( name ), users ( full_name )",
+      )
+      .eq("token", token)
+      .maybeSingle(),
+  );
   if (!row) return null;
+  const expiresAt = parsePgTimestamp(row.expires_at);
   return {
-    id: row.id,
-    workspaceId: row.workspaceId,
+    id: branded<"WorkspaceInvitationId">(row.id),
+    workspaceId: branded<"WorkspaceId">(row.workspace_id),
     email: row.email,
     role: row.role,
-    expiresAt: row.expiresAt,
+    expiresAt,
     status: row.status,
-    expired: row.expiresAt.getTime() < Date.now(),
-    workspaceName: row.workspaceName,
-    inviterName: row.inviterName,
+    expired: expiresAt.getTime() < Date.now(),
+    workspaceName: row.workspaces?.name ?? "",
+    inviterName: row.users?.full_name ?? null,
   };
 }
 
@@ -386,17 +369,15 @@ export async function revokeInvitation(
   invitationId: WorkspaceInvitationId,
   actorId: UserId,
 ): Promise<void> {
-  const db = getDb();
-  await db
-    .update(workspaceInvitations)
-    .set({ status: "revoked", updatedAt: new Date() })
-    .where(
-      and(
-        eq(workspaceInvitations.id, invitationId),
-        eq(workspaceInvitations.workspaceId, workspaceId),
-        eq(workspaceInvitations.status, "pending"),
-      ),
-    );
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("workspace_invitations")
+      .update({ status: "revoked", updated_at: new Date().toISOString() })
+      .eq("id", invitationId)
+      .eq("workspace_id", workspaceId)
+      .eq("status", "pending"),
+  );
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -416,29 +397,24 @@ export async function resendInvitation(
   invitationId: WorkspaceInvitationId,
   actorId: UserId,
 ): Promise<{ token: string; expiresAt: Date; email: string; role: WorkspaceRole } | null> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      email: workspaceInvitations.email,
-      role: workspaceInvitations.role,
-      token: workspaceInvitations.token,
-    })
-    .from(workspaceInvitations)
-    .where(
-      and(
-        eq(workspaceInvitations.id, invitationId),
-        eq(workspaceInvitations.workspaceId, workspaceId),
-        eq(workspaceInvitations.status, "pending"),
-      ),
-    )
-    .limit(1);
-  const row = rows[0];
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("workspace_invitations")
+      .select("email, role, token")
+      .eq("id", invitationId)
+      .eq("workspace_id", workspaceId)
+      .eq("status", "pending")
+      .maybeSingle(),
+  );
   if (!row) return null;
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
-  await db
-    .update(workspaceInvitations)
-    .set({ expiresAt, updatedAt: new Date() })
-    .where(eq(workspaceInvitations.id, invitationId));
+  await unwrapVoid(
+    supabase
+      .from("workspace_invitations")
+      .update({ expires_at: expiresAt.toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", invitationId),
+  );
   await publishEvent({
     type: "MemberInvited",
     workspaceId,

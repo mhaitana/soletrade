@@ -1,14 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  subscriptions as subscriptionsTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-  auditLogs,
-  moduleInstallations,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrapMaybe } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus } from "@/server/events";
@@ -44,11 +37,10 @@ describe.skipIf(!RUN)(
     };
 
     beforeAll(async () => {
-      const db = getDb();
       clearEventBus();
-      await db
-        .insert(usersTable)
-        .values({ id: actor, email: "stripe-lifecycle@soletrade-test.local", fullName: "Stripe LC" });
+      await seedUsers([
+        { id: actor, email: "stripe-lifecycle@soletrade-test.local", fullName: "Stripe LC" },
+      ]);
     });
 
     afterEach(async () => {
@@ -73,21 +65,11 @@ describe.skipIf(!RUN)(
     });
 
     afterAll(async () => {
-      const db = getDb();
-      if (workspaceIds.length > 0) {
-        await db
-          .delete(moduleInstallations)
-          .where(inArray(moduleInstallations.workspaceId, workspaceIds));
-        await db
-          .delete(subscriptionsTable)
-          .where(inArray(subscriptionsTable.workspaceId, workspaceIds));
-        await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-        await db
-          .delete(workspaceMembers)
-          .where(inArray(workspaceMembers.workspaceId, workspaceIds));
-        await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-      }
-      await db.delete(usersTable).where(eq(usersTable.id, actor));
+      await cleanupWorkspaces(
+        workspaceIds,
+        [actor],
+        [{ table: "module_installations" }, { table: "subscriptions" }, { table: "audit_logs" }],
+      );
       clearEventBus();
     });
 
@@ -124,12 +106,15 @@ describe.skipIf(!RUN)(
       expect(url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
       // We don't complete the checkout (no automated pay). Clean up the customer
       // created for this session.
-      const db = getDb();
-      const rows = await db
-        .select({ cus: subscriptionsTable.stripeCustomerId })
-        .from(subscriptionsTable)
-        .where(eq(subscriptionsTable.workspaceId, ws));
-      if (rows[0]?.cus) stripeObjectIds.customers.push(rows[0].cus);
+      const row = await unwrapMaybe(
+        getDataClient()
+          .from("subscriptions")
+          .select("stripe_customer_id")
+          .eq("workspace_id", ws)
+          .limit(1)
+          .maybeSingle(),
+      );
+      if (row?.stripe_customer_id) stripeObjectIds.customers.push(row.stripe_customer_id);
     });
   },
 );

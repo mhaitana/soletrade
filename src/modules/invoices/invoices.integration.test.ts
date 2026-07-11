@@ -1,15 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  customers as customersTable,
-  invoiceLineItems,
-  invoices as invoicesTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type CustomerId, type InvoiceId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createCustomer } from "@/platform/customers";
@@ -43,8 +33,7 @@ describe.skipIf(!HAS_DB)("invoices integration (requires DATABASE_URL)", () => {
   const createdInvoiceIds: InvoiceId[] = [];
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "inv-actor@soletrade-test.local", fullName: "Inv Actor" },
       { id: otherActor, email: "inv-other@soletrade-test.local", fullName: "Inv Other" },
     ]);
@@ -58,17 +47,17 @@ describe.skipIf(!HAS_DB)("invoices integration (requires DATABASE_URL)", () => {
   });
 
   afterAll(async () => {
-    const db = getDb();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    // Invoices cascade their line items via FK ON DELETE cascade.
-    await db.delete(invoicesTable).where(inArray(invoicesTable.workspaceId, workspaceIds));
-    await db.delete(invoiceLineItems).where(inArray(invoiceLineItems.workspaceId, workspaceIds));
-    await db.delete(customersTable).where(inArray(customersTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor, otherActor],
+      [
+        { table: "invoices" },
+        { table: "invoice_line_items" },
+        { table: "customers" },
+        { table: "audit_logs" },
+      ],
+    );
   });
 
   it("creates a draft invoice with INV-YYYY-0001 and denormalized totals", async () => {

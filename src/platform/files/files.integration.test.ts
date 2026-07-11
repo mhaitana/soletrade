@@ -1,12 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  files as filesTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createFileRecord, getFile, listFiles, listFilesByIds } from "./index";
@@ -37,8 +30,7 @@ describe.skipIf(!HAS_DB)("files platform integration (requires DATABASE_URL)", (
   const createdFileIds: string[] = [];
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "files-actor@soletrade-test.local", fullName: "Files Actor" },
       { id: otherActor, email: "files-other@soletrade-test.local", fullName: "Files Other" },
     ]);
@@ -47,14 +39,10 @@ describe.skipIf(!HAS_DB)("files platform integration (requires DATABASE_URL)", (
   });
 
   afterAll(async () => {
-    const db = getDb();
-    const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length > 0) {
-      await db.delete(filesTable).where(inArray(filesTable.workspaceId, workspaceIds));
-      await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-      await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    }
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    const workspaceIds = [ws1, ws2].filter(Boolean) as WorkspaceId[];
+    // The helper deletes users even when workspaceIds is empty, covering the
+    // original no-workspace branch that deleted only the users.
+    await cleanupWorkspaces(workspaceIds, [actor, otherActor], [{ table: "files" }]);
   });
 
   it("creates a record with a workspace-namespaced storage path", async () => {

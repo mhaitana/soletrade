@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  creditLedger as creditLedgerTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus, onEvent } from "@/server/events";
@@ -40,11 +34,10 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
   const collectedEvents: { type: string; amountCents?: number }[] = [];
 
   beforeAll(async () => {
-    const db = getDb();
     clearEventBus();
-    await db
-      .insert(usersTable)
-      .values({ id: actor, email: "credit-actor@soletrade-test.local", fullName: "Credit Actor" });
+    await seedUsers([
+      { id: actor, email: "credit-actor@soletrade-test.local", fullName: "Credit Actor" },
+    ]);
     ws1 = await createWorkspace(actor, "Credit Test One", `credit-test-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Credit Test Two", `credit-test-two-${Date.now()}`);
     // Collect CreditIssued / RefundIssued events for the assertion below.
@@ -63,17 +56,12 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
   });
 
   afterAll(async () => {
-    const db = getDb();
     const workspaceIds = [ws1, ws2].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) {
-      await db.delete(usersTable).where(eq(usersTable.id, actor));
-      return;
-    }
-    await db.delete(creditLedgerTable).where(inArray(creditLedgerTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor],
+      [{ table: "credit_ledger" }, { table: "audit_logs" }],
+    );
     clearEventBus();
   });
 
@@ -138,11 +126,9 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
   });
 
   it("writes audit rows for grant/consume/refund/adjust", async () => {
-    const db = getDb();
-    const rows = await db
-      .select({ action: auditLogs.action })
-      .from(auditLogs)
-      .where(eq(auditLogs.workspaceId, ws1!));
+    const rows = await unwrap(
+      getDataClient().from("audit_logs").select("action").eq("workspace_id", ws1!),
+    );
     const actions = new Set(rows.map((r) => r.action));
     expect(actions.has("credit.grant")).toBe(true);
     expect(actions.has("credit.consume")).toBe(true);
@@ -195,16 +181,17 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
   });
 
   it("grantCredit persists expiresAt when provided (and null when omitted)", async () => {
-    const db = getDb();
     const expiry = new Date(Date.now() + 7 * 86_400_000);
     await grantCredit(ws2!, { amountCents: 2500, reason: "timed.grant", expiresAt: expiry }, actor);
     await grantCredit(ws2!, { amountCents: 500, reason: "perpetual.grant" }, actor);
-    const rows = await db
-      .select({ entryType: creditLedgerTable.entryType, expiresAt: creditLedgerTable.expiresAt })
-      .from(creditLedgerTable)
-      .where(eq(creditLedgerTable.workspaceId, ws2!));
-    const timed = rows.find((r) => r.entryType === "grant" && r.expiresAt != null);
-    const perpetual = rows.find((r) => r.entryType === "grant" && r.expiresAt == null);
+    const rows = await unwrap(
+      getDataClient()
+        .from("credit_ledger")
+        .select("entry_type, expires_at")
+        .eq("workspace_id", ws2!),
+    );
+    const timed = rows.find((r) => r.entry_type === "grant" && r.expires_at != null);
+    const perpetual = rows.find((r) => r.entry_type === "grant" && r.expires_at == null);
     expect(timed).toBeDefined();
     expect(perpetual).toBeDefined();
   });
@@ -235,11 +222,9 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
     expect(balanceAfterExpire).toBe(balanceAfterGrant - expiredAmount);
 
     // Exactly one 'expired' row references this grant via metadata.originalEntryId.
-    const db = getDb();
-    const expiredRows = await db
-      .select({ entryType: creditLedgerTable.entryType })
-      .from(creditLedgerTable)
-      .where(eq(creditLedgerTable.workspaceId, ws2!));
-    expect(expiredRows.filter((r) => r.entryType === "expired").length).toBeGreaterThanOrEqual(1);
+    const expiredRows = await unwrap(
+      getDataClient().from("credit_ledger").select("entry_type").eq("workspace_id", ws2!),
+    );
+    expect(expiredRows.filter((r) => r.entry_type === "expired").length).toBeGreaterThanOrEqual(1);
   });
 });

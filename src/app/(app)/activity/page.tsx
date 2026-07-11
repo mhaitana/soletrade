@@ -41,17 +41,17 @@ const DEFAULT_LIMIT = 25;
 
 const ALL_CATEGORY = { label: "All activity", types: [] as string[] };
 
-/** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip. */
+/** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip.
+ *  `createdAt` is the raw µs-precision ISO string (never a Date) so the keyset
+ *  comparison stays exact — see `ActivityCursor`. */
 function encodeCursor(cursor: ActivityCursor): string {
-  return `${cursor.createdAt.toISOString()}|${cursor.id}`;
+  return `${cursor.createdAt}|${cursor.id}`;
 }
 
 function parseCursor(raw: string): ActivityCursor | null {
   const [iso, id] = raw.split("|");
   if (!iso || !id) return null;
-  const createdAt = new Date(iso);
-  if (Number.isNaN(createdAt.getTime())) return null;
-  return { createdAt, id: branded<"ActivityEventId">(id) };
+  return { createdAt: iso, id: branded<"ActivityEventId">(id) };
 }
 
 export default async function ActivityPage({

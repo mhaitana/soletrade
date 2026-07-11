@@ -1,17 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
 import type Stripe from "stripe";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  creditLedger,
-  moduleInstallations,
-  processedWebhookEvents,
-  subscriptions as subscriptionsTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapVoid } from "@/server/db/helpers";
+import { cleanupWorkspaces, seedUsers, type CleanupTable } from "@/tests/db-helpers";
 import { branded, type WorkspaceId, type UserId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { clearEventBus } from "@/server/events";
@@ -85,37 +76,32 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
   }
 
   beforeAll(async () => {
-    const db = getDb();
     clearEventBus();
-    await db.insert(usersTable).values({
-      id: actor,
-      email: "stripe-handler@soletrade-test.local",
-      fullName: "Stripe Handler",
-    });
+    await seedUsers([
+      { id: actor, email: "stripe-handler@soletrade-test.local", fullName: "Stripe Handler" },
+    ]);
   });
 
   afterAll(async () => {
-    const db = getDb();
-    // Clean up in FK order. processed_webhook_events + audit_logs reference
-    // nothing; module_installations + subscriptions reference workspaces.
-    if (workspaceIds.length > 0) {
-      await db
-        .delete(processedWebhookEvents)
-        .where(inArray(processedWebhookEvents.stripeEventId, allEventIds));
-      // creditLedger references workspaces (4c invoice/refund tests write rows); delete
-      // before workspaces or the FK on workspaces.id blocks the workspace delete.
-      await db.delete(creditLedger).where(inArray(creditLedger.workspaceId, workspaceIds));
-      await db
-        .delete(moduleInstallations)
-        .where(inArray(moduleInstallations.workspaceId, workspaceIds));
-      await db
-        .delete(subscriptionsTable)
-        .where(inArray(subscriptionsTable.workspaceId, workspaceIds));
-      await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-      await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-      await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
+    // processed_webhook_events is keyed by stripe_event_id (NOT workspace-scoped), so purge
+    // it directly before the workspace-scoped cascade. The remaining workspace-scoped tables
+    // go through the shared cleanup helper (credit_ledger before workspaces or its FK blocks
+    // the workspace delete).
+    if (allEventIds.length > 0) {
+      await unwrapVoid(
+        getDataClient()
+          .from("processed_webhook_events")
+          .delete()
+          .in("stripe_event_id", allEventIds),
+      );
     }
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    const tables: CleanupTable[] = [
+      { table: "credit_ledger" },
+      { table: "module_installations" },
+      { table: "subscriptions" },
+      { table: "audit_logs" },
+    ];
+    await cleanupWorkspaces(workspaceIds, [actor], tables);
     clearEventBus();
   });
 
@@ -153,11 +139,9 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
     const sub = await getSubscription(ws);
     expect(sub?.status).toBe("past_due");
 
-    const db = getDb();
-    const auditRows = await db
-      .select({ action: auditLogs.action })
-      .from(auditLogs)
-      .where(eq(auditLogs.workspaceId, ws));
+    const auditRows = await unwrap(
+      getDataClient().from("audit_logs").select("action").eq("workspace_id", ws),
+    );
     const updateAudits = auditRows.filter((r) => r.action === "billing.subscription.update");
     expect(updateAudits.length).toBe(1);
   });
@@ -214,11 +198,9 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
     });
     await handleStripeEvent(event);
 
-    const db = getDb();
-    const rows = await db
-      .select({ action: auditLogs.action })
-      .from(auditLogs)
-      .where(eq(auditLogs.workspaceId, ws));
+    const rows = await unwrap(
+      getDataClient().from("audit_logs").select("action").eq("workspace_id", ws),
+    );
     const invoiceAudits = rows.filter((r) => r.action === "billing.invoice.paid");
     expect(invoiceAudits.length).toBe(1);
   });
@@ -228,11 +210,9 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
     allEventIds.push(id);
     await recordProcessedEvent(id, "invoice.paid");
     await recordProcessedEvent(id, "invoice.paid"); // duplicate — no-op
-    const db = getDb();
-    const rows = await db
-      .select({ id: processedWebhookEvents.id })
-      .from(processedWebhookEvents)
-      .where(eq(processedWebhookEvents.stripeEventId, id));
+    const rows = await unwrap(
+      getDataClient().from("processed_webhook_events").select("id").eq("stripe_event_id", id),
+    );
     expect(rows.length).toBe(1);
   });
 
@@ -286,11 +266,9 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
 
     const balance = await getCreditBalance(ws, "AUD");
     expect(balance).toBe(3000); // granted once, not twice
-    const db = getDb();
-    const grantRows = await db
-      .select({ id: creditLedger.id })
-      .from(creditLedger)
-      .where(eq(creditLedger.workspaceId, ws));
+    const grantRows = await unwrap(
+      getDataClient().from("credit_ledger").select("id").eq("workspace_id", ws),
+    );
     const grants = grantRows.length;
     expect(grants).toBe(1);
   });

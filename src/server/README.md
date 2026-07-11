@@ -7,7 +7,7 @@ Never imported from client code (these modules should pull `import "server-only"
 
 | Folder   | Purpose                                                | Phase   |
 | -------- | ------------------------------------------------------ | ------- |
-| `db`     | Drizzle client + schema, migrations                    | Phase 1 |
+| `db`     | Supabase data client (service-role) + generated types, CLI migrations | Phase 1 |
 | `stripe` | Stripe SDK client + webhook helpers                    | Phase 3 |
 | `jobs`   | Background job runner (Trigger.dev / Inngest / simple) | Phase 5+|
 | `events` | Internal typed event bus (in-process, queue-ready)    | Phase 1 |

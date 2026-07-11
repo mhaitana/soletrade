@@ -9,7 +9,7 @@ import { unreadCount } from "@/platform/notifications/store";
 import { AppShell } from "@/shared/components/app-shell/app-shell";
 import type { ModuleKey } from "@/shared/constants/modules";
 import type { WorkspaceId } from "@/shared/types/ids";
-import type { WorkspaceRole } from "@/server/db/schema/enums";
+import type { WorkspaceRole } from "@/server/db/enums";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireWorkspaceContext();

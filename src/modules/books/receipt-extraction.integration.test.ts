@@ -1,17 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  activityEvents,
-  auditLogs,
-  bookTransactions as bookTransactionsTable,
-  files as filesTable,
-  moduleInstallations,
-  receiptExtractions as receiptExtractionsTable,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
+import { getDataClient } from "@/server/db/client";
+import { unwrap, unwrapMaybe, parsePgTimestamp } from "@/server/db/helpers";
+import type { Database } from "@/server/db/types";
 import { branded, type FileId, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { createFileRecord } from "@/platform/files";
@@ -56,10 +47,9 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
     vi.resetModules();
     [svc, bus] = await Promise.all([import("./receipt-extraction"), import("@/server/events")]);
 
-    const db = getDb();
-    await db
-      .insert(usersTable)
-      .values([{ id: actor, email: "receipt-ext@soletrade-test.local", fullName: "Receipt Ext" }]);
+    await seedUsers([
+      { id: actor, email: "receipt-ext@soletrade-test.local", fullName: "Receipt Ext" },
+    ]);
     ws = await createWorkspace(actor, "Receipt Ext One", `receipt-ext-one-${Date.now()}`);
     await enableModule(ws, "books", actor);
     bus.clearEventBus();
@@ -80,30 +70,44 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
   });
 
   afterAll(async () => {
-    const db = getDb();
     unsubReceipt?.();
     bus.clearEventBus();
     vi.unstubAllEnvs();
     const workspaceIds = [ws!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    // receipt_extractions reference workspace (no cascade) — delete first.
-    await db
-      .delete(receiptExtractionsTable)
-      .where(inArray(receiptExtractionsTable.workspaceId, workspaceIds));
-    // bookTransactions reference workspace + file (no cascade) — delete next.
-    await db
-      .delete(bookTransactionsTable)
-      .where(inArray(bookTransactionsTable.workspaceId, workspaceIds));
-    await db.delete(filesTable).where(inArray(filesTable.workspaceId, workspaceIds));
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(activityEvents).where(inArray(activityEvents.workspaceId, workspaceIds));
-    await db
-      .delete(moduleInstallations)
-      .where(inArray(moduleInstallations.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(eq(usersTable.id, actor));
+    await cleanupWorkspaces(
+      workspaceIds,
+      [actor],
+      [
+        { table: "receipt_extractions" },
+        { table: "book_transactions" },
+        { table: "files" },
+        { table: "audit_logs" },
+        { table: "activity_events" },
+        { table: "module_installations" },
+      ],
+    );
   });
+
+  /** CamelCase + branded-id + Date mapper for book_transactions rows (keeps assertions unchanged). */
+  type BookTxRow = Database["public"]["Tables"]["book_transactions"]["Row"];
+
+  function mapBookTx(r: BookTxRow) {
+    return {
+      id: r.id,
+      type: r.type,
+      category: r.category,
+      amountCents: r.amount_cents,
+      gstCents: r.gst_cents,
+      currency: r.currency,
+      customerId: r.customer_id,
+      sourceInvoiceId: r.source_invoice_id,
+      sourceEarningId: r.source_earning_id,
+      description: r.description,
+      notes: r.notes,
+      date: parsePgTimestamp(r.date),
+      receiptFileId: r.receipt_file_id,
+    };
+  }
 
   it("extracts canned data, persists a pending row, and publishes ReceiptProcessed", async () => {
     const extractionId = await svc.extractReceipt(ws!, receiptFileId!, actor);
@@ -136,21 +140,23 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
 
     const transactionId = await svc.applyExtraction(ws!, extractionId, {}, actor);
 
-    const db = getDb();
-    const txRows = await db
-      .select()
-      .from(bookTransactionsTable)
-      .where(eq(bookTransactionsTable.id, transactionId))
-      .limit(1);
-    const tx = txRows[0];
-    expect(tx).toBeDefined();
-    expect(tx!.type).toBe("expense");
-    expect(tx!.amountCents).toBe(1099);
-    expect(tx!.gstCents).toBe(100);
-    expect(tx!.currency).toBe("AUD");
-    expect(tx!.category).toBe("supplies");
-    expect(tx!.receiptFileId).toBe(receiptFileId);
-    expect(tx!.description).toBe("Mock Merchant");
+    const txRow = await unwrapMaybe(
+      getDataClient()
+        .from("book_transactions")
+        .select("*")
+        .eq("id", transactionId)
+        .limit(1)
+        .maybeSingle(),
+    );
+    expect(txRow).not.toBeNull();
+    const tx = mapBookTx(txRow!);
+    expect(tx.type).toBe("expense");
+    expect(tx.amountCents).toBe(1099);
+    expect(tx.gstCents).toBe(100);
+    expect(tx.currency).toBe("AUD");
+    expect(tx.category).toBe("supplies");
+    expect(tx.receiptFileId).toBe(receiptFileId);
+    expect(tx.description).toBe("Mock Merchant");
 
     // The extraction is now `applied` with the transactionId linked back.
     const row = await svc.getExtraction(ws!, extractionId);
@@ -175,11 +181,9 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
     expect(row!.status).toBe("rejected");
     expect(row!.transactionId).toBeNull();
     // No new book_transaction references this extraction — only the one applied above exists.
-    const db = getDb();
-    const txCount = await db
-      .select({ id: bookTransactionsTable.id })
-      .from(bookTransactionsTable)
-      .where(eq(bookTransactionsTable.receiptFileId, receiptFileId));
-    expect(txCount.length).toBe(1);
+    const txCountRows = await unwrap(
+      getDataClient().from("book_transactions").select("id").eq("receipt_file_id", receiptFileId),
+    );
+    expect(txCountRows.length).toBe(1);
   });
 });

@@ -7,7 +7,7 @@ import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
 import { loadQuote } from "../actions";
 import { QuoteDetailActions } from "../quote-detail-actions";
-import type { QuoteStatus } from "@/server/db/schema/enums";
+import type { QuoteStatus } from "@/server/db/enums";
 
 export const metadata = { title: "Quote" };
 

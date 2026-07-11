@@ -1,9 +1,8 @@
 import "server-only";
-import { eq } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import { subscriptions } from "@/server/db/schema";
-import type { BillingInterval } from "@/server/db/schema/enums";
-import type { SubscriptionId, WorkspaceId } from "@/shared/types/ids";
+import { getDataClient } from "@/server/db/client";
+import { parsePgTimestamp, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
+import type { BillingInterval } from "@/server/db/enums";
+import { branded, type SubscriptionId, type WorkspaceId } from "@/shared/types/ids";
 
 /**
  * Subscription service (brief §10 — one unified subscription per workspace).
@@ -32,27 +31,46 @@ export interface SubscriptionRow {
   updatedAt: Date;
 }
 
-const selectRow = {
-  id: subscriptions.id,
-  workspaceId: subscriptions.workspaceId,
-  billingInterval: subscriptions.billingInterval,
-  status: subscriptions.status,
-  stripeCustomerId: subscriptions.stripeCustomerId,
-  stripeSubscriptionId: subscriptions.stripeSubscriptionId,
-  anchorBillingDate: subscriptions.anchorBillingDate,
-  createdAt: subscriptions.createdAt,
-  updatedAt: subscriptions.updatedAt,
-} as const;
+const SUBSCRIPTION_COLUMNS =
+  "id, workspace_id, billing_interval, status, stripe_customer_id, stripe_subscription_id, anchor_billing_date, created_at, updated_at";
+
+/** Maps a snake_case PostgREST subscriptions row to the camelCase `SubscriptionRow`. */
+function toSubscriptionRow(r: {
+  id: string;
+  workspace_id: string;
+  billing_interval: BillingInterval | null;
+  status: SubscriptionRow["status"];
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  anchor_billing_date: string | null;
+  created_at: string;
+  updated_at: string;
+}): SubscriptionRow {
+  return {
+    id: branded<"SubscriptionId">(r.id),
+    workspaceId: branded<"WorkspaceId">(r.workspace_id),
+    billingInterval: r.billing_interval,
+    status: r.status,
+    stripeCustomerId: r.stripe_customer_id,
+    stripeSubscriptionId: r.stripe_subscription_id,
+    anchorBillingDate: r.anchor_billing_date ? parsePgTimestamp(r.anchor_billing_date) : null,
+    createdAt: parsePgTimestamp(r.created_at),
+    updatedAt: parsePgTimestamp(r.updated_at),
+  };
+}
 
 /** The workspace's 1:1 subscription row, or null if none exists yet. */
 export async function getSubscription(workspaceId: WorkspaceId): Promise<SubscriptionRow | null> {
-  const db = getDb();
-  const rows = await db
-    .select(selectRow)
-    .from(subscriptions)
-    .where(eq(subscriptions.workspaceId, workspaceId))
-    .limit(1);
-  return rows[0] ?? null;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("subscriptions")
+      .select(SUBSCRIPTION_COLUMNS)
+      .eq("workspace_id", workspaceId)
+      .limit(1)
+      .maybeSingle(),
+  );
+  return row ? toSubscriptionRow(row) : null;
 }
 
 /**
@@ -61,11 +79,18 @@ export async function getSubscription(workspaceId: WorkspaceId): Promise<Subscri
  * billing loader. Safe to call repeatedly — always returns the row.
  */
 export async function ensureSubscription(workspaceId: WorkspaceId): Promise<SubscriptionRow> {
-  const db = getDb();
-  await db
-    .insert(subscriptions)
-    .values({ workspaceId, billingInterval: null, status: "active" })
-    .onConflictDoNothing({ target: subscriptions.workspaceId });
+  const supabase = getDataClient();
+  // onConflictDoNothing → upsert with ignoreDuplicates so a pre-existing row is left
+  // untouched (no partial-overwrite of the populated Stripe columns on a lazy re-call).
+  // Wrapped in unwrapVoid so a PostgREST error throws (supabase-js returns, never throws).
+  await unwrapVoid(
+    supabase
+      .from("subscriptions")
+      .upsert(
+        { workspace_id: workspaceId, billing_interval: null, status: "active" },
+        { onConflict: "workspace_id", ignoreDuplicates: true },
+      ),
+  );
   // Re-read so we always return the canonical row (whether inserted or pre-existing).
   const row = await getSubscription(workspaceId);
   if (!row) throw new Error(`ensureSubscription failed for workspace ${workspaceId}.`);
@@ -82,9 +107,11 @@ export async function setBillingInterval(
   workspaceId: WorkspaceId,
   interval: BillingInterval,
 ): Promise<void> {
-  const db = getDb();
-  await db
-    .update(subscriptions)
-    .set({ billingInterval: interval, updatedAt: new Date() })
-    .where(eq(subscriptions.workspaceId, workspaceId));
+  const supabase = getDataClient();
+  await unwrapVoid(
+    supabase
+      .from("subscriptions")
+      .update({ billing_interval: interval, updated_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId),
+  );
 }

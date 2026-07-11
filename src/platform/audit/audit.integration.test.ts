@@ -1,12 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
-import { getDb } from "@/server/db";
-import {
-  auditLogs,
-  users as usersTable,
-  workspaces as workspacesTable,
-  workspaceMembers,
-} from "@/server/db/schema";
+import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace } from "@/platform/workspaces";
 import { listAudit, writeAudit } from "@/platform/audit";
@@ -31,8 +24,7 @@ describe.skipIf(!HAS_DB)("audit integration (requires DATABASE_URL)", () => {
   let ws2: WorkspaceId;
 
   beforeAll(async () => {
-    const db = getDb();
-    await db.insert(usersTable).values([
+    await seedUsers([
       { id: actor, email: "audit-actor@soletrade-test.local", fullName: "Audit Actor" },
       { id: otherActor, email: "audit-other@soletrade-test.local", fullName: "Audit Other" },
     ]);
@@ -79,13 +71,8 @@ describe.skipIf(!HAS_DB)("audit integration (requires DATABASE_URL)", () => {
   });
 
   afterAll(async () => {
-    const db = getDb();
-    const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
-    if (workspaceIds.length === 0) return;
-    await db.delete(auditLogs).where(inArray(auditLogs.workspaceId, workspaceIds));
-    await db.delete(workspaceMembers).where(inArray(workspaceMembers.workspaceId, workspaceIds));
-    await db.delete(workspacesTable).where(inArray(workspacesTable.id, workspaceIds));
-    await db.delete(usersTable).where(inArray(usersTable.id, [actor, otherActor]));
+    const workspaceIds = [ws1, ws2].filter(Boolean) as WorkspaceId[];
+    await cleanupWorkspaces(workspaceIds, [actor, otherActor], [{ table: "audit_logs" }]);
   });
 
   it("lists workspace entries newest-first and isolates per workspace (no IDOR)", async () => {

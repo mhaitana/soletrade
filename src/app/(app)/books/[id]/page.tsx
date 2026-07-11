@@ -8,7 +8,7 @@ import { categoryLabel } from "@/shared/constants/books-categories";
 import { loadTransaction } from "../actions";
 import { BookDetailActions } from "../book-detail-actions";
 import { ReceiptLink } from "./receipt-link";
-import type { BookType } from "@/server/db/schema/enums";
+import type { BookType } from "@/server/db/enums";
 
 export const metadata = { title: "Transaction" };
 

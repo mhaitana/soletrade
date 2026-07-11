@@ -1,9 +1,8 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { getDb } from "@/server/db";
-import { workspaces, workspaceMembers } from "@/server/db/schema";
-import type { WorkspaceRole } from "@/server/db/schema/enums";
+import { getDataClient } from "@/server/db/client";
+import { rpc, unwrap, unwrapMaybe } from "@/server/db/helpers";
+import type { WorkspaceRole } from "@/server/db/enums";
 import type { UserId, WorkspaceId } from "@/shared/types/ids";
 import { branded } from "@/shared/types/ids";
 import { publishEvent } from "@/server/events";
@@ -17,8 +16,57 @@ export interface WorkspaceMembership {
   role: WorkspaceRole;
 }
 
-/** Full workspace row shape (all columns). The shape `getWorkspace` returns. */
-export type WorkspaceRow = NonNullable<Awaited<ReturnType<typeof getWorkspace>>>;
+/** Full workspace row shape (camelCase — mapped from the snake_case PostgREST row at the
+ *  service boundary so consumers keep the same field names Drizzle exposed). Timestamps come
+ *  back as ISO strings from PostgREST (Drizzle returned `Date`); no consumer reads them today. */
+export interface WorkspaceRow {
+  id: WorkspaceId;
+  name: string;
+  slug: string;
+  ownerId: UserId;
+  defaultCurrency: string;
+  invoicePrefix: string;
+  quotePrefix: string;
+  timezone: string;
+  fyStartMonth: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+/** Maps a snake_case PostgREST workspaces row to the camelCase `WorkspaceRow` contract. */
+function toWorkspaceRow(r: {
+  id: string;
+  name: string;
+  slug: string;
+  owner_user_id: string;
+  default_currency: string;
+  invoice_prefix: string;
+  quote_prefix: string;
+  timezone: string;
+  fy_start_month: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}): WorkspaceRow {
+  return {
+    id: branded<"WorkspaceId">(r.id),
+    name: r.name,
+    slug: r.slug,
+    ownerId: branded<"UserId">(r.owner_user_id),
+    defaultCurrency: r.default_currency,
+    invoicePrefix: r.invoice_prefix,
+    quotePrefix: r.quote_prefix,
+    timezone: r.timezone,
+    fyStartMonth: r.fy_start_month,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  };
+}
+
+const WORKSPACE_COLUMNS =
+  "id, name, slug, owner_user_id, default_currency, invoice_prefix, quote_prefix, timezone, fy_start_month, created_at, updated_at, deleted_at";
 
 /** Cookie holding the user's currently-active workspace id. */
 export const ACTIVE_WORKSPACE_COOKIE = "soletrade:wid";
@@ -29,21 +77,22 @@ export async function createWorkspace(
   name: string,
   slug: string,
 ): Promise<WorkspaceId> {
-  const db = getDb();
-  const id = await db.transaction(async (tx) => {
-    const rows = await tx
-      .insert(workspaces)
-      .values({ name, slug, ownerId })
-      .returning({ id: workspaces.id });
-    const ws = rows[0];
-    if (!ws) throw new Error("Failed to create workspace");
-    await tx.insert(workspaceMembers).values({
-      workspaceId: ws.id,
-      userId: ownerId,
-      role: "owner",
-    });
-    return ws.id;
+  // Atomic insert (workspace + owner membership) via the `create_workspace_with_owner`
+  // PL/pgSQL RPC. PostgREST has no multi-statement transactions, so the two inserts live
+  // in one function. The `publishEvent`/`writeAudit` run AFTER the rpc returns (a tiny
+  // non-atomic gap between the row writes and the event/audit rows — acceptable: the event
+  // bus is best-effort and consumers are idempotent).
+  const supabase = getDataClient();
+  const { data, error } = await rpc(supabase, "create_workspace_with_owner", {
+    p_owner_user_id: ownerId,
+    p_name: name,
+    p_slug: slug,
   });
+  if (error) {
+    throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  }
+  if (!data) throw new Error("Failed to create workspace");
+  const id = branded<"WorkspaceId">(data);
   await publishEvent({
     type: "WorkspaceCreated",
     workspaceId: id,
@@ -65,34 +114,44 @@ export async function createWorkspace(
 
 /** List all workspaces the user is an active member of. */
 export async function listUserWorkspaces(userId: UserId): Promise<WorkspaceMembership[]> {
-  const db = getDb();
-  return db
-    .select({
-      workspaceId: workspaces.id,
-      name: workspaces.name,
-      slug: workspaces.slug,
-      role: workspaceMembers.role,
-    })
-    .from(workspaceMembers)
-    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-    .where(
-      and(
-        eq(workspaceMembers.userId, userId),
-        isNull(workspaceMembers.deletedAt),
-        isNull(workspaces.deletedAt),
-      ),
-    );
+  const supabase = getDataClient();
+  // Query the membership side and embed the parent workspace (many-to-one → a single nested
+  // object, not an array). Active memberships are filtered in SQL (`deleted_at IS NULL` on the
+  // member row); the parent workspace's soft-delete is filtered in JS (PostgREST can't filter
+  // the embedded side's columns from the "many" query), so dead workspaces are dropped here.
+  const rows = await unwrap(
+    supabase
+      .from("workspace_members")
+      .select(`role, workspaces ( ${WORKSPACE_COLUMNS} )`)
+      .eq("user_id", userId)
+      .is("deleted_at", null),
+  );
+  return rows.flatMap((r) => {
+    const w = r.workspaces;
+    if (!w || w.deleted_at !== null) return [];
+    return [
+      {
+        workspaceId: branded<"WorkspaceId">(w.id),
+        name: w.name,
+        slug: w.slug,
+        role: r.role,
+      },
+    ];
+  });
 }
 
 /** Resolve a single workspace (not soft-deleted). */
-export async function getWorkspace(workspaceId: WorkspaceId) {
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(workspaces)
-    .where(and(eq(workspaces.id, workspaceId), isNull(workspaces.deletedAt)))
-    .limit(1);
-  return rows[0] ?? null;
+export async function getWorkspace(workspaceId: WorkspaceId): Promise<WorkspaceRow | null> {
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("workspaces")
+      .select(WORKSPACE_COLUMNS)
+      .eq("id", workspaceId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+  );
+  return row ? toWorkspaceRow(row) : null;
 }
 
 /** Editable workspace fields (Wave 4 — `/settings/general`). The slug stays immutable v1. */
@@ -116,21 +175,24 @@ export async function updateWorkspace(
   workspaceId: WorkspaceId,
   input: WorkspaceUpdateInput,
   actorId: UserId,
-) {
-  const db = getDb();
-  const rows = await db
-    .update(workspaces)
-    .set({
-      name: input.name,
-      defaultCurrency: input.defaultCurrency,
-      invoicePrefix: input.invoicePrefix,
-      quotePrefix: input.quotePrefix,
-      timezone: input.timezone,
-      fyStartMonth: input.fyStartMonth,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(workspaces.id, workspaceId), isNull(workspaces.deletedAt)))
-    .returning();
+): Promise<WorkspaceRow | null> {
+  const supabase = getDataClient();
+  const rows = await unwrap(
+    supabase
+      .from("workspaces")
+      .update({
+        name: input.name,
+        default_currency: input.defaultCurrency,
+        invoice_prefix: input.invoicePrefix,
+        quote_prefix: input.quotePrefix,
+        timezone: input.timezone,
+        fy_start_month: input.fyStartMonth,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", workspaceId)
+      .is("deleted_at", null)
+      .select(WORKSPACE_COLUMNS),
+  );
   const updated = rows[0] ?? null;
   if (!updated) return null;
   await publishEvent({
@@ -163,7 +225,7 @@ export async function updateWorkspace(
       fyStartMonth: input.fyStartMonth,
     },
   });
-  return updated;
+  return toWorkspaceRow(updated);
 }
 
 /** The user's role in a workspace, or `null` if not an active member. */
@@ -171,19 +233,17 @@ export async function getMembershipRole(
   workspaceId: WorkspaceId,
   userId: UserId,
 ): Promise<WorkspaceRole | null> {
-  const db = getDb();
-  const rows = await db
-    .select({ role: workspaceMembers.role })
-    .from(workspaceMembers)
-    .where(
-      and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, userId),
-        isNull(workspaceMembers.deletedAt),
-      ),
-    )
-    .limit(1);
-  return rows[0]?.role ?? null;
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+  );
+  return row ? row.role : null;
 }
 
 /** Read the active-workspace cookie. */
