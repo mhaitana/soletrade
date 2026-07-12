@@ -117,7 +117,7 @@ export function InvoiceForm({
 
     const lineItemInputs = toLineItemInput(items);
     if (!customerId) {
-      setError("Pick a customer — a name and email are required to send the invoice.");
+      setError("Pick a customer - a name and email are required to send the invoice.");
       return;
     }
     if (lineItemInputs.length === 0) {
@@ -179,7 +179,7 @@ export function InvoiceForm({
                 <option key={c.id} value={c.id} disabled={!c.email}>
                   {c.name}
                   {c.company ? ` · ${c.company}` : ""}
-                  {!c.email ? " (no email — add one)" : ""}
+                  {!c.email ? " (no email - add one)" : ""}
                 </option>
               ))}
             </select>

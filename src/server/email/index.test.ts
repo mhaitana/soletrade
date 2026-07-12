@@ -87,7 +87,7 @@ describe("sendEmail", () => {
     });
   });
 
-  it("forwards attachments to the client (Wave 4 — PDF attachments)", async () => {
+  it("forwards attachments to the client (Wave 4 - PDF attachments)", async () => {
     let captured: EmailPayload | null = null;
     const fake: EmailClient = {
       async send(p: EmailPayload) {

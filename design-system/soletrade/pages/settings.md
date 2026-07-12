@@ -1,11 +1,11 @@
-# Page Override — Settings
+# Page Override - Settings
 
 **Overrides:** This file overrides `design-system/soletrade/MASTER.md` for `/settings/*` (General, Account, Modules, Members, Billing-as-settings).
 
 ## Layout
 - Left sidebar nav (`md:w-52`) of section links, content on the right. On mobile the nav stacks above content.
 - Active section: `bg-muted text-foreground`; inactive: `text-muted-foreground hover:bg-muted/60`.
-- Each section renders form(s) inside `Card` sections (CardHeader/CardTitle/CardDescription/CardContent) — flat hairline, no shadow.
+- Each section renders form(s) inside `Card` sections (CardHeader/CardTitle/CardDescription/CardContent) - flat hairline, no shadow.
 
 ## Forms
 - Use shared `<Input>`, `<Label>`, `<Button>` primitives. Native `<select>` retargeted to warm tokens (`border-input`, `ring-ring/40` focus) until a `Select` primitive exists.

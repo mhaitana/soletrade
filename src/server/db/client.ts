@@ -7,7 +7,7 @@ import type { Database } from "@/server/db/types";
  * Supabase server **data** client (migration off Drizzle). Server-only infra, sibling
  * to `src/server/storage/index.ts` (the Storage admin client) and `src/server/email`.
  *
- * Uses the **service-role** key, which bypasses RLS — exactly like the Storage client.
+ * Uses the **service-role** key, which bypasses RLS - exactly like the Storage client.
  * There are no RLS policies anywhere in this project; workspace scoping is enforced in
  * **code** (every service filters by `workspaceId` resolved from the session, never
  * from a client-supplied value). The service-role client is the pragmatic match for that
@@ -32,7 +32,7 @@ export function getDataClient(): SupabaseClient<Database> {
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) {
     throw new Error(
-      "Supabase data client is not configured — set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      "Supabase data client is not configured - set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
     );
   }
   cachedClient = createClient<Database>(url, serviceRoleKey, {

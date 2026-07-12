@@ -42,7 +42,7 @@ interface InvoiceRaw {
 interface InvoiceLineRaw {
   id: string;
   description: string;
-  /** numeric(12,2) — generated type `number`, runtime string; `Number()` coerces both. */
+  /** numeric(12,2) - generated type `number`, runtime string; `Number()` coerces both. */
   quantity: number;
   unit_price_cents: number;
   amount_cents: number;

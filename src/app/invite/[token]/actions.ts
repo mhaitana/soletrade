@@ -15,13 +15,13 @@ const tokenSchema = z.object({ token: z.string().min(1) });
 export type AcceptInvitationResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Accept a workspace invitation (Wave 4 — public `/invite?token=...`). The signed-in user
+ * Accept a workspace invitation (Wave 4 - public `/invite?token=...`). The signed-in user
  * (resolved from the session, never from client input) accepts the invitation, joins the
  * workspace, and is redirected to its dashboard with the active-workspace cookie set to the
  * joined workspace.
  *
  * Uses `getCurrentUser` (not `requireWorkspaceContext`) because a first-time invitee has no
- * workspace membership yet — `requireWorkspaceContext` would redirect them to /onboarding.
+ * workspace membership yet - `requireWorkspaceContext` would redirect them to /onboarding.
  * The platform `acceptInvitation` enforces the email-match + pending + unexpired guards.
  *
  * Rate-limited per IP (the 122-bit token makes brute-force infeasible, but the gate matches

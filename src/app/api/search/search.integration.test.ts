@@ -38,7 +38,7 @@ describe.skipIf(!HAS_DB)("searchWorkspace integration (requires DATABASE_URL)", 
     ws1 = await createWorkspace(actor, "Search Test One", `search-test-one-${Date.now()}`);
     ws2 = await createWorkspace(otherActor, "Search Test Two", `search-test-two-${Date.now()}`);
 
-    // ws1: install ONLY `books` (not invoices/quotes/drive). Used to prove the module gate —
+    // ws1: install ONLY `books` (not invoices/quotes/drive). Used to prove the module gate -
     // we'll create an invoice in ws1 anyway and confirm it doesn't surface without the module.
     await unwrapVoid(
       getDataClient()
@@ -136,7 +136,7 @@ describe.skipIf(!HAS_DB)("searchWorkspace integration (requires DATABASE_URL)", 
       },
       otherActor,
     );
-    // The number is INV-YYYY-0001 for the first ws2 invoice — search the distinctive "0001".
+    // The number is INV-YYYY-0001 for the first ws2 invoice - search the distinctive "0001".
     const groups = await searchWorkspace(ws2!, "0001");
     const invGroup = groups.find((g) => g.module === "invoices");
     expect(invGroup).toBeDefined();

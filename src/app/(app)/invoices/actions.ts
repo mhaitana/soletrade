@@ -63,7 +63,7 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
 
-  // Every invoice must be linked to an emailable customer (no walk-in) — the email is
+  // Every invoice must be linked to an emailable customer (no walk-in) - the email is
   // used to send the invoice. The picker disables no-email customers, but the server
   // enforces it too (defense-in-depth + covers API/convert paths).
   const customer = await getCustomer(
@@ -73,7 +73,7 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
   if (!customer || !customer.email) {
     return {
       ok: false,
-      error: "Selected customer has no email — add one in Customers before sending.",
+      error: "Selected customer has no email - add one in Customers before sending.",
       fieldErrors: { customerId: ["This customer has no email on file."] },
     };
   }
@@ -142,7 +142,7 @@ export async function updateInvoiceAction(input: unknown): Promise<UpdateInvoice
   if (!customer || !customer.email) {
     return {
       ok: false,
-      error: "Selected customer has no email — add one in Customers before sending.",
+      error: "Selected customer has no email - add one in Customers before sending.",
       fieldErrors: { customerId: ["This customer has no email on file."] },
     };
   }

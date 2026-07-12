@@ -20,7 +20,7 @@ import { createCustomerAction } from "./actions";
 /**
  * Inline customer-creation dialog used by the invoice + quote forms so a user can
  * add a customer without navigating to /customers/new. Collects only name + email
- * (both required) — the minimum needed to send an invoice/quote. The full field set
+ * (both required) - the minimum needed to send an invoice/quote. The full field set
  * (phone/company/notes) is still editable later from /customers/[id].
  *
  * `onCreated` receives the new customer so the parent form can append it to its
@@ -66,7 +66,7 @@ export function CustomerCreateDialog({
       return;
     }
     if (!trimmedEmail) {
-      setError("Email is required — needed to send the invoice/quote.");
+      setError("Email is required - needed to send the invoice/quote.");
       return;
     }
 
@@ -107,7 +107,7 @@ export function CustomerCreateDialog({
         <DialogHeader>
           <DialogTitle>Add customer</DialogTitle>
           <DialogDescription>
-            Create a new customer for this document. Name and email are required — the email is used
+            Create a new customer for this document. Name and email are required - the email is used
             to send the invoice or quote.
           </DialogDescription>
         </DialogHeader>

@@ -7,7 +7,7 @@ const COLS: readonly CsvColumn[] = [
   { key: "note", header: "Note" },
 ];
 
-describe("shared csv — toCsv", () => {
+describe("shared csv - toCsv", () => {
   it("emits a header row from columns even when there are no data rows", () => {
     expect(toCsv([], COLS)).toBe("Name,Amount,Note");
   });

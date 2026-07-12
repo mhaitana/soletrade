@@ -6,7 +6,7 @@ import { formatDelta, type Delta } from "@/shared/utils/delta";
 import type { KpiCardData } from "./actions";
 
 /**
- * Headline KPI card for the cross-module dashboard (Phase 9). Server component — no client JS.
+ * Headline KPI card for the cross-module dashboard (Phase 9). Server component - no client JS.
  *
  * Renders the metric label + value (`tabular-nums` on the figure per the brief's money rule) and,
  * when the metric is period-bound, a delta badge vs the previous period. The delta is **never
@@ -35,7 +35,7 @@ const DELTA_COLOR = {
 
 function DeltaBadge({ delta, periodNoun }: { delta: Delta; periodNoun: string }) {
   const Icon = DELTA_ICON[delta.kind];
-  if (!Icon) return null; // `none` — both periods zero, no badge.
+  if (!Icon) return null; // `none` - both periods zero, no badge.
   const text = formatDelta(delta, periodNoun);
   if (!text) return null;
   return (
@@ -57,7 +57,7 @@ export function KpiCard({
   periodNoun,
 }: {
   kpi: KpiCardData;
-  /** "last month" / "last quarter" / "last year" — the delta badge noun. */
+  /** "last month" / "last quarter" / "last year" - the delta badge noun. */
   periodNoun: string;
 }) {
   const empty = kpi.value === null;
@@ -67,7 +67,7 @@ export function KpiCard({
         <p className="text-sm font-medium text-muted-foreground">{kpi.label}</p>
         {empty ? (
           <div className="space-y-1">
-            <p className="text-2xl font-semibold tracking-tight text-muted-foreground">—</p>
+            <p className="text-2xl font-semibold tracking-tight text-muted-foreground">-</p>
             <Link
               href={kpi.href}
               className="inline-block text-xs font-medium text-brand-blue hover:underline"

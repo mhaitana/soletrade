@@ -104,7 +104,7 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
     const { id } = await createSentInvoice();
     const evt = captured.find((e) => e.type === "InvoiceSent" && e.invoiceId === id);
     expect(evt).toBeDefined();
-    // The notifications platform renders an email from this metadata — it needs the public
+    // The notifications platform renders an email from this metadata - it needs the public
     // token (link), customer email (recipient), and the amount/number for the body.
     expect(evt?.metadata?.publicToken).toMatch(/.+/);
     expect(evt?.metadata?.customerEmail).toBe("globex@soletrade-test.local");
@@ -123,6 +123,8 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
     expect(view).not.toHaveProperty("id");
     expect(view).not.toHaveProperty("publicToken");
     expect(view!.customerName).toBe("Globex Corp");
+    // The issuing business (workspace) name is the dominant brand on the public page.
+    expect(view!.merchantName).toBe("Pub Test");
     expect(view!.lineItems).toHaveLength(1);
     expect(view!.totalCents).toBe(11000); // 10000 + 10% tax
     expect(view!.stripeChargeId).toBeNull();
@@ -133,7 +135,7 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
     const first = await markInvoiceViewed(token);
     expect(first).toBe(true);
     const second = await markInvoiceViewed(token);
-    expect(second).toBe(false); // already viewed — no-op, no duplicate event
+    expect(second).toBe(false); // already viewed - no-op, no duplicate event
     const inv = await getInvoice(ws!, id);
     expect(inv!.status).toBe("viewed");
     expect(captured.filter((e) => e.type === "InvoiceViewed" && e.invoiceId === id)).toHaveLength(

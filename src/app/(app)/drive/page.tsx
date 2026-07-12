@@ -289,7 +289,7 @@ export default async function DrivePage({
                         {label}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{t.purpose ?? "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{t.purpose ?? "-"}</td>
                     <td className="px-4 py-3 text-right font-medium tabular-nums text-foreground">
                       {formatKm(t.distanceMeters)}
                     </td>

@@ -1,26 +1,29 @@
 import Link from "next/link";
 import { Button } from "@/shared/ui/button";
 import { ArrowRight, FileText, BookOpen, Car, Receipt } from "lucide-react";
+import { brand } from "@/config/brand";
 
 const modules = [
-  { name: "soletrade Invoices", desc: "Fast business billing for freelancers.", icon: Receipt },
-  { name: "soletrade Books", desc: "Lightweight cash-book ledger for sole traders.", icon: BookOpen },
-  { name: "soletrade Drive", desc: "Gig delivery earnings and mileage dashboard.", icon: Car },
-  { name: "soletrade Quotes", desc: "Fast proposal and contract builder.", icon: FileText },
+  { name: "Invoices", desc: "Fast business billing for freelancers.", icon: Receipt },
+  { name: "Books", desc: "Lightweight cash-book ledger for sole traders.", icon: BookOpen },
+  { name: "Drive", desc: "Gig delivery earnings and mileage dashboard.", icon: Car },
+  { name: "Quotes", desc: "Fast proposal and contract builder.", icon: FileText },
 ];
 
 export default function MarketingPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-20 md:px-8 md:py-32">
       <section className="flex flex-col items-center text-center">
-        <p className="text-sm font-medium text-brand-blue">The business operating system</p>
+        <p className="text-sm font-medium text-brand-blue">{brand.productName}</p>
         <h1 className="mt-4 max-w-2xl text-balance text-4xl font-semibold tracking-tight md:text-5xl">
-          One workspace for invoices, books, quotes, and gig earnings.
+          {brand.tagline}
         </h1>
         <p className="mt-5 max-w-xl text-balance text-muted-foreground">
-          soletrade OS is a modular, mobile-first platform for solo traders, freelancers, and gig
-          operators. Enable the modules you need — share customers, files, and billing across all of
-          them.
+          Create invoices, send quotes, track expenses, manage receipts, log mileage, and understand
+          your earnings from one simple workspace.
+        </p>
+        <p className="mt-3 max-w-xl text-balance text-sm text-muted-foreground">
+          {brand.shortDescription}
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Button asChild size="lg">

@@ -28,7 +28,7 @@ type ModuleLoader = typeof Module & {
 // Stub `server-only` before any server module is imported. `server-only` is a Next-bundler
 // guard that throws under plain Node (tsx uses the `default` export condition; only Next's
 // server build applies `react-server`, which maps it to an empty module). We redirect it to an
-// empty CJS stub — see `scripts/stubs/server-only.js` for why we don't use `--conditions
+// empty CJS stub - see `scripts/stubs/server-only.js` for why we don't use `--conditions
 // react-server` (it routes `react` to its RSC build and breaks lucide-react).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverOnlyStub = path.resolve(__dirname, "stubs/server-only.js");

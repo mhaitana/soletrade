@@ -1,11 +1,12 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { brand } from "@/config/brand";
 
 /**
  * Quote PDF document (Wave 4). Mirrors the public quote page (brand + number + customer + line
  * items + sections + totals + terms). The stored quote row already carries computed totals.
  *
  * Boundary: local prop interfaces (structurally compatible with the quotes module's
- * `QuoteWithItems`) — no `@/modules/*` import. See `invoice-document.tsx` for the rationale.
+ * `QuoteWithItems`) - no `@/modules/*` import. See `invoice-document.tsx` for the rationale.
  */
 
 export interface QuotePdfLineItem {
@@ -47,7 +48,7 @@ function money(cents: number, currency: string): string {
 }
 
 function fmtDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -101,13 +102,13 @@ export function QuoteDocument({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>soletrade labs</Text>
+        <Text style={styles.brand}>{brand.productName.toLowerCase()}</Text>
         <View style={styles.row}>
           <Text style={styles.label}>From</Text>
           <Text style={styles.label}>Quote</Text>
         </View>
         <View style={styles.row}>
-          <Text>{workspaceName ?? "soletrade labs"}</Text>
+          <Text>{workspaceName ?? brand.productName}</Text>
           <Text style={styles.bold}>{quote.number}</Text>
         </View>
         <View style={styles.row}>

@@ -27,7 +27,7 @@ import {
 
 /**
  * Global search composition root (Wave 3). Lives in the app layer (not `src/platform/*`)
- * because it wires the customer/files platform services to the four module services —
+ * because it wires the customer/files platform services to the four module services -
  * `platform/*` MUST NOT import `modules/*` (the bulletproof-react boundary), and a
  * composition root that fans out across modules is exactly the app-layer concern the
  * dashboard loader (`src/app/(app)/dashboard/actions.ts`) already embodies.
@@ -35,11 +35,11 @@ import {
  * Fans out across customers + every installed module's list function (each already supports
  * `{ search }`), tags each row with a label/sublabel/href, and groups results by module.
  * Search is read-only + module-gated (not role-gated): a viewer sees the same results a
- * manager does — no `authorizeOrAudit` calls here. Each list function is already
+ * manager does - no `authorizeOrAudit` calls here. Each list function is already
  * workspace-scoped + IDOR-safe, so cross-workspace leakage is impossible at the source.
  *
  * The leading-wildcard ILIKE each list function runs is index-backed by `pg_trgm` gin indexes
- * (migration 0017) — without them every search is a seq scan. The `< 2` char guard avoids
+ * (migration 0017) - without them every search is a seq scan. The `< 2` char guard avoids
  * 1-char seq scans (a single character matches most rows and isn't useful).
  */
 
@@ -90,7 +90,7 @@ function transactionResult(t: TransactionRow): SearchResult {
     id: t.id,
     label: t.description,
     sublabel: `${sign}${formatCents(t.amountCents, t.currency)}`,
-    // Books has no per-transaction detail route (Wave 3) — deep-link to the list for now.
+    // Books has no per-transaction detail route (Wave 3) - deep-link to the list for now.
     href: `/books`,
   };
 }
@@ -138,11 +138,11 @@ function fileResult(f: FileRecord): SearchResult {
 
 /**
  * Search the workspace across customers + every installed module. Returns groups in
- * canonical order, dropping empty ones. `query` < 2 chars (after trim) returns `[]` —
+ * canonical order, dropping empty ones. `query` < 2 chars (after trim) returns `[]` -
  * the server-side guard matches the client's min-2-char fetch trigger.
  *
  * The caller resolves `workspaceId` from the session (`tryWorkspaceContext`/`requireWorkspaceContext`)
- * — it is never client-provided.
+ * - it is never client-provided.
  */
 export async function searchWorkspace(
   workspaceId: WorkspaceId,

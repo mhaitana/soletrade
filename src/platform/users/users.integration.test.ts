@@ -33,7 +33,7 @@ describe.skipIf(!HAS_DB)("users mirror integration (requires DATABASE_URL)", () 
     expect(row?.fullName).toBe("Mirror Test");
   });
 
-  it("upserts on a second call — updates email + name without duplicating", async () => {
+  it("upserts on a second call - updates email + name without duplicating", async () => {
     await ensureUserMirror({ id: actor, email: secondEmail, fullName: "Mirror Updated" });
     const supabase = getDataClient();
     const rows = await unwrap(supabase.from("users").select("id").eq("id", actor));
@@ -44,7 +44,7 @@ describe.skipIf(!HAS_DB)("users mirror integration (requires DATABASE_URL)", () 
   });
 
   it("preserves an existing full_name when the update omits it", async () => {
-    // Defensive call (as createWorkspaceAction makes) — no fullName supplied.
+    // Defensive call (as createWorkspaceAction makes) - no fullName supplied.
     await ensureUserMirror({ id: actor, email: secondEmail });
     const row = await getUser(actor);
     expect(row?.fullName).toBe("Mirror Updated");

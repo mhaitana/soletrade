@@ -23,14 +23,14 @@ import {
  *   DATABASE_URL="postgresql://..." pnpm test:ci
  *
  * Focus: CRUD + IDOR. Every service function filters `workspaceId = ? AND userId =
- * ?` — these tests prove a member can't read or mutate another member's chats
+ * ?` - these tests prove a member can't read or mutate another member's chats
  * (cross-user AND cross-workspace), and that deleting a conversation cascades its
  * messages. The tests create their own users + workspaces and clean up in afterAll.
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!HAS_DB)("ai conversations integration (requires DATABASE_URL)", () => {
-  // Distinct UUIDs from every other integration test file (they hardcode user ids too) —
+  // Distinct UUIDs from every other integration test file (they hardcode user ids too) -
   // the `c3`/`c4` suffix avoids the `c1`/`c2` collision with cancellation.integration.test.ts
   // that surfaced as a flaky users_pkey race when the two files ran concurrently.
   const actor = branded<"UserId">("00000000-0000-4000-8000-0000000000c3");
@@ -88,7 +88,7 @@ describe.skipIf(!HAS_DB)("ai conversations integration (requires DATABASE_URL)",
     expect(await getConversation(ws1!, actor, missing)).toBeNull();
   });
 
-  it("isolates conversations across users (no IDOR) — list + get", async () => {
+  it("isolates conversations across users (no IDOR) - list + get", async () => {
     const id = await createConversation(ws1!, actor, "Private actor chat");
     createdConversationIds.push(id);
     await appendMessage(ws1!, actor, id, { role: "user", content: "secret" });

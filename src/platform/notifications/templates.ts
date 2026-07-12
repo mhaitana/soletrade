@@ -1,10 +1,10 @@
 /**
- * Invoice email templates (Phase 5c). Pure functions — no `server-only`, no DB, no I/O — so
+ * Invoice email templates (Phase 5c). Pure functions - no `server-only`, no DB, no I/O - so
  * they're unit-testable in isolation (mirrors `@/modules/invoices/totals` purity). Each takes
  * the `InvoiceEmailMeta` payload the invoices module publishes on the event bus + the public
  * app URL, and returns `{ subject, html, text }`.
  *
- * **Standalone HTML** — not React-rendered — because emails render in a mail client, not the
+ * **Standalone HTML** - not React-rendered - because emails render in a mail client, not the
  * browser. Styles are inlined (many clients strip `<style>` tags). The visual language mirrors
  * the public `/i/[token]` page (brand wordmark, amount hero, emerald-for-paid / red-for-overdue
  * accents) but the template is maintained separately and can drift over time (documented
@@ -13,13 +13,14 @@
  * The `customerEmail` null case is handled by the **handlers** in `index.ts` (no email → no
  * send); templates always render, so they don't branch on it.
  *
- * `customerId` (Phase 6c) is carried by the metadata but ignored by the email templates — it's
+ * `customerId` (Phase 6c) is carried by the metadata but ignored by the email templates - it's
  * there so cross-module subscribers (e.g. the Books `InvoicePaid` income recorder) can link
  * without importing the invoices module. Kept in this type because `InvoiceEmailMeta` is the
  * documented "payload the invoices module publishes on the event bus".
  */
 
 import { branded, type CustomerId } from "@/shared/types/ids";
+import { brand } from "@/config/brand";
 
 export type InvoiceEmailMeta = {
   number: string;
@@ -41,7 +42,7 @@ export interface RenderedEmail {
 /**
  * Coerce a raw event-bus metadata record into a typed `InvoiceEmailMeta`, validating the
  * shape defensively (the event bus types metadata as `Record<string, unknown>`). Returns null
- * if the record is missing or has no `publicToken` — the caller treats that as a no-op (no
+ * if the record is missing or has no `publicToken` - the caller treats that as a no-op (no
  * email). Used by the notification handlers so they never need an `as` cast on the bus payload.
  */
 export function coerceInvoiceEmailMeta(
@@ -68,7 +69,7 @@ function money(cents: number, currency: string): string {
 }
 
 function formatDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -77,7 +78,7 @@ export function invoiceLink(publicToken: string, appUrl: string): string {
   return `${appUrl.replace(/\/$/, "")}/i/${publicToken}`;
 }
 
-/** Shared HTML wrapper — brand wordmark + content card + footer. */
+/** Shared HTML wrapper - brand wordmark + content card + footer. */
 function emailHtml(opts: {
   accent: string; // hex
   heading: string;
@@ -95,7 +96,7 @@ function emailHtml(opts: {
     <tr><td align="center">
       <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
         <tr><td style="padding:20px 24px;border-bottom:1px solid #e2e8f0;">
-          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:-0.01em;">soletrade labs</span>
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:-0.01em;">${brand.productName.toLowerCase()}</span>
         </td></tr>
         <tr><td style="padding:28px 24px;">
           ${opts.preheading ? `<p style="margin:0 0 4px;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;">${opts.preheading}</p>` : ""}
@@ -104,18 +105,18 @@ function emailHtml(opts: {
           ${button ? `<div style="margin-top:24px;">${button}</div>` : ""}
         </td></tr>
       </table>
-      <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">This is a transactional email from soletrade labs. If you did not expect it, you can ignore it.</p>
+      <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">${brand.productName}. If you did not expect this email, you can ignore it.</p>
     </td></tr>
   </table>
 </body></html>`;
 }
 
-/** "You have a new invoice" — sent on `InvoiceSent`. */
+/** "You have a new invoice" - sent on `InvoiceSent`. */
 export function invoiceSentEmail(m: InvoiceEmailMeta, appUrl: string): RenderedEmail {
   const link = invoiceLink(m.publicToken, appUrl);
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
   const due = m.dueDate ? ` due ${formatDate(m.dueDate)}` : "";
-  const subject = `Invoice ${m.number} from soletrade labs`;
+  const subject = `Invoice ${m.number}`;
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
     <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Amount due${due}</p>
@@ -142,7 +143,7 @@ export function invoiceSentEmail(m: InvoiceEmailMeta, appUrl: string): RenderedE
   return { subject, html, text };
 }
 
-/** "Your invoice is overdue" — sent on `InvoiceOverdue`. */
+/** "Your invoice is overdue" - sent on `InvoiceOverdue`. */
 export function invoiceOverdueEmail(m: InvoiceEmailMeta, appUrl: string): RenderedEmail {
   const link = invoiceLink(m.publicToken, appUrl);
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
@@ -173,7 +174,7 @@ export function invoiceOverdueEmail(m: InvoiceEmailMeta, appUrl: string): Render
   return { subject, html, text };
 }
 
-/** "Payment receipt" — sent on `InvoicePaid` (Stripe or manual source). */
+/** "Payment receipt" - sent on `InvoicePaid` (Stripe or manual source). */
 export function invoicePaidEmail(
   m: InvoiceEmailMeta & { source: "stripe" | "manual" },
   appUrl: string,
@@ -185,7 +186,7 @@ export function invoicePaidEmail(
     <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
     <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Payment received</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Thanks — we've received your payment for invoice ${m.number}. You can view the receipt online anytime.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Thanks - we've received your payment for invoice ${m.number}. You can view the receipt online anytime.</p>`;
   const html = emailHtml({
     accent: "#059669",
     preheading: `Receipt · Invoice ${m.number}`,
@@ -210,9 +211,9 @@ export function invoicePaidEmail(
 // ─────────────────────────────────────────────────────────────────────────────
 // Quote email templates (Phase 8). Same purity + standalone-HTML contract as the
 // invoice templates above. Two meta shapes:
-//  - `QuoteEmailMeta` — the customer-facing payload on `QuoteSent` (needs publicToken).
-//  - `QuoteMerchantMeta` — the merchant-notification payload on `QuoteAccepted` /
-//    `QuoteDeclined` (no publicToken — the merchant clicks through to the app, not the
+//  - `QuoteEmailMeta` - the customer-facing payload on `QuoteSent` (needs publicToken).
+//  - `QuoteMerchantMeta` - the merchant-notification payload on `QuoteAccepted` /
+//    `QuoteDeclined` (no publicToken - the merchant clicks through to the app, not the
 //    public page; informational, no button).
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -284,12 +285,12 @@ export function quoteLink(publicToken: string, appUrl: string): string {
   return `${appUrl.replace(/\/$/, "")}/q/${publicToken}`;
 }
 
-/** "You have a new quote" — sent to the customer on `QuoteSent`. */
+/** "You have a new quote" - sent to the customer on `QuoteSent`. */
 export function quoteSentEmail(m: QuoteEmailMeta, appUrl: string): RenderedEmail {
   const link = quoteLink(m.publicToken, appUrl);
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
-  const valid = m.validUntil ? ` — valid until ${formatDate(m.validUntil)}` : "";
-  const subject = `Quote ${m.number} from soletrade labs`;
+  const valid = m.validUntil ? ` - valid until ${formatDate(m.validUntil)}` : "";
+  const subject = `Quote ${m.number}`;
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
     <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Quote amount${valid}</p>
@@ -316,7 +317,7 @@ export function quoteSentEmail(m: QuoteEmailMeta, appUrl: string): RenderedEmail
   return { subject, html, text };
 }
 
-/** "A quote was accepted" — sent to workspace members on `QuoteAccepted`. Informational, no button. */
+/** "A quote was accepted" - sent to workspace members on `QuoteAccepted`. Informational, no button. */
 export function quoteAcceptedEmail(m: QuoteMerchantMeta): RenderedEmail {
   const customer = m.customerName ? ` from ${m.customerName}` : "";
   const subject = `Quote ${m.number} accepted`;
@@ -324,7 +325,7 @@ export function quoteAcceptedEmail(m: QuoteMerchantMeta): RenderedEmail {
     <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A quote you sent has been accepted.</p>
     <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Accepted quote${customer}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Quote ${m.number}${customer} was accepted by the customer. Convert it to an invoice in soletrade labs when you're ready to bill.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Quote ${m.number}${customer} was accepted by the customer. Convert it to an invoice in ${brand.productName} when you're ready to bill.</p>`;
   const html = emailHtml({
     accent: "#059669",
     preheading: `Accepted · Quote ${m.number}`,
@@ -337,14 +338,14 @@ export function quoteAcceptedEmail(m: QuoteMerchantMeta): RenderedEmail {
   const text = [
     `A quote you sent has been accepted.`,
     ``,
-    `Quote ${m.number}${customer} — ${money(m.totalCents, m.currency)}`,
+    `Quote ${m.number}${customer} - ${money(m.totalCents, m.currency)}`,
     ``,
-    `Convert it to an invoice in soletrade labs when you're ready to bill.`,
+    `Convert it to an invoice in ${brand.productName} when you're ready to bill.`,
   ].join("\n");
   return { subject, html, text };
 }
 
-/** "A quote was declined" — sent to workspace members on `QuoteDeclined`. Informational, no button. */
+/** "A quote was declined" - sent to workspace members on `QuoteDeclined`. Informational, no button. */
 export function quoteDeclinedEmail(m: QuoteMerchantMeta): RenderedEmail {
   const customer = m.customerName ? ` from ${m.customerName}` : "";
   const subject = `Quote ${m.number} declined`;
@@ -365,7 +366,7 @@ export function quoteDeclinedEmail(m: QuoteMerchantMeta): RenderedEmail {
   const text = [
     `A quote you sent was declined.`,
     ``,
-    `Quote ${m.number}${customer} — ${money(m.totalCents, m.currency)}`,
+    `Quote ${m.number}${customer} - ${money(m.totalCents, m.currency)}`,
     ``,
     `You may want to follow up or issue a revised quote.`,
   ].join("\n");
@@ -410,13 +411,13 @@ export function inviteLink(token: string, appUrl: string): string {
   return `${appUrl.replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
 }
 
-/** "You're invited to join {workspace}" — sent to the invitee on `MemberInvited`. */
+/** "You're invited to join {workspace}" - sent to the invitee on `MemberInvited`. */
 export function memberInvitedEmail(m: MemberInvitedEmailMeta, appUrl: string): RenderedEmail {
   const link = inviteLink(m.token, appUrl);
   const inviter = m.inviterName
     ? `${m.inviterName} invited you to join`
     : "You've been invited to join";
-  const subject = `${inviter} ${m.workspaceName} on soletrade labs`;
+  const subject = `You've been invited to join ${m.workspaceName}`;
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">Hi,</p>
     <p style="margin:0 0 8px;font-size:13px;color:#64748b;">${inviter}</p>
@@ -434,7 +435,7 @@ export function memberInvitedEmail(m: MemberInvitedEmailMeta, appUrl: string): R
   const text = [
     `Hi,`,
     ``,
-    `${inviter} ${m.workspaceName} on soletrade labs.`,
+    `${inviter} ${m.workspaceName}.`,
     `You've been invited as ${roleLabel(m.role)}.`,
     ``,
     `Accept and create your account:`,
@@ -447,7 +448,7 @@ export function memberInvitedEmail(m: MemberInvitedEmailMeta, appUrl: string): R
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Refund issued email (Wave 4). Sent to workspace members on `RefundIssued` (money
-// movement the merchant should see). The bus metadata is loose — `refundCredit`
+// movement the merchant should see). The bus metadata is loose - `refundCredit`
 // carries `{amountCents, currency?, reason, moduleKey}`, the module-cancel card-refund
 // path carries `{method:"card", amountCents, moduleKey, stripeRefundId}`. Coercion
 // requires only `amountCents`; everything else is optional.
@@ -475,10 +476,10 @@ export function coerceRefundMeta(record: Record<string, unknown> | undefined): R
   };
 }
 
-/** "A refund was issued" — sent to workspace members on `RefundIssued`. Informational, no button. */
+/** "A refund was issued" - sent to workspace members on `RefundIssued`. Informational, no button. */
 export function refundIssuedEmail(m: RefundMeta): RenderedEmail {
   const modulePart = m.moduleKey ? ` for ${m.moduleKey}` : "";
-  const reason = m.reason ? ` — ${m.reason}` : "";
+  const reason = m.reason ? ` - ${m.reason}` : "";
   const subject = `Refund issued${modulePart}`;
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A refund was issued from your workspace.</p>

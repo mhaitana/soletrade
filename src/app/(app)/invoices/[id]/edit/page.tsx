@@ -47,7 +47,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
           <span className="font-mono text-base text-muted-foreground">{data.invoice.number}</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Save before sending — sent invoices are locked.
+          Save before sending - sent invoices are locked.
         </p>
       </div>
       <InvoiceForm mode="edit" invoice={data.invoice} customers={data.customers} />

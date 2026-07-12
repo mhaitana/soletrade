@@ -7,14 +7,14 @@ import { createFileRecord, getFile, listFiles, listFilesByIds } from "./index";
 /**
  * Integration tests for the files platform DB side against a real Postgres.
  * Storage URL minting (`createSignedUploadUrl`/`createSignedReadUrl`) hits
- * Supabase Storage and is not exercised here — it's verified in deployment.
+ * Supabase Storage and is not exercised here - it's verified in deployment.
  *
  * Run ONLY when DATABASE_URL is set; otherwise `pnpm test:ci` skips this file:
  *
  *   DATABASE_URL="postgresql://..." pnpm test:ci
  *
  * UUID suffixes `...0000e1`/`...0000e2` are unique to this file (grep before
- * adding a new integration test — a failed beforeAll leaves orphaned rows; run
+ * adding a new integration test - a failed beforeAll leaves orphaned rows; run
  * `pnpm db:reset` to recover).
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
@@ -22,7 +22,7 @@ const HAS_DB = Boolean(process.env.DATABASE_URL);
 describe.skipIf(!HAS_DB)("files platform integration (requires DATABASE_URL)", () => {
   const actor = branded<"UserId">("00000000-0000-4000-8000-0000000000e1");
   const otherActor = branded<"UserId">("00000000-0000-4000-8000-0000000000e2");
-  // A synthetic entity id (UUID — the `files.entity_id` column is uuid; all real
+  // A synthetic entity id (UUID - the `files.entity_id` column is uuid; all real
   // entity ids in this system are branded UUIDs).
   const txnEntityId = "00000000-0000-4000-8000-0000000000e4";
   let ws1: WorkspaceId;
@@ -103,7 +103,7 @@ describe.skipIf(!HAS_DB)("files platform integration (requires DATABASE_URL)", (
     expect(items[0]?.fileName).toBe("receipt.pdf");
   });
 
-  it("getFile is workspace-scoped (IDOR-safe — cross-workspace id returns null)", async () => {
+  it("getFile is workspace-scoped (IDOR-safe - cross-workspace id returns null)", async () => {
     const [ws1File] = (await listFiles(ws1!, { limit: 100 })).items;
     expect(ws1File).toBeDefined();
     // Correct workspace → row.

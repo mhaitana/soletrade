@@ -1,8 +1,8 @@
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 
 /**
- * Pricing engine (brief §10 — anchor app + add-on stack discount). Pure: no
- * `server-only`, no DB, no I/O — safe to unit-test and to import from client
+ * Pricing engine (brief §10 - anchor app + add-on stack discount). Pure: no
+ * `server-only`, no DB, no I/O - safe to unit-test and to import from client
  * components (the public /pricing page does exactly that). All money is integer
  * cents to avoid floating-point drift; the catalog is the single source of truth
  * for prices and is trivially editable.
@@ -14,11 +14,11 @@ import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
  *     **add-on** price (standalone − flat $2.50/mo, or − $22.50/yr = $2.50 × 9).
  *   - Two billing intervals: monthly and annual (annual = 9× monthly, 3 months free).
  *
- * The engine is pure arithmetic — it does not decide policy (whether a workspace may
+ * The engine is pure arithmetic - it does not decide policy (whether a workspace may
  * add a module is gated by the billing/subscription state in the lifecycle service).
  */
 
-/** Billing interval (brief §10.1 — monthly and annual). Annual = 9 paid months. */
+/** Billing interval (brief §10.1 - monthly and annual). Annual = 9 paid months. */
 export type Interval = "monthly" | "annual";
 
 /** A module's role in a workspace's billing for the current cycle. */
@@ -70,7 +70,7 @@ export const PRICING_CATALOG = {
 export interface ModulePriceBreakdown {
   key: ModuleKey;
   role: Role;
-  /** The standalone price for this module at the interval — what it would cost as anchor. */
+  /** The standalone price for this module at the interval - what it would cost as anchor. */
   grossCents: number;
   /** The stack discount applied (standalone − addon). 0 for the anchor. */
   discountCents: number;
@@ -114,7 +114,7 @@ export function selectAnchor(moduleKeys: readonly ModuleKey[]): ModuleKey | null
 /**
  * Price a workspace's active modules for the given interval. The anchor (highest
  * standalone) is charged its standalone price; every other module is charged its
- * add-on price. Pure — does not touch Stripe or the DB.
+ * add-on price. Pure - does not touch Stripe or the DB.
  */
 export function priceSubscription(
   moduleKeys: readonly ModuleKey[],
@@ -159,7 +159,7 @@ export function formatCents(cents: number, currency: string = PRICING_CATALOG.cu
 
 /**
  * Billing period length in milliseconds (brief §10). Monthly is approximated as 30 days
- * and annual as 365 days — a deliberate approximation so proration is deterministic and
+ * and annual as 365 days - a deliberate approximation so proration is deterministic and
  * avoids calendar-month length / DST edge cases. The refund is off by at most ~one day's
  * worth of value (<4% of one day), which is acceptable for a credit-ledger true-up.
  */
@@ -189,12 +189,12 @@ export function currentBillingPeriod(
 
 /**
  * Pro-rated refund in cents for a module billed at `netCents` over the current billing
- * period, cancelled at `now` (brief §10.2 — 4c cancellation engine). Returns 0 when there
+ * period, cancelled at `now` (brief §10.2 - 4c cancellation engine). Returns 0 when there
  * is nothing to refund: no anchor date, non-positive net, or the period has elapsed
  * (`now >= end`). The fraction is clamped to [0, 1] so a `now` before the period start
  * refunds the full net (defensive), and a `now` after the end refunds nothing.
  *
- * Pure — safe to unit-test and to import from the server reconcile path.
+ * Pure - safe to unit-test and to import from the server reconcile path.
  */
 export function prorateRefundCents(
   netCents: number,
@@ -219,7 +219,7 @@ export function prorateRefundCents(
  * `prorateRefundCents`. Returns 0 when the module isn't in the active set or the billing
  * state is missing (no anchor).
  *
- * Single source of truth for "what refund does cancelling this module produce" — used by
+ * Single source of truth for "what refund does cancelling this module produce" - used by
  * the single-module cancel path and (per-module) the whole-subscription cancel path.
  */
 export function moduleRefundCents(
@@ -237,7 +237,7 @@ export function moduleRefundCents(
 
 /**
  * Pro-rated charge in cents for adding a module billed at `netCents` mid-cycle at
- * `now` (brief §10.5 — immediate proration charge). Mirrors `prorateRefundCents`:
+ * `now` (brief §10.5 - immediate proration charge). Mirrors `prorateRefundCents`:
  * charges for the *remaining* fraction of the current billing period
  * (`netCents × remainingMs / periodMs`). Returns 0 when there is nothing to charge
  * (no anchor date, non-positive net, or the period has elapsed). The fraction is

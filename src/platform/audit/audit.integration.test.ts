@@ -12,7 +12,7 @@ import { listAudit, writeAudit } from "@/platform/audit";
  *   DATABASE_URL="postgresql://..." pnpm test:ci
  *
  * UUID suffixes `...0000d1`/`...0000d2` are unique to this file (grep before
- * adding a new integration test — a failed beforeAll leaves orphaned rows; run
+ * adding a new integration test - a failed beforeAll leaves orphaned rows; run
  * `pnpm db:reset` to recover).
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);

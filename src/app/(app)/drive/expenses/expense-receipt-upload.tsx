@@ -17,7 +17,7 @@ import type { FileId } from "@/shared/types/ids";
  * Optional. On edit, an existing `receiptFileId` renders as a "View receipt" link plus a
  * Remove button.
  */
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches the upload-url route cap.
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB - matches the upload-url route cap.
 
 interface PendingUpload {
   fileId: FileId;

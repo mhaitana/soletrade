@@ -12,12 +12,12 @@ import { createTripAction } from "./actions";
 /**
  * Swipe-to-log quick trip (Wave 2). A small card with a platform + distance input and a
  * swipeable "track" the user drags right; releasing past 80px confirms a quick trip via
- * `createTripAction`. Native pointer events + CSS `transform: translateX(...)` — no gesture
+ * `createTripAction`. Native pointer events + CSS `transform: translateX(...)` - no gesture
  * library. A "Quick log" button is the accessible fallback (pointer/touch swipe is an
  * enhancement; the button always works and is keyboard-reachable).
  *
  * Defaults: first platform in the catalog; 5 km distance (the workspace's settings don't yet
- * store a default platform/distance — only the mileage rate + default vehicle — so we use
+ * store a default platform/distance - only the mileage rate + default vehicle - so we use
  * sensible built-in defaults the user can override inline before swiping).
  */
 const SWIPE_THRESHOLD = 80;

@@ -8,10 +8,10 @@ import { UPLOAD_ACCEPT, isAllowedUploadMime } from "@/shared/constants/file-uplo
 /**
  * Standalone upload control for the `/files` page (Phase 11b). Mint a signed
  * upload URL, PUT the bytes straight to Storage, then refresh the list. Files
- * uploaded here are "unlinked" (no entity) — receipts attached to a transaction
+ * uploaded here are "unlinked" (no entity) - receipts attached to a transaction
  * are uploaded from the Books form with `entityType: "book_transaction"`.
  */
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches the upload-url route cap.
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB - matches the upload-url route cap.
 
 export function UploadButton() {
   const router = useRouter();

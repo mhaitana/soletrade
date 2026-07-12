@@ -14,7 +14,7 @@ import type { Period } from "@/shared/utils/periods";
 
 /**
  * Drive summary header + per-platform bar chart + deduction/profit card + monthly and weekly
- * sparklines (Phase 7, extended in Wave 2). Server component — pure SVG, no client JS.
+ * sparklines (Phase 7, extended in Wave 2). Server component - pure SVG, no client JS.
  *
  * Wave 2 additions:
  * - The per-platform breakdown table is replaced by the shared `<BarChart>` (categorical bars).
@@ -46,7 +46,7 @@ export function DriveSummary({
   const empty = summary.earningsCount === 0 && summary.tripsCount === 0;
 
   return (
-    <section className="space-y-4" aria-label={`Drive summary — ${PERIOD_LABEL[period]}`}>
+    <section className="space-y-4" aria-label={`Drive summary - ${PERIOD_LABEL[period]}`}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
           label="Earnings"
@@ -114,7 +114,7 @@ function DeductionProfitCard({
               detail={`${formatKm(summary.totalDistanceMeters)} × ${
                 summary.mileageDeductionCents > 0
                   ? `${(summary.totalDistanceMeters / 1000).toFixed(0)} km`
-                  : "—"
+                  : "-"
               }`}
               value={formatCents(summary.mileageDeductionCents, currency)}
             />

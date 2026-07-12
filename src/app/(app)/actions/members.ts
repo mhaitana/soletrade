@@ -139,7 +139,7 @@ export async function revokeInvitationAction(input: unknown): Promise<RevokeInvi
   }
 }
 
-/** Resend a pending invitation (Wave 4) — bumps expiry + re-publishes MemberInvited (re-sends
+/** Resend a pending invitation (Wave 4) - bumps expiry + re-publishes MemberInvited (re-sends
  *  the email). Gated `manage:member`. */
 export async function resendInvitationAction(input: unknown): Promise<ResendInvitationResult> {
   const parsed = invitationIdSchema.safeParse(input);
@@ -175,9 +175,9 @@ export type MembersPageData = {
   }[];
   canInvite: boolean;
   canManage: boolean;
-  /** Signed-in user's id — so the UI can disable self role-edit. */
+  /** Signed-in user's id - so the UI can disable self role-edit. */
   currentUserId: string;
-  /** Workspace owner's id — so the UI can show the owner row as non-changeable. */
+  /** Workspace owner's id - so the UI can show the owner row as non-changeable. */
   ownerId: string | null;
 };
 

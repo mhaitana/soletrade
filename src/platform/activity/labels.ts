@@ -1,5 +1,5 @@
 /**
- * Activity label registry — pure presentation data mapping an event `type`
+ * Activity label registry - pure presentation data mapping an event `type`
  * (from the platform event catalog) to a human label and tone. No DB / no
  * `server-only` import so it unit-tests cleanly and the UI layer can import it.
  *

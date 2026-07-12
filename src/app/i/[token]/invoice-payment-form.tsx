@@ -20,7 +20,7 @@ function PayButtonForm({ invoice }: { invoice: PublicInvoiceView }) {
   const [stage, setStage] = useState<Stage>("paying");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
-  // Elements readiness is derived from the Stripe hooks (not state) — the Pay button stays
+  // Elements readiness is derived from the Stripe hooks (not state) - the Pay button stays
   // disabled until `stripe` + `elements` are non-null.
   const ready = Boolean(stripe && elements);
 

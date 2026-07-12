@@ -72,7 +72,7 @@ describe("requireWorkspaceContext", () => {
   it("uses the first membership when the cookie is missing, without writing the cookie", async () => {
     // The resolver is read-only (called from Server Component renders, where Next
     // forbids cookies().set()). It falls back to the first membership but leaves the
-    // cookie unset — the cookie is persisted only by explicit activation actions
+    // cookie unset - the cookie is persisted only by explicit activation actions
     // (switchWorkspace / createWorkspace / acceptInvite).
     const memberships = [
       { workspaceId: WID("ws-1"), name: "Acme", slug: "acme", role: "owner" as const },

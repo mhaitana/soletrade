@@ -8,7 +8,7 @@ import { env } from "@/shared/lib/env";
  *
  * Two backends:
  * - **Upstash Redis** (`@upstash/ratelimit` fixed-window) when both
- *   `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set — state is
+ *   `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set - state is
  *   shared across all serverless replicas, so the limit holds in prod.
  * - **In-memory fixed-window counter** otherwise (dev/test, or a single-instance
  *   deploy). Per-instance: each replica has its own buckets, so the effective
@@ -41,7 +41,7 @@ function getRedis(): Redis | null {
 }
 
 /**
- * Cached `Ratelimit` instances keyed by `${max}:${windowMs}` — @upstash/ratelimit
+ * Cached `Ratelimit` instances keyed by `${max}:${windowMs}` - @upstash/ratelimit
  * bakes the max/window into the limiter, so one instance per distinct config.
  */
 const upstashLimiters = new Map<string, Ratelimit>();
@@ -53,7 +53,7 @@ function getUpstashLimiter(max: number, windowMs: number): Ratelimit | null {
   if (!limiter) {
     limiter = new Ratelimit({
       redis,
-      // fixedWindow(max, window) — window is a human string; convert ms → seconds.
+      // fixedWindow(max, window) - window is a human string; convert ms → seconds.
       limiter: Ratelimit.fixedWindow(max, `${Math.max(1, Math.round(windowMs / 1000))} s`),
       analytics: false,
     });

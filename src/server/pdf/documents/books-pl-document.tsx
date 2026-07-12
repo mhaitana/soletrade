@@ -1,11 +1,12 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { TransactionSummary } from "@/modules/books/calc";
 import { categoryLabel } from "@/shared/constants/books-categories";
+import { brand } from "@/config/brand";
 import type { WorkspaceRow } from "@/platform/workspaces";
 
 /**
  * Books P&L report PDF (Wave 4). Renders the period summary (income/expense/net + by-category +
- * GST) computed by the pure `summarizeTransactions` — the route does the aggregation and passes the
+ * GST) computed by the pure `summarizeTransactions` - the route does the aggregation and passes the
  * result in, so the document is purely presentational (no DB, no calc duplication).
  */
 
@@ -49,10 +50,10 @@ export function BooksPlDocument({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>soletrade labs</Text>
+        <Text style={styles.brand}>{brand.productName.toLowerCase()}</Text>
         <Text style={styles.heading}>Profit &amp; Loss</Text>
         <Text style={styles.subheading}>
-          {workspace?.name ?? "soletrade labs"} · {periodLabel}
+          {workspace?.name ?? brand.productName} · {periodLabel}
         </Text>
 
         <View style={styles.kpiRow}>

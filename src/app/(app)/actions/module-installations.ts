@@ -40,7 +40,7 @@ export async function enableModuleAction(input: unknown): Promise<EnableModuleRe
   if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
 
   try {
-    // A workspace without active billing can't add paid modules — surface a
+    // A workspace without active billing can't add paid modules - surface a
     // start-billing prompt instead of hitting the orchestrator (which would
     // throw BillingNotStartedError anyway). `ensureSubscription` lazily creates
     // the unbilled row if the WorkspaceCreated subscriber hasn't run yet.
@@ -84,7 +84,7 @@ export type AddModulePreview =
 /**
  * Preview the mid-cycle cost of enabling `moduleKey` (brief §10.5). Returns the
  * prorated upfront charge, the resolved role, and whether the module becomes the
- * new anchor — so the confirm dialog can show "Adding Drive as an add-on costs
+ * new anchor - so the confirm dialog can show "Adding Drive as an add-on costs
  * ~$X today (period ends {date})" before the user commits. Returns a no-billing
  * error when the workspace has no active subscription (the UI then routes to the
  * start-billing flow instead of the proration dialog).
@@ -221,7 +221,7 @@ export async function cancelModuleAction(input: unknown): Promise<CancelModuleRe
 
 export type ModulesPageData = {
   installed: ModuleKey[];
-  /** Modules with a keep-until-end cancellation scheduled — surfaced as "Cancels on {date}" + Undo. */
+  /** Modules with a keep-until-end cancellation scheduled - surfaced as "Cancels on {date}" + Undo. */
   pendingCancellations: { moduleKey: ModuleKey; effectiveAt: string }[];
   canManage: boolean;
 };
@@ -242,7 +242,7 @@ export type UndoCancelModuleResult =
 
 /**
  * Undo a keep-until-end module cancellation (Wave 4). Clears `pendingCancellationAt` so the
- * `module-cancel-finalize` cron no longer picks the row up — the module stays billable and
+ * `module-cancel-finalize` cron no longer picks the row up - the module stays billable and
  * accessible. The Stripe subscription item is NOT deleted until the finalize step, so clearing the
  * local timestamp is sufficient to revive the module. Gated `manage:module`.
  */

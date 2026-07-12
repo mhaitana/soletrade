@@ -7,16 +7,16 @@ import type { Database } from "@/server/db/types";
  * Drizzle removal) so the ~35 `import type { X } from "@/server/db/enums"`
  * call sites repoint to `@/server/db/enums` with no change to the type names.
  *
- * The string-union values are identical to the old `pgEnum(...)` enumValues —
+ * The string-union values are identical to the old `pgEnum(...)` enumValues -
  * `supabase gen types` reads them from the live DB, which the Drizzle
  * migrations created. Add new enum values via a Supabase migration, then
  * regenerate `types.ts`.
  */
 
-/** Workspace roles (brief §11). Ordered loosely by privilege — do not rely on order for authz. */
+/** Workspace roles (brief §11). Ordered loosely by privilege - do not rely on order for authz. */
 export type WorkspaceRole = Database["public"]["Enums"]["workspace_role"];
 
-/** Product modules — mirrors shared/constants/modules MODULE_KEYS. */
+/** Product modules - mirrors shared/constants/modules MODULE_KEYS. */
 export type ModuleKey = Database["public"]["Enums"]["module_key"];
 
 export type ModuleInstallationStatus = Database["public"]["Enums"]["module_installation_status"];
@@ -25,10 +25,10 @@ export type InvitationStatus = Database["public"]["Enums"]["invitation_status"];
 
 /**
  * Billing enums (Phase 4). One subscription per workspace; credit ledger is
- * append-only with signed entries — the balance is always derived (SUM), never
+ * append-only with signed entries - the balance is always derived (SUM), never
  * stored as a mutable column.
  *
- * Brief §10 — there is no Free/Pro tier. A workspace's billing is determined by its
+ * Brief §10 - there is no Free/Pro tier. A workspace's billing is determined by its
  * active modules (the highest-standalone is the anchor app, charged standalone; the
  * rest are add-ons). `billing_interval` records whether the unified Stripe
  * subscription bills monthly or annually; it is null when billing has not started.
@@ -51,14 +51,14 @@ export type InvoiceStatus = Database["public"]["Enums"]["invoice_status"];
  * Quote lifecycle (Phase 8). `draft → sent → viewed → (accepted | declined | expired)`;
  * `accepted → converted` (terminal). `viewed` is set by the public-page view tracker
  * (sent → viewed, idempotent). `expired` is set by the quote-expired cron for sent/viewed
- * quotes past their `validUntil` (accepted quotes don't expire — they're heading to
+ * quotes past their `validUntil` (accepted quotes don't expire - they're heading to
  * conversion). `converted` is terminal and stores `convertedInvoiceId`. Declined/expired
  * are terminal this phase (no re-send).
  */
 export type QuoteStatus = Database["public"]["Enums"]["quote_status"];
 
 /**
- * Books module (Phase 6). A book transaction is a flat ledger entry — `income` adds
+ * Books module (Phase 6). A book transaction is a flat ledger entry - `income` adds
  * to the workspace's net, `expense` subtracts. There is no lifecycle / status flow
  * (unlike invoices); a transaction is just a dated row. Categories are slugs from the
  * pure `src/shared/constants/books-categories` catalog, stored as `text` so the seed
@@ -83,7 +83,7 @@ export type ReceiptExtractionStatus = Database["public"]["Enums"]["receipt_extra
 export type VehicleExpenseType = Database["public"]["Enums"]["vehicle_expense_type"];
 
 /**
- * AI assistant (Phase 10). Only `user` and `assistant` text is persisted — tool calls
+ * AI assistant (Phase 10). Only `user` and `assistant` text is persisted - tool calls
  * and tool results are NOT replayed (read-only Q&A; the model re-derives data per turn
  * via tools rather than trusting cached tool output).
  */

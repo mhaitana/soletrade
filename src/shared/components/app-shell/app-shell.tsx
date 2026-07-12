@@ -180,7 +180,7 @@ export function AppShell({
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
         <div className="flex h-16 items-center border-b border-border px-5">
-          <Logo />
+          <Logo variant="compact" />
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-4">
           <NavList items={items} />
@@ -199,7 +199,7 @@ export function AppShell({
             <SheetContent side="left" className="w-72">
               <SheetHeader>
                 <SheetTitle>
-                  <Logo href={null} />
+                  <Logo href={null} variant="compact" />
                 </SheetTitle>
               </SheetHeader>
               <div className="space-y-4 px-3 pb-6 pt-2">

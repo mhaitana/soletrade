@@ -98,7 +98,7 @@ describe("summarizeTransactions", () => {
       row({ type: "expense", amountCents: -2000, category: "rent" }),
       row({ type: "income", amountCents: 1000, category: "sales" }),
     ]);
-    // The negative expense is abs'd to 2000 — it does NOT add to income.
+    // The negative expense is abs'd to 2000 - it does NOT add to income.
     expect(s.incomeCents).toBe(1000);
     expect(s.expenseCents).toBe(2000);
     expect(s.netCents).toBe(-1000);
@@ -179,7 +179,7 @@ describe("fiscalQuarter (Australian FY starts July)", () => {
   });
 });
 
-describe("fiscalQuarter — configurable fyStartMonth", () => {
+describe("fiscalQuarter - configurable fyStartMonth", () => {
   it("default (7 = July) preserves the Australian behaviour", () => {
     expect(fiscalQuarter(new Date("2026-08-15"))).toEqual({
       fiscalYear: 2026,
@@ -234,7 +234,7 @@ describe("fiscalQuarter — configurable fyStartMonth", () => {
   });
 });
 
-describe("summarizeGst — configurable fyStartMonth", () => {
+describe("summarizeGst - configurable fyStartMonth", () => {
   function grow(partial: Omit<GstSummaryInput, "date"> & { date?: Date }): GstSummaryInput {
     return { date: new Date("2026-08-15T12:00:00Z"), ...partial };
   }

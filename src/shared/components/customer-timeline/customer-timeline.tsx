@@ -6,7 +6,7 @@ import type { TimelineEntry, TimelineTone } from "@/shared/types/timeline";
 
 /**
  * Customer 360 timeline (Wave 3). Renders a customer's merged invoices/quotes/transactions as a
- * single chronological list with month separators + tone-coded left borders. Server component —
+ * single chronological list with month separators + tone-coded left borders. Server component -
  * no client interactivity (each entry is just a link to its module's detail page).
  *
  * Tone encodes the row's status: positive (paid/accepted/income), negative (void/declined/

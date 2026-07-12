@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/shared/ui/card";
 /**
  * Route loading boundary for `/dashboard` (Phase 9). Next.js shows this while the server
  * component's data loads (the dashboard loader fans out to four module services in parallel).
- * Mirrors the real layout — header + period selector + KPI row + module cards — so the shift
+ * Mirrors the real layout - header + period selector + KPI row + module cards - so the shift
  * from skeleton to content is layout-stable (no CLS).
  */
 export default function DashboardLoading() {

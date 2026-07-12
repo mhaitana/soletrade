@@ -1,5 +1,5 @@
 /**
- * Branded ID types — nominal typing across entity boundaries so a WorkspaceId
+ * Branded ID types - nominal typing across entity boundaries so a WorkspaceId
  * can't be passed where a UserId is expected. Brand is erased at runtime (it's
  * just a string). Brief §7: "strongly typed IDs everywhere".
  */
@@ -34,7 +34,7 @@ export type CreditLedgerEntryId = Brand<string, "CreditLedgerEntryId">;
 export type AiConversationId = Brand<string, "AiConversationId">;
 export type AiMessageId = Brand<string, "AiMessageId">;
 
-/** Cast a runtime string to a branded ID (no validation — use at trust boundaries). */
+/** Cast a runtime string to a branded ID (no validation - use at trust boundaries). */
 export function branded<B extends string>(value: string): Brand<string, B> {
   return value as Brand<string, B>;
 }

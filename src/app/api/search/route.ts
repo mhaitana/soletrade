@@ -7,9 +7,9 @@ import { searchWorkspace } from "./search";
  * Global search endpoint (Wave 3). The ⌘K command palette debounces GET requests here as
  * the user types; the response is a grouped list of hits the palette renders as cmdk groups.
  *
- * Auth: resolved workspace context (401 if none) — any signed-in member can search (search
+ * Auth: resolved workspace context (401 if none) - any signed-in member can search (search
  * is read-only + module-gated, not role-gated; see `search.ts`). The session workspace id is
- * resolved server-side — the client never supplies it. Zod validates the query (Route Handlers
+ * resolved server-side - the client never supplies it. Zod validates the query (Route Handlers
  * are a server boundary, so every boundary gets Zod per the project rules).
  */
 export const dynamic = "force-dynamic";

@@ -105,7 +105,7 @@ describe.skipIf(!HAS_DB)(
 
     it("workspace_settings table is gone (migration 0018 dropped it)", async () => {
       // After dropping the table + removing the schema export, a PostgREST read against
-      // the old table name errors (PGRST205 — table not found in schema cache). unwrap
+      // the old table name errors (PGRST205 - table not found in schema cache). unwrap
       // surfaces the error, which carries the table name.
       await expect(
         unwrap(

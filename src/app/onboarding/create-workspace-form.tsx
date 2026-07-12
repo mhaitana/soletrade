@@ -74,7 +74,7 @@ export function CreateWorkspaceForm() {
         </p>
       ) : null}
       <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? "Creating…" : "Create workspace"}
+        {isPending ? "Creating…" : "Create your workspace"}
       </Button>
     </form>
   );

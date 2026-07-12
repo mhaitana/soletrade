@@ -10,7 +10,7 @@ import { getCreditBalance } from "./credits";
 /**
  * Integration tests for the cancellation engine orchestrator (brief §10.6) against a
  * real Postgres. The Stripe lifecycle is mocked so `removeModuleSubscriptionItem` and
- * `refundToCard` don't hit Stripe — the orchestrator logic (scheduling, disabling,
+ * `refundToCard` don't hit Stripe - the orchestrator logic (scheduling, disabling,
  * ledger refund, events, finalize) is what's under test here.
  *
  *   DATABASE_URL="postgresql://..." pnpm test:ci

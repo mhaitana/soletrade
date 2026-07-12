@@ -16,7 +16,7 @@ import {
 /**
  * Serializable subset of `ExtractionRow` passed from the server `receipts/page.tsx`.
  * The full `ExtractionRow` type lives in a `server-only` module, so the client
- * component defines its own prop shape — `Date` fields serialize fine over the
+ * component defines its own prop shape - `Date` fields serialize fine over the
  * RSC boundary (Next serializes Dates as ISO strings; here `createdAt` is only
  * used for display via the server-rendered page, so the card itself doesn't need it).
  */
@@ -61,7 +61,7 @@ function isoDate(iso: string): string {
 /**
  * Review card for a single extraction: editable fields pre-filled from the model
  * output, with Apply (creates a `book_transactions` row) and Reject buttons. Mirrors
- * `book-detail-actions.tsx` — `useTransition` for the pending state, local error
+ * `book-detail-actions.tsx` - `useTransition` for the pending state, local error
  * state, fail-closed on the server action's `manage:books` gate.
  */
 export function ReceiptReviewCard({ extraction }: { extraction: ReceiptReviewProps }) {
@@ -70,7 +70,7 @@ export function ReceiptReviewCard({ extraction }: { extraction: ReceiptReviewPro
   const [error, setError] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
 
-  // Editable reviewer fields. Default `type` to "expense" — receipts are almost
+  // Editable reviewer fields. Default `type` to "expense" - receipts are almost
   // always expenses; the model's `category` is an expense slug, so this stays valid.
   const [type, setType] = useState<"income" | "expense">("expense");
   const [amountDollars, setAmountDollars] = useState<string>(
@@ -252,7 +252,7 @@ export function ReceiptReviewCard({ extraction }: { extraction: ReceiptReviewPro
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          No extracted data — enter the transaction manually on the Books page.
+          No extracted data - enter the transaction manually on the Books page.
         </p>
       )}
 

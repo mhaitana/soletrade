@@ -30,7 +30,7 @@ import { CancellationModal, type CancelOptionChoice } from "@/app/(app)/billing/
 type PreviewPayload = Extract<AddModulePreview, { ok: true }>;
 
 function formatDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -105,7 +105,7 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
     setPreviewingCancelKey(null);
     if (!res.ok) {
       // No active billing or permission error. For no-billing, fall back to a direct
-      // disable (legacy behavior) — surface the error only if it isn't the no-billing
+      // disable (legacy behavior) - surface the error only if it isn't the no-billing
       // case. previewCancelModuleAction returns no-billing as a 1-option ok payload,
       // so an !ok here is a permission/unknown-module error.
       setError(res.error);
@@ -317,7 +317,7 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
         }
         description={
           cancelPreview?.branch === "offboarding"
-            ? "This is the last active module in your workspace — cancelling it ends your subscription. Unused time in the current period can be refunded to your payment method, or you can keep access until the period ends."
+            ? "This is the last active module in your workspace - cancelling it ends your subscription. Unused time in the current period can be refunded to your payment method, or you can keep access until the period ends."
             : "You can keep this module until the current billing period ends, or cancel now for a pro-rated refund. Choose how you'd like to proceed."
         }
         periodEnd={cancelPreview?.periodEnd ?? null}

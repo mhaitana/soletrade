@@ -121,7 +121,7 @@ export function ExpenseForm({
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {selectableVehicles.length === 0 ? (
-              <option value="">No vehicles — add one first</option>
+              <option value="">No vehicles - add one first</option>
             ) : (
               selectableVehicles.map((v) => (
                 <option key={v.id} value={v.id}>

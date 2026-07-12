@@ -8,7 +8,7 @@ import { renderPdf, pdfResponse } from "@/server/pdf";
 import { InvoiceDocument } from "@/server/pdf/documents/invoice-document";
 
 /**
- * Invoice PDF download (Wave 4). Workspace-member-only — the public invoice page (`/i/[token]`)
+ * Invoice PDF download (Wave 4). Workspace-member-only - the public invoice page (`/i/[token]`)
  * already serves the public view; this route renders a downloadable PDF for the workspace's own
  * records + is reused to attach the PDF to the InvoiceSent email. IDOR-safe via `getInvoice`
  * (workspaceId-scoped). Auth: resolved workspace context (401) + `view:invoice` (403).
@@ -30,7 +30,7 @@ export async function GET(
   const invoice = await getInvoice(ctx.workspaceId, branded<"InvoiceId">(id));
   if (!invoice) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  // Build the element before the try/catch — React renders lazily, so a JSX error inside the
+  // Build the element before the try/catch - React renders lazily, so a JSX error inside the
   // try wouldn't be caught by it (react-hooks/error-boundaries). `renderPdf` (renderToBuffer)
   // is the call that actually renders + can throw, so only that is wrapped.
   const workspace = await getWorkspace(ctx.workspaceId).catch(() => null);

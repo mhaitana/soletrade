@@ -1,5 +1,5 @@
 /**
- * Pure Invoices dashboard aggregator (Phase 9). No `server-only`, no DB, no time calls —
+ * Pure Invoices dashboard aggregator (Phase 9). No `server-only`, no DB, no time calls -
  * unit-testable in isolation, mirroring `@/modules/books/calc.ts` + `@/modules/drive/calc.ts`
  * purity. The cross-module dashboard loader fetches a workspace's invoices (capped at 200 by
  * `listInvoices`) and runs `summarizeInvoices` for the current + previous period to produce
@@ -9,9 +9,9 @@
  * Money is integer cents throughout.
  *
  * **Range semantics:** `outstandingCents`, `overdueCount`, `draftCount` are **current-state
- * snapshots** — they ignore `range` and reflect the workspace's invoices as-of-now (an invoice
+ * snapshots** - they ignore `range` and reflect the workspace's invoices as-of-now (an invoice
  * is outstanding/overdue/draft regardless of when it was issued). `paidCents`, `paidCount`,
- * `sentCount`, and `monthly` are **period-bound** — a row counts if its relevant event date
+ * `sentCount`, and `monthly` are **period-bound** - a row counts if its relevant event date
  * (`paidAt` for paid, `sentAt` for sent) falls in `[range.start, range.end]`. `range.start ==
  * null` means no lower bound (the "all" period). The loader runs this twice (current + previous
  * range) for the Revenue delta; the snapshots come from the current call only.
@@ -22,13 +22,13 @@ import type { InvoiceStatus } from "@/server/db/enums";
 /** An invoice reduced to the fields `summarizeInvoices` needs. */
 export interface InvoiceSummaryInput {
   status: InvoiceStatus;
-  /** Integer cents — the invoice total. */
+  /** Integer cents - the invoice total. */
   totalCents: number;
   /** When the invoice was sent (null for drafts). Drives `sentCount`. */
   sentAt: Date | null;
   /** When the invoice was paid (null unless status === "paid"). Drives `paidCents`/`paidCount`/`monthly`. */
   paidAt: Date | null;
-  /** The invoice's issue date — used as a fallback for monthly bucketing if `paidAt` is null. */
+  /** The invoice's issue date - used as a fallback for monthly bucketing if `paidAt` is null. */
   issueDate: Date;
 }
 
@@ -42,11 +42,11 @@ export interface MonthlyInvoicePoint {
 }
 
 export interface InvoiceSummary {
-  /** Sum of `totalCents` for status in (sent, viewed, overdue) — outstanding, all-time snapshot. */
+  /** Sum of `totalCents` for status in (sent, viewed, overdue) - outstanding, all-time snapshot. */
   outstandingCents: number;
-  /** Count of status === "overdue" — all-time snapshot. */
+  /** Count of status === "overdue" - all-time snapshot. */
   overdueCount: number;
-  /** Count of status === "draft" — all-time snapshot. */
+  /** Count of status === "draft" - all-time snapshot. */
   draftCount: number;
   /** Sum of `totalCents` for invoices paid in range. */
   paidCents: number;
@@ -54,7 +54,7 @@ export interface InvoiceSummary {
   paidCount: number;
   /** Count of invoices sent in range. */
   sentCount: number;
-  /** Paid-by-month series (in range), sorted ascending by month — for the sparkline. */
+  /** Paid-by-month series (in range), sorted ascending by month - for the sparkline. */
   monthly: MonthlyInvoicePoint[];
 }
 
@@ -71,7 +71,7 @@ function inRange(date: Date, range: { start: Date | null; end: Date }): boolean 
 const OUTSTANDING_STATUSES: ReadonlySet<InvoiceStatus> = new Set(["sent", "viewed", "overdue"]);
 
 /**
- * Aggregate a set of invoices into a dashboard summary. Pure — no DB, no time calls.
+ * Aggregate a set of invoices into a dashboard summary. Pure - no DB, no time calls.
  * Empty input → zeros + empty `monthly`.
  */
 export function summarizeInvoices(
@@ -88,7 +88,7 @@ export function summarizeInvoices(
   const monthMap = new Map<string, MonthlyInvoicePoint>();
 
   for (const row of rows) {
-    // Snapshots — all-time, ignore range.
+    // Snapshots - all-time, ignore range.
     if (OUTSTANDING_STATUSES.has(row.status)) {
       outstandingCents += row.totalCents;
     }

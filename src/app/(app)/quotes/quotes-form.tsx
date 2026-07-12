@@ -150,7 +150,7 @@ export function QuoteForm({
 
     const lineItemInputs = toLineItemInput(items);
     if (!customerId) {
-      setError("Pick a customer — a name and email are required to send the quote.");
+      setError("Pick a customer - a name and email are required to send the quote.");
       return;
     }
     if (lineItemInputs.length === 0) {
@@ -224,7 +224,7 @@ export function QuoteForm({
                 <option key={c.id} value={c.id} disabled={!c.email}>
                   {c.name}
                   {c.company ? ` · ${c.company}` : ""}
-                  {!c.email ? " (no email — add one)" : ""}
+                  {!c.email ? " (no email - add one)" : ""}
                 </option>
               ))}
             </select>
@@ -291,7 +291,7 @@ export function QuoteForm({
             onChange={(e) => setValidUntil(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            Optional — sent quotes auto-expire past this date.
+            Optional - sent quotes auto-expire past this date.
           </p>
         </div>
       </div>

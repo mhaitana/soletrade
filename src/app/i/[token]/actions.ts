@@ -7,14 +7,14 @@ import { rateLimit } from "@/server/rate-limit";
 import { claimPaymentIntentId, getInvoicePaymentContext } from "@/modules/invoices";
 
 /**
- * Public payment-intent creation for the `/i/[token]` page. No auth — the publicToken is the
+ * Public payment-intent creation for the `/i/[token]` page. No auth - the publicToken is the
  * credential (122-bit unguessable). The action creates a Stripe PaymentIntent for the invoice
  * total and returns its client secret; the client confirms via Stripe Elements.
  *
  * Idempotent across reloads: if a PI id is already stored on the invoice, it's retrieved and
  * its client secret reused (Stripe PI client secrets are reusable until the PI succeeds or
  * is canceled). An atomic `claimPaymentIntentId` guards against two concurrent creates both
- * making a PI — the loser reuses the winner's.
+ * making a PI - the loser reuses the winner's.
  *
  * Rate-limited per IP (defense-in-depth). The publicToken is unguessable, so this only
  * matters if the link itself is abused.
@@ -47,7 +47,7 @@ export async function createInvoicePaymentIntentAction(
 
   // Reuse an existing PaymentIntent if one was already created for this invoice (reload,
   // second tab, abandoned-and-return). A succeeded PI means the webhook already marked the
-  // invoice paid — but the context lookup above would have returned null (status === "paid"),
+  // invoice paid - but the context lookup above would have returned null (status === "paid"),
   // so we shouldn't reach this branch in that case. Still, guard defensively.
   if (ctx.stripePaymentIntentId) {
     try {
@@ -84,7 +84,7 @@ export async function createInvoicePaymentIntentAction(
   // don't leak a dangling PI). The unique partial index is the real guard.
   const claimed = await claimPaymentIntentId(ctx.workspaceId, ctx.invoiceId, pi.id);
   if (!claimed) {
-    // Another request created a PI for this invoice first — retrieve + reuse that one,
+    // Another request created a PI for this invoice first - retrieve + reuse that one,
     // and let the just-created PI cancel itself (Stripe cancels PIs that never get attached
     // after a period; we don't explicitly cancel to keep this path simple).
     const fresh = await getInvoicePaymentContext(parsed.data.token);

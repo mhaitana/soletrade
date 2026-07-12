@@ -7,7 +7,7 @@ import { rateLimit } from "@/server/rate-limit";
 import { isAllowedUploadMime } from "@/shared/constants/file-upload";
 
 /**
- * Phase 11b — mint a signed Supabase Storage upload URL. The client PUTs file
+ * Phase 11b - mint a signed Supabase Storage upload URL. The client PUTs file
  * bytes directly to Storage (bytes never touch this server), then calls the
  * `confirmUploadAction` Server Action to mark the row + link an entity.
  *

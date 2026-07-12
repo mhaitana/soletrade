@@ -1,15 +1,15 @@
 /**
- * Shared inline-SVG categorical bar chart (Wave 2 — Drive platform-earnings chart + GST-by-
+ * Shared inline-SVG categorical bar chart (Wave 2 - Drive platform-earnings chart + GST-by-
  * quarter). Mirrors `<Sparkline>`: pure SVG, server-rendered, no client JS, no `"use client"`,
  * no new charting dependency. Each bar carries a native `<title>` tooltip (`{label}: {value}`).
  *
  * Boundary-clean: **shared imports nothing app-specific** (no `@/platform/*`, no `@/modules/*`)
- * — the caller pre-formats the per-bar tooltip `valueLabel` (e.g. via `formatCents`). This
+ * - the caller pre-formats the per-bar tooltip `valueLabel` (e.g. via `formatCents`). This
  * component just renders the bars it's given; it does no aggregation.
  *
  * Degenerate cases (no bars, or all bars zero) render an "Insufficient data" caption rather
  * than a misleading chart. Bars are scaled to the max value; non-negative series assumed
- * (categorical earnings / GST counts — negative values would render below the baseline).
+ * (categorical earnings / GST counts - negative values would render below the baseline).
  */
 
 export interface BarChartPoint {
@@ -35,7 +35,7 @@ const PAD_TOP = 4;
 const PAD_BOTTOM = 18; // room for x-axis caption
 const PAD_X = 4;
 // Read from the theme token so bars adapt in dark mode (chart-2 is #2563eb in light,
-// #60a5fa in dark — a hardcoded #2563EB is too-dark blue on the dark background).
+// #60a5fa in dark - a hardcoded #2563EB is too-dark blue on the dark background).
 const PRIMARY = "var(--chart-2)";
 
 export function BarChart({ points, ariaLabel }: BarChartProps) {

@@ -27,7 +27,7 @@ function actorLabel(row: ActivityRow): string {
 }
 
 /** Build a deep link to the entity referenced by an activity row, if any. Only entity types
- *  with a real detail route are linked — the rest render as plain text (no dead links). */
+ *  with a real detail route are linked - the rest render as plain text (no dead links). */
 function entityHref(row: ActivityRow): string | null {
   if (!row.entityType || !row.entityId) return null;
   switch (row.entityType) {

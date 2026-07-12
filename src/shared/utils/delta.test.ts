@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatDelta, percentDelta } from "./delta";
 
-describe("shared delta — percentDelta", () => {
+describe("shared delta - percentDelta", () => {
   it("returns none when both current and previous are zero", () => {
     expect(percentDelta(0, 0)).toEqual({ pct: null, kind: "none" });
   });
@@ -39,7 +39,7 @@ describe("shared delta — percentDelta", () => {
   });
 });
 
-describe("shared delta — formatDelta", () => {
+describe("shared delta - formatDelta", () => {
   it("formats an up delta as '+N% vs last month'", () => {
     expect(formatDelta(percentDelta(1100, 1000))).toBe("+10% vs last month");
   });

@@ -3,7 +3,7 @@ import { branded } from "@/shared/types/ids";
 import type { ActivityRow } from "@/platform/activity";
 
 /**
- * Unit tests for `loadCustomerTimeline` — the customer-360 composition root. Mocks
+ * Unit tests for `loadCustomerTimeline` - the customer-360 composition root. Mocks
  * `requireWorkspaceContext` + the list/get functions; leaves `authorize` + `formatCents` real
  * (pure, no DB) so the role→canManage + money formatting paths are exercised truthfully.
  *

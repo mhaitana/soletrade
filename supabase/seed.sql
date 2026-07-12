@@ -1,5 +1,5 @@
 -- ============================================================================
--- soletrade OS — local development seed (auto-run by `supabase db reset`)
+-- soletrade OS - local development seed (auto-run by `supabase db reset`)
 -- ============================================================================
 --config.toml [db.seed] enabled=true, sql_paths=["./seed.sql"] → this file runs
 -- after the 4 migrations on every `pnpm db:reset`. LOCAL-DEV ONLY: `supabase db
@@ -83,7 +83,7 @@ INSERT INTO users (id, email, full_name, created_at, updated_at) VALUES
   ('11111111-1111-4111-8111-111111110006', 'pending@soletrade.test',    'Pat Pending',      now(), now());
 
 -- ----------------------------------------------------------------------------
--- 2. Workspaces (WS1 full demo, WS2 smaller NZD studio — owner owns both)
+-- 2. Workspaces (WS1 full demo, WS2 smaller NZD studio - owner owns both)
 -- ----------------------------------------------------------------------------
 INSERT INTO workspaces
   (id, name, slug, owner_user_id, default_currency, timezone, invoice_prefix, quote_prefix, fy_start_month, created_at)
@@ -149,7 +149,7 @@ INSERT INTO customers
   (id, workspace_id, name, email, phone, company, notes, created_at)
 VALUES
   ('11111111-1111-4111-8111-111111110101', '11111111-1111-4111-8111-111111111010',
-   'Acme Corp', 'accounts@acme.test', '0400000001', 'Acme Pty Ltd', 'VIP — net-15 terms', '2025-07-05 00:00:00'),
+   'Acme Corp', 'accounts@acme.test', '0400000001', 'Acme Pty Ltd', 'VIP - net-15 terms', '2025-07-05 00:00:00'),
   ('11111111-1111-4111-8111-111111110102', '11111111-1111-4111-8111-111111111010',
    'Jordan Lee', 'jordan@example.test', '0400000002', NULL, NULL, '2025-07-20 00:00:00'),
   ('11111111-1111-4111-8111-111111110103', '11111111-1111-4111-8111-111111111010',
@@ -218,7 +218,7 @@ VALUES
    '2026-05-01 00:00:00', 12800, 'Service + tyres', 'Logbook serviced', '2026-05-01 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 9. Invoices — one per status (draft/sent/viewed/paid/void/overdue) + line items
+-- 9. Invoices - one per status (draft/sent/viewed/paid/void/overdue) + line items
 --    Numbers INV-2026-0001..0006. Totals hand-computed (cents).
 --    i3 has a fractional qty 1.5 (numeric(12,2) regression). i6 is tax-inclusive.
 -- ----------------------------------------------------------------------------
@@ -252,7 +252,7 @@ VALUES
   ('11111111-1111-4111-8111-111111110705', '11111111-1111-4111-8111-111111111010',
    '11111111-1111-4111-8111-111111110104', 'INV-2026-0005', 'void',
    '2026-04-01 00:00:00', NULL, 'AUD', 0, false, 500000, 0, 500000,
-   'Cancelled — duplicate.', NULL, NULL, NULL, NULL, NULL, '2026-04-01 00:00:00'),
+   'Cancelled - duplicate.', NULL, NULL, NULL, NULL, NULL, '2026-04-01 00:00:00'),
   -- i6 overdue, tax 10%, tax-INCLUSIVE, 1 line → total 1100000, subtotal 1000000, tax 100000
   ('11111111-1111-4111-8111-111111110706', '11111111-1111-4111-8111-111111111010',
    '11111111-1111-4111-8111-111111110105', 'INV-2026-0006', 'overdue',
@@ -282,7 +282,7 @@ VALUES
    '11111111-1111-4111-8111-111111111010', 'Support plan', 1, 1100000, 1100000, 0, '2026-03-01 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 10. Quotes — one per status (draft/sent/viewed/accepted/declined/expired/converted)
+-- 10. Quotes - one per status (draft/sent/viewed/accepted/declined/expired/converted)
 --     Numbers QUO-2026-0001..0007. q2 has sections + T&Cs. q4 accepted → acceptance row.
 --     q7 converted → converted_invoice_id = i4.
 -- ----------------------------------------------------------------------------
@@ -338,9 +338,9 @@ VALUES
   ('11111111-1111-4111-8111-111111110811', '11111111-1111-4111-8111-111111110801',
    '11111111-1111-4111-8111-111111111010', 'Website redesign', 1, 800000, 800000, 0, '2026-07-05 00:00:00'),
   ('11111111-1111-4111-8111-111111110821', '11111111-1111-4111-8111-111111110802',
-   '11111111-1111-4111-8111-111111111010', 'Phase 1 — Design', 1, 500000, 500000, 0, '2026-06-20 00:00:00'),
+   '11111111-1111-4111-8111-111111111010', 'Phase 1 - Design', 1, 500000, 500000, 0, '2026-06-20 00:00:00'),
   ('11111111-1111-4111-8111-111111110822', '11111111-1111-4111-8111-111111110802',
-   '11111111-1111-4111-8111-111111111010', 'Phase 2 — Build', 1, 700000, 700000, 1, '2026-06-20 00:00:00'),
+   '11111111-1111-4111-8111-111111111010', 'Phase 2 - Build', 1, 700000, 700000, 1, '2026-06-20 00:00:00'),
   ('11111111-1111-4111-8111-111111110831', '11111111-1111-4111-8111-111111110803',
    '11111111-1111-4111-8111-111111111010', 'Security audit', 1, 300000, 300000, 0, '2026-06-10 00:00:00'),
   ('11111111-1111-4111-8111-111111110841', '11111111-1111-4111-8111-111111110804',
@@ -397,7 +397,7 @@ VALUES
    '11111111-1111-4111-8111-111111110b04', '2026-04-22 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 11. Books transactions — income/expense + all 4 cross-module source links
+-- 11. Books transactions - income/expense + all 4 cross-module source links
 --     Categories from src/shared/constants/books-categories. Spread Jan–Jul 2026.
 -- ----------------------------------------------------------------------------
 INSERT INTO book_transactions
@@ -443,7 +443,7 @@ VALUES
   ('11111111-1111-4111-8111-111111110908', '11111111-1111-4111-8111-111111111010',
    'income', 800000, 'AUD', '2026-06-01 00:00:00', 'Consulting fees', 'services',
    '11111111-1111-4111-8111-111111110102', NULL, 72727, NULL, NULL, NULL, NULL, NULL, '2026-06-01 00:00:00'),
-  -- bx9 manual expense, office rent (residential — no GST)
+  -- bx9 manual expense, office rent (residential - no GST)
   ('11111111-1111-4111-8111-111111110909', '11111111-1111-4111-8111-111111111010',
    'expense', 200000, 'AUD', '2026-05-01 00:00:00', 'Office rent', 'rent',
    NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-05-01 00:00:00'),
@@ -454,7 +454,7 @@ VALUES
    NULL, '11111111-1111-4111-8111-111111110402', NULL, NULL, NULL, '2026-04-10 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 12. Receipt extractions — pending / reviewed / applied / rejected
+-- 12. Receipt extractions - pending / reviewed / applied / rejected
 -- ----------------------------------------------------------------------------
 INSERT INTO receipt_extractions
   (id, workspace_id, file_id, status, extracted_data, transaction_id, error_message,
@@ -477,11 +477,11 @@ VALUES
    '11111111-1111-4111-8111-111111110001', '2026-01-15 00:00:00', '2026-01-16 00:00:00'),
   ('11111111-1111-4111-8111-111111110b04', '11111111-1111-4111-8111-111111111010',
    '11111111-1111-4111-8111-111111110a04', 'rejected',
-   NULL, NULL, 'No receipt data found — image too blurry.', 'claude-haiku-4-5',
+   NULL, NULL, 'No receipt data found - image too blurry.', 'claude-haiku-4-5',
    '11111111-1111-4111-8111-111111110001', '2026-04-22 00:00:00', '2026-04-22 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 14. Credit ledger — one row per entry_type (grant/consumption/refund/adjustment/
+-- 14. Credit ledger - one row per entry_type (grant/consumption/refund/adjustment/
 --     promotion/expired). Net balance = 500000 − 50000 + 20000 + 5000 + 100000 − 30000
 --     = 545000. The 'expired' row's metadata.originalEntryId points at the promotion.
 -- ----------------------------------------------------------------------------
@@ -510,7 +510,7 @@ VALUES
    '{"originalEntryId":"11111111-1111-4111-8111-111111110c05"}'::jsonb, NULL, '2026-01-01 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 15. Tax periods — FY2025 quarters (Jul 2025–Jun 2026). Q1 lodged, Q2/Q3 not.
+-- 15. Tax periods - FY2025 quarters (Jul 2025–Jun 2026). Q1 lodged, Q2/Q3 not.
 -- ----------------------------------------------------------------------------
 INSERT INTO tax_periods
   (id, workspace_id, fiscal_year, quarter, period_label, gst_collected_cents,
@@ -525,7 +525,7 @@ VALUES
    2025, 3, 'FY2025 Q3', 45000, 9000, 36000, NULL, NULL, '2026-05-01 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 16. Activity events — spread over time for feed pagination
+-- 16. Activity events - spread over time for feed pagination
 -- ----------------------------------------------------------------------------
 INSERT INTO activity_events
   (id, workspace_id, actor_user_id, type, entity_type, entity_id, metadata, created_at)
@@ -568,7 +568,7 @@ VALUES
    '11111111-1111-4111-8111-111111110807', '{"number":"QUO-2026-0007","invoiceNumber":"INV-2026-0004"}'::jsonb, '2026-05-12 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 17. Audit logs — create/update/delete actions across entities
+-- 17. Audit logs - create/update/delete actions across entities
 -- ----------------------------------------------------------------------------
 INSERT INTO audit_logs
   (id, workspace_id, actor_user_id, action, target_type, target_id, metadata, ip, created_at)
@@ -611,7 +611,7 @@ VALUES
    '11111111-1111-4111-8111-111111111010', '{"fields":["invoice_prefix"]}'::jsonb, '127.0.0.1', '2025-07-10 00:00:00');
 
 -- ----------------------------------------------------------------------------
--- 18. Notifications — mix read/unread, targeted at owner + admin
+-- 18. Notifications - mix read/unread, targeted at owner + admin
 -- ----------------------------------------------------------------------------
 INSERT INTO notifications
   (id, workspace_id, user_id, type, title, body, entity_type, entity_id, read_at, created_at)
@@ -634,7 +634,7 @@ VALUES
    '11111111-1111-4111-8111-111111110c01', '2025-07-01 02:00:00', '2025-07-01 00:00:00'),
   ('11111111-1111-4111-8111-111111111005', '11111111-1111-4111-8111-111111111010',
    '11111111-1111-4111-8111-111111110001', 'invoice.overdue', 'Invoice INV-2026-0006 overdue',
-   'Beta Industries — $11,000.00 past due.', 'invoice',
+   'Beta Industries - $11,000.00 past due.', 'invoice',
    '11111111-1111-4111-8111-111111110706', NULL, '2026-04-01 00:00:00'),
   ('11111111-1111-4111-8111-111111111006', '11111111-1111-4111-8111-111111111010',
    '11111111-1111-4111-8111-111111110002', 'invoice.paid', 'Invoice INV-2026-0004 paid',
@@ -665,11 +665,11 @@ VALUES
   ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111101',
    'user', 'How do I record a GST payment to the ATO?', '2026-07-08 00:00:00'),
   ('11111111-1111-4111-8111-111111111112', '11111111-1111-4111-8111-111111111101',
-   'assistant', 'A GST payment to the ATO is recorded as an expense transaction in Books with the "tax" category — it reduces your net GST position but is not itself a deductible business expense. Create it from Books → New transaction → type: expense, category: tax, dated the day you paid it.', '2026-07-08 00:00:01'),
+   'assistant', 'A GST payment to the ATO is recorded as an expense transaction in Books with the "tax" category - it reduces your net GST position but is not itself a deductible business expense. Create it from Books → New transaction → type: expense, category: tax, dated the day you paid it.', '2026-07-08 00:00:01'),
   ('11111111-1111-4111-8111-111111111113', '11111111-1111-4111-8111-111111111101',
    'user', 'What was my best income month this year?', '2026-07-09 00:00:00'),
   ('11111111-1111-4111-8111-111111111114', '11111111-1111-4111-8111-111111111101',
-   'assistant', 'Your best income month so far in 2026 is May — driven by the $25,300 INV-2026-0004 invoice payment and $8,000 in consulting fees, for a combined income well above any other month. June is second, led by consulting fees.', '2026-07-09 00:00:01');
+   'assistant', 'Your best income month so far in 2026 is May - driven by the $25,300 INV-2026-0004 invoice payment and $8,000 in consulting fees, for a combined income well above any other month. June is second, led by consulting fees.', '2026-07-09 00:00:01');
 
 -- ----------------------------------------------------------------------------
 -- 20. Processed webhook events (idempotency table demo)

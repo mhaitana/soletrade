@@ -32,7 +32,7 @@ export interface AuditRow {
 /** Cursor for keyset pagination (createdAt desc + id desc tiebreaker). */
 export interface AuditCursor {
   /**
-   * Raw PostgREST ISO string for `created_at` — preserves full µs precision
+   * Raw PostgREST ISO string for `created_at` - preserves full µs precision
    * (`now()` is µs-precise; a JS `Date` truncates to ms, breaking the keyset
    * `eq`/`lt` when rows share a millisecond). Kept as a string, never a `Date`.
    */
@@ -94,7 +94,7 @@ function toAuditRow(r: {
 }
 
 /**
- * Record an authorization denial as an `authz.denied` audit row (brief §13 —
+ * Record an authorization denial as an `authz.denied` audit row (brief §13 -
  * "log suspicious permission failures"). `actorUserId` is nullable on
  * `audit_logs`, so an anonymous / no-session attempt fits naturally; the IP is
  * the request IP (caller-resolved via `getClientIp`). Best-effort callers wrap
@@ -145,7 +145,7 @@ export async function writeAudit(input: AuditInput): Promise<AuditLogId> {
 
 /**
  * List audit entries for a workspace, newest first. Always scoped to the
- * workspace (IDOR-safe — never returns another workspace's entries). Surfaced
+ * workspace (IDOR-safe - never returns another workspace's entries). Surfaced
  * only to roles with `view:audit` (owner/admin/accountant); the caller enforces
  * that gate. Optional filters by action / target type, keyset cursor pagination.
  */
@@ -162,7 +162,7 @@ export async function listAudit(
     query = query.in("action", opts.actions);
   }
   if (opts.actionPrefix) {
-    // `like` (case-sensitive) matches the original Drizzle `like` — audit actions
+    // `like` (case-sensitive) matches the original Drizzle `like` - audit actions
     // are lowercase by convention, so case-sensitive prefix matching is correct.
     query = query.like("action", `${opts.actionPrefix}%`);
   }
@@ -170,7 +170,7 @@ export async function listAudit(
     query = query.eq("target_type", opts.targetType);
   }
   if (opts.before) {
-    // Keyset: (created_at, id) strictly < before — created_at < cursor OR
+    // Keyset: (created_at, id) strictly < before - created_at < cursor OR
     // (created_at = cursor AND id < cursor). PostgREST expresses this as an `or`
     // with a nested `and(...)` for the tiebreaker. `opts.before.createdAt` is the
     // raw µs-precision ISO string (see AuditCursor) so the comparison is exact.
@@ -188,7 +188,7 @@ export async function listAudit(
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
   const items = pageRows.map(toAuditRow);
   const last = pageRows[pageRows.length - 1];
-  // Cursor carries the raw `created_at` string (µs precision) — NOT a Date.
+  // Cursor carries the raw `created_at` string (µs precision) - NOT a Date.
   const nextCursor: AuditCursor | null =
     hasMore && last ? { createdAt: last.created_at, id: branded<"AuditLogId">(last.id) } : null;
   return { items, nextCursor };

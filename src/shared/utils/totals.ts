@@ -1,12 +1,12 @@
 /**
- * Pure line-item totals math — shared by Invoices and Quotes (and any future
- * line-item document). No `server-only`, no DB — unit-testable in isolation,
+ * Pure line-item totals math - shared by Invoices and Quotes (and any future
+ * line-item document). No `server-only`, no DB - unit-testable in isolation,
  * mirroring `@/platform/billing/pricing.ts` purity. Extracted from
  * `@/modules/invoices/totals.ts` in Phase 8 so both modules share a single
  * source of truth (mirrors the Phase 7 `periods` extraction to `@/shared/utils`).
  *
  * Money is integer cents throughout. `quantity` is a decimal (hours, units); a line
- * item's `amountCents` is `round(quantity * unitPriceCents)` — half-up rounding so a
+ * item's `amountCents` is `round(quantity * unitPriceCents)` - half-up rounding so a
  * 2.5h line at $10.01/h (1001 cents) → 2502.5 → 2503 cents (round, not floor).
  */
 
@@ -43,7 +43,7 @@ export function lineItemAmountCents(quantity: number, unitPriceCents: number): n
  *
  * With `opts.pricesIncludeTax`, unit prices are gross: `totalCents` is the sum of
  * line amounts, `taxCents = round(totalCents * rate / (100 + rate))` (back-calculated
- * once on the total — matches the exclusive path's "round once on the sum" convention
+ * once on the total - matches the exclusive path's "round once on the sum" convention
  * and avoids per-line rounding drift), and `subtotalCents = totalCents - taxCents`.
  */
 export function computeLineItemTotals(

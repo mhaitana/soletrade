@@ -7,7 +7,7 @@ import { Button } from "@/shared/ui/button";
  * Global error boundary for the `(app)` shell (Wave 4 robustness). Catches render errors
  * thrown by any authed/workspace-scoped route and offers a "Try again" that re-runs the
  * segment (`reset()` from next/error). Server-component data failures above this boundary
- * (e.g. `requireWorkspaceContext` redirects) are not caught here — those propagate as
+ * (e.g. `requireWorkspaceContext` redirects) are not caught here - those propagate as
  * normal navigation. The error is logged to the console in dev only (never in prod, where
  * it could leak details to the rendered output).
  */

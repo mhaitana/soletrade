@@ -190,7 +190,7 @@ export default async function TaxPage() {
                       {formatCents(p.netGstCents, CURRENCY)}
                     </td>
                     <td className="px-0 py-2 text-right text-muted-foreground">
-                      {p.lodgedAt ? formatDate(p.lodgedAt) : "—"}
+                      {p.lodgedAt ? formatDate(p.lodgedAt) : "-"}
                     </td>
                   </tr>
                 ))}

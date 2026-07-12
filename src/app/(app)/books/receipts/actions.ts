@@ -34,7 +34,7 @@ export type ReceiptsPageData =
   | { installed: false };
 
 /**
- * Load the receipt review queue. The queue is a manage:books surface — a viewer
+ * Load the receipt review queue. The queue is a manage:books surface - a viewer
  * without `manage:books` gets `canManage: false` and an empty list (the page renders
  * a permission message). Mirrors `loadBooksPage`'s module-gate + canManage pattern.
  */
@@ -46,7 +46,7 @@ export async function loadReceiptsPage(params?: {
 
   const canManage = authorize(ctx.role, "manage:books").ok;
   const statusFilter = params?.status ?? null;
-  // Only fetch extractions for managers — viewers can't act on them anyway and the
+  // Only fetch extractions for managers - viewers can't act on them anyway and the
   // page renders a permission message, so a DB hit would be wasted.
   const extractions = canManage
     ? await listExtractions(ctx.workspaceId, { status: params?.status, limit: 200 })

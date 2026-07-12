@@ -1,5 +1,5 @@
 /**
- * Drive platform catalog (Phase 7). Pure data + lookup helpers — no `server-only`, no
+ * Drive platform catalog (Phase 7). Pure data + lookup helpers - no `server-only`, no
  * app/module/platform imports, so both the client form and the server action/service can
  * import it without dragging server-only into the client bundle. Mirrors the
  * `src/shared/constants/books-categories` pattern: data only (validation lives in the

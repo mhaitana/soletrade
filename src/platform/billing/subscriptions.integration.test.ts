@@ -12,7 +12,7 @@ import { ensureSubscription, getSubscription } from "./subscriptions";
  *
  * Skipped when DATABASE_URL is unset. Creates its own user + workspaces and
  * cleans everything up in `afterAll`. (The old `changeTier` path was removed in
- * the pricing rework — tier/anchor mutations now flow through the webhook reconcile
+ * the pricing rework - tier/anchor mutations now flow through the webhook reconcile
  * layer, tested in handlers.integration.test.ts.)
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
@@ -55,7 +55,7 @@ describe.skipIf(!HAS_DB)("subscription service integration (requires DATABASE_UR
   });
 
   it("isolates subscriptions per workspace (no IDOR)", async () => {
-    // ws2 has no row yet — getSubscription returns null.
+    // ws2 has no row yet - getSubscription returns null.
     expect(await getSubscription(ws2!)).toBeNull();
     // Provisioning ws2 must not affect ws1's row.
     const ws2Row = await ensureSubscription(ws2!);

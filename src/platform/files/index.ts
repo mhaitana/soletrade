@@ -13,7 +13,7 @@ import { getStorageAdminClient, storageBucket } from "@/server/storage";
  * `createSignedUploadUrl` for a one-shot PUT URL the client uploads to directly,
  * then `confirmUpload` flips the row to the source of truth. Reads are likewise
  * signed (`createSignedReadUrl`). The Storage client uses the service-role key
- * (bypasses RLS), so every method here re-checks `workspaceId` — Storage RLS is
+ * (bypasses RLS), so every method here re-checks `workspaceId` - Storage RLS is
  * defense-in-depth, code is the boundary.
  *
  * `storagePath` is namespaced `workspaces/{workspaceId}/{entityType ?? "misc"}/
@@ -81,7 +81,7 @@ const FILE_COLUMNS =
 /** Cursor for keyset pagination (createdAt desc + id desc tiebreaker). */
 export interface FileCursor {
   /**
-   * Raw PostgREST ISO string for `created_at` — preserves full µs precision
+   * Raw PostgREST ISO string for `created_at` - preserves full µs precision
    * (`now()` is µs-precise; a JS `Date` truncates to ms, breaking the keyset
    * `eq`/`lt` when rows share a millisecond). Kept as a string, never a `Date`.
    */
@@ -94,7 +94,7 @@ export interface FileListOptions {
   entityType?: string;
   /** Restrict to a single entity id (implies same entityType in practice). */
   entityId?: string;
-  /** Leading-wildcard ILIKE on `file_name` (index-backed via `pg_trgm` — migration 0017). */
+  /** Leading-wildcard ILIKE on `file_name` (index-backed via `pg_trgm` - migration 0017). */
   search?: string;
   limit?: number;
   /** Keyset cursor: return rows strictly before this (createdAt, id). */
@@ -126,7 +126,7 @@ export function buildStoragePath(input: {
 
 /**
  * Insert a file metadata row. Called by the upload-url route after it has minted
- * a signed upload URL — the row is created BEFORE the upload so the path is
+ * a signed upload URL - the row is created BEFORE the upload so the path is
  * deterministic, and `confirmUpload` is the (idempotent) mark that bytes landed.
  */
 export async function createFileRecord(
@@ -174,7 +174,7 @@ export async function listFiles(
   const search = opts.search?.trim();
   if (search) query = query.ilike("file_name", `%${search}%`);
   if (opts.before) {
-    // Keyset: (created_at, id) strictly < before — i.e. created_at < cursor OR
+    // Keyset: (created_at, id) strictly < before - i.e. created_at < cursor OR
     // (created_at = cursor AND id < cursor). PostgREST expresses this as an `or`
     // with a nested `and(...)` for the tiebreaker. `opts.before.createdAt` is the
     // raw µs-precision ISO string (see FileCursor) so the comparison is exact.
@@ -190,14 +190,14 @@ export async function listFiles(
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
   const last = pageRows[pageRows.length - 1];
-  // Cursor carries the raw `created_at` string (µs precision) — NOT a Date.
+  // Cursor carries the raw `created_at` string (µs precision) - NOT a Date.
   const nextCursor: FileCursor | null =
     hasMore && last ? { createdAt: last.created_at, id: branded<"FileId">(last.id) } : null;
   return { items: pageRows.map(toFileRecord), nextCursor };
 }
 
 /**
- * Fetch a single file, workspace-scoped (IDOR-safe — returns null if the id
+ * Fetch a single file, workspace-scoped (IDOR-safe - returns null if the id
  * exists but belongs to another workspace).
  */
 export async function getFile(workspaceId: WorkspaceId, id: FileId): Promise<FileRecord | null> {
@@ -244,7 +244,7 @@ export async function createSignedReadUrl(storagePath: string, ttlSeconds = 60):
 }
 
 /**
- * Download a file's bytes server-side (Wave 2 — receipt extraction). Unlike the signed-URL
+ * Download a file's bytes server-side (Wave 2 - receipt extraction). Unlike the signed-URL
  * helpers (which hand the client a URL to fetch), this pulls bytes through the app server so
  * they can be fed to the vision model. Uses the service-role admin client (bypasses RLS);
  * the caller is responsible for workspace-scoping (the `storagePath` is namespaced by
@@ -266,7 +266,7 @@ export async function downloadFileBytes(
 /**
  * Delete a file: remove the Storage object then the metadata row. Workspace-
  * scoped (refuses a file that belongs to another workspace). Writes an audit
- * row and publishes `ReceiptUploaded`'s counterpart is not needed — deletion
+ * row and publishes `ReceiptUploaded`'s counterpart is not needed - deletion
  * is a quiet cleanup, recorded only in audit.
  */
 export async function deleteFile(
@@ -279,7 +279,7 @@ export async function deleteFile(
   const client = getStorageAdminClient();
   const { error } = await client.storage.from(storageBucket()).remove([record.storagePath]);
   if (error) {
-    // Storage miss shouldn't strand the row — log + proceed to delete metadata.
+    // Storage miss shouldn't strand the row - log + proceed to delete metadata.
     console.warn(`Storage delete failed for ${record.storagePath}: ${error.message}`);
   }
   await unwrapVoid(

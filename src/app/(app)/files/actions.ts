@@ -12,7 +12,7 @@ export type FilesPageData =
   { access: true; page: FilePage; canManage: boolean } | { access: false };
 
 /**
- * Load a page of files for the workspace. `view:file` gates the list — members
+ * Load a page of files for the workspace. `view:file` gates the list - members
  * without the grant get `access: false` and the page renders a no-access card.
  * `canManage` (manage:file) toggles the upload + delete controls.
  */

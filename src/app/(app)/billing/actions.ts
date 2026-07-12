@@ -43,14 +43,14 @@ export interface BillingOverviewData {
 
 /**
  * Loader for the read-only /billing overview. View billing is granted to every
- * role (brief §3 — `view:billing`); `manage:billing` (start billing / manage modules)
+ * role (brief §3 - `view:billing`); `manage:billing` (start billing / manage modules)
  * is owner/admin and is surfaced as `canManage` for the management UI.
  *
  * Defensively calls `ensureSubscription` first so the page works even when the
- * WorkspaceCreated subscriber hasn't run yet (idempotent — no-op if a row exists).
+ * WorkspaceCreated subscriber hasn't run yet (idempotent - no-op if a row exists).
  *
  * The pricing engine is pure, so the breakdown is computed at the workspace's
- * interval (monthly as the display default when billing hasn't started — the page
+ * interval (monthly as the display default when billing hasn't started - the page
  * shows the start-billing card instead of the breakdown in that case).
  */
 export async function loadBillingOverview(): Promise<BillingOverviewData> {
@@ -94,7 +94,7 @@ export type StartBillingCheckoutResult = { ok: true; url: string } | { ok: false
 /**
  * Start billing: create a Stripe Checkout Session for a chosen set of modules + an
  * interval and return its hosted URL. The browser redirects to it
- * (`window.location.href`) — no client Stripe SDK. `manage:billing` (owner/admin)
+ * (`window.location.href`) - no client Stripe SDK. `manage:billing` (owner/admin)
  * only. The highest-standalone-price module becomes the anchor (charged standalone);
  * the rest are add-ons. Stripe reconciles the subscription back to the workspace via
  * the `checkout.session.completed` webhook, which enables each chosen module locally.
@@ -168,7 +168,7 @@ export async function previewCancelSubscriptionAction(): Promise<CancelSubscript
  *     immediately with `metadata.cancelOption = "immediate_refund"`; the webhook issues
  *     no ledger refund.
  *
- * Returns ok after the Stripe call — the immediate cancel completes asynchronously via
+ * Returns ok after the Stripe call - the immediate cancel completes asynchronously via
  * webhook. The /billing page may briefly show "active" until the webhook lands.
  */
 export async function cancelSubscriptionAction(input: unknown): Promise<CancelSubscriptionResult> {
@@ -214,7 +214,7 @@ export type SwitchIntervalResult =
 /**
  * Switch the workspace's billing interval (monthly↔annual). `manage:billing` only.
  * Reprices every active subscription item to the new interval with
- * `proration_behavior: "none"` (effective next cycle — no Stripe proration), then flips
+ * `proration_behavior: "none"` (effective next cycle - no Stripe proration), then flips
  * the local `billingInterval`. The 4c ledger does not true-up the switch; the next
  * `invoice.paid` grants at the new prices. Returns the new interval on success.
  */

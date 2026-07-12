@@ -62,7 +62,7 @@ describe.skipIf(!HAS_DB)("invoices integration (requires DATABASE_URL)", () => {
 
   it("creates a draft invoice with INV-YYYY-0001 and denormalized totals", async () => {
     const lineItems = [
-      { description: "Consulting — 5h", quantity: 5, unitPriceCents: 12000 },
+      { description: "Consulting - 5h", quantity: 5, unitPriceCents: 12000 },
       { description: "Expense", quantity: 1, unitPriceCents: 4500 },
     ];
     const id = await createInvoice(
@@ -126,14 +126,14 @@ describe.skipIf(!HAS_DB)("invoices integration (requires DATABASE_URL)", () => {
       ws1!,
       createdInvoiceIds[0]!,
       {
-        lineItems: [{ description: "Consulting — 10h", quantity: 10, unitPriceCents: 12000 }],
+        lineItems: [{ description: "Consulting - 10h", quantity: 10, unitPriceCents: 12000 }],
         taxRate: 10,
       },
       actor,
     );
     const inv = await getInvoice(ws1!, createdInvoiceIds[0]!);
     expect(inv!.lineItems).toHaveLength(1);
-    expect(inv!.lineItems[0]!.description).toBe("Consulting — 10h");
+    expect(inv!.lineItems[0]!.description).toBe("Consulting - 10h");
     expect(inv!.subtotalCents).toBe(120000);
     expect(inv!.taxCents).toBe(12000);
     expect(inv!.totalCents).toBe(132000);

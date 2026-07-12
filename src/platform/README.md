@@ -7,7 +7,7 @@ Reusable platform services shared across all product modules.
 - Modules MAY import from `platform/*` and `shared/*`.
 - `platform/*` MUST NOT import from `modules/*` (modules depend on platform, never the reverse).
 - `platform/*` MAY import from `shared/*` and `server/*`.
-- Never trust a client-provided `workspaceId` — resolve it server-side from the session.
+- Never trust a client-provided `workspaceId` - resolve it server-side from the session.
 
 ## Services (added per phase)
 

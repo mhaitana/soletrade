@@ -24,7 +24,7 @@ import type { ModuleKey } from "@/shared/constants/modules";
  * cmdk filters all items client-side against the input; nav items that don't match the typed
  * query simply disappear, leaving the live search results. Search results carry `label +
  * sublabel` as their cmdk `value` so the same substring the server matched (name/number/
- * description/email) is what cmdk matches on — keeping client + server filtering consistent.
+ * description/email) is what cmdk matches on - keeping client + server filtering consistent.
  */
 export interface CommandPaletteProps {
   open: boolean;
@@ -61,7 +61,7 @@ export function CommandPalette({ open, onOpenChange, installedModules }: Command
         .then((r) => (r.ok ? r.json() : { groups: [] }))
         .then((data: { groups?: SearchResultGroup[] }) => setGroups(data.groups ?? []))
         .catch(() => {
-          // Abort on new keystroke is expected — swallow. Real errors leave the last good list.
+          // Abort on new keystroke is expected - swallow. Real errors leave the last good list.
         })
         .finally(() => setLoading(false));
     }, 150);
@@ -71,7 +71,7 @@ export function CommandPalette({ open, onOpenChange, installedModules }: Command
     };
   }, [term, open, showResults]);
 
-  // Abort any in-flight request when the palette closes (pure side-effect — no setState).
+  // Abort any in-flight request when the palette closes (pure side-effect - no setState).
   useEffect(() => {
     if (!open) abortRef.current?.abort();
   }, [open]);

@@ -11,7 +11,7 @@ const DEFAULT_LIMIT = 25;
 
 /** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip.
  *  `createdAt` is the raw µs-precision ISO string (never a Date) so the keyset
- *  comparison stays exact — see `NotificationCursor`. */
+ *  comparison stays exact - see `NotificationCursor`. */
 function encodeCursor(cursor: NotificationCursor): string {
   return `${cursor.createdAt}|${cursor.id}`;
 }

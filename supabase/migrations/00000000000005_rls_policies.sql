@@ -2,14 +2,14 @@
 --
 -- 0004 enabled RLS on every table; this migration adds the matching SELECT policies.
 -- The application reads/writes ALL business data through the service_role key, which
--- bypasses RLS — so these policies are NOT exercised by any app code path today. They are a
+-- bypasses RLS - so these policies are NOT exercised by any app code path today. They are a
 -- safety net: they activate only if a future code path reads via the anon/cookie client, or if
 -- someone hits PostgREST directly with the anon key.
 --
 -- Design:
 --  * Coarse boundary: a user may SELECT only rows in workspaces where they hold an ACTIVE
 --    membership (workspace_members row with deleted_at IS NULL, parent workspace not
---    soft-deleted). Role-agnostic — the fine-grained verb:resource matrix (view:R / manage:R
+--    soft-deleted). Role-agnostic - the fine-grained verb:resource matrix (view:R / manage:R
 --    etc.) stays in app code (authorizeOrAudit). RLS is NOT the place to encode roles.
 --  * User-scoped tables (notifications, ai_conversations, ai_messages) additionally require
 --    user_id = auth.uid(). ai_messages has no workspace_id/user_id column, so it is scoped via
@@ -17,28 +17,28 @@
 --  * Recursion-safe: the membership check is a SECURITY DEFINER function (runs as the postgres
 --    owner, bypassing RLS) so policies referencing workspace_members/workspaces do not recurse.
 --    auth.uid() is evaluated in the POLICY (caller context, where the JWT lives) and passed in
---    as a parameter — it is never called inside the function body.
+--    as a parameter - it is never called inside the function body.
 --  * SELECT only. There are deliberately NO INSERT/UPDATE/DELETE policies, so writes are denied
 --    to the authenticated/anon roles; the service_role key bypasses RLS, so app writes work.
 --    This intentionally locks all writes to the server-side service-role path. If a future
---    feature ever needs anon writes, add a write policy in a new migration — don't widen this
+--    feature ever needs anon writes, add a write policy in a new migration - don't widen this
 --    one.
 --  * Public-token reads (invoices/quotes by public_token) stay server-side via the service-role
 --    client; anon PostgREST access to those tables is denied (membership only), so the sanitized
 --    public view the code returns is the only public surface. Do NOT add a public-token SELECT
---    policy here — it would leak the internal ids/notes/stripe ids the service carefully strips.
+--    policy here - it would leak the internal ids/notes/stripe ids the service carefully strips.
 --  * processed_webhook_events (global, no workspace/user) intentionally gets NO policy → denied
 --    to all non-bypass roles; the Stripe webhook handler reads/writes it via the service_role
 --    key. Do NOT add a policy for it.
 --
 -- Companion GRANT: migration 0002 granted DML to service_role ONLY (anon/authenticated were
 -- deliberately left without table DML so the then-policy-less RLS couldn't leak rows). That made
--- the SELECT policies below unreachable — an authenticated PostgREST request failed with 42501
+-- the SELECT policies below unreachable - an authenticated PostgREST request failed with 42501
 -- "permission denied for table" before RLS ran. This migration therefore also GRANTs SELECT to
--- `authenticated` (and only authenticated — anon stays hard-blocked at the GRANT layer, matching
+-- `authenticated` (and only authenticated - anon stays hard-blocked at the GRANT layer, matching
 -- the app's auth-only anon client; there are no public anon-readable tables). With SELECT granted
 -- to authenticated, the policies below become the live boundary. anon retains no SELECT, so it
--- gets 42501 regardless — belt-and-suspenders: even a future buggy anon policy can't leak rows
+-- gets 42501 regardless - belt-and-suspenders: even a future buggy anon policy can't leak rows
 -- because anon has no table-level SELECT privilege.
 
 -- ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ GRANT EXECUTE ON FUNCTION public.is_conversation_owner(uuid, uuid) TO authentica
 -- ---------------------------------------------------------------------------
 
 -- Users: a user reads only their own mirror row. (Also blocks email leakage via anon
--- resource-embedding — a member listing members via anon would only see their own email.)
+-- resource-embedding - a member listing members via anon would only see their own email.)
 CREATE POLICY users_select ON public.users
   FOR SELECT TO authenticated USING (id = auth.uid());
 
@@ -181,7 +181,7 @@ CREATE POLICY ai_conversations_select ON public.ai_conversations
   FOR SELECT TO authenticated
   USING (public.is_workspace_member(workspace_id, auth.uid()) AND user_id = auth.uid());
 
--- ai_messages has no workspace_id/user_id — scoped via its parent conversation.
+-- ai_messages has no workspace_id/user_id - scoped via its parent conversation.
 CREATE POLICY ai_messages_select ON public.ai_messages
   FOR SELECT TO authenticated USING (public.is_conversation_owner(conversation_id, auth.uid()));
 

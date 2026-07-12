@@ -19,7 +19,7 @@ import { branded, type WorkspaceId } from "@/shared/types/ids";
  * sync with Stripe as the source of truth for the live subscription.
  *
  * Idempotency is layered:
- *   1. `handleStripeEvent` pre-checks `processed_webhook_events` (primary guard —
+ *   1. `handleStripeEvent` pre-checks `processed_webhook_events` (primary guard -
  *      `writeAudit` is append-only, so without this a retried event would duplicate the
  *      audit row).
  *   2. Each handler checks current state before writing (defense-in-depth).
@@ -57,7 +57,7 @@ export interface CheckoutItem {
   itemId: string;
 }
 
-/** Patch derived from a completed Checkout Session (ids only — interval + items come
+/** Patch derived from a completed Checkout Session (ids only - interval + items come
  * from the subscription retrieval done by the handler). */
 export function mapCheckoutSessionToUpdate(
   session: Pick<Stripe.Checkout.Session, "customer" | "subscription">,
@@ -190,7 +190,7 @@ export async function reconcileSubscription(stripeSub: Stripe.Subscription): Pro
 
 /**
  * `customer.subscription.deleted`: issue a pro-rated refund for each active module
- * (4c — same formula as a single-module cancel), then mark canceled + clear billing
+ * (4c - same formula as a single-module cancel), then mark canceled + clear billing
  * interval and cascade-disable active modules (their Stripe items are gone with the
  * subscription). The `stripeSubscriptionId` is retained for the audit trail. Webhooks
  * carry no user actor, so `disableModule`/`refundCredit` are called with `undefined`.
@@ -226,7 +226,7 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
     (cancelOption === undefined || cancelOption === "immediate_credit") &&
     current.billingInterval != null &&
     current.anchorBillingDate != null;
-  // Per-module prorated refund (actorless — webhook). Only when we have the billing state
+  // Per-module prorated refund (actorless - webhook). Only when we have the billing state
   // needed to compute the period; legacy rows missing interval/anchor get no refund.
   if (issueCreditRefunds) {
     const active = await getInstalledModules(workspaceId);
@@ -302,10 +302,10 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
 }
 
 /**
- * `invoice.paid`: audit + grant credits equal to the invoice's `amount_paid` (4c —
+ * `invoice.paid`: audit + grant credits equal to the invoice's `amount_paid` (4c -
  * prepayment model: paying a Stripe invoice issues credit that future module charges
  * draw down). workspaceId is resolved by joining `invoice.customer` (the Stripe customer
- * id we store on start-billing) against `subscriptions.stripeCustomerId` — this Stripe
+ * id we store on start-billing) against `subscriptions.stripeCustomerId` - this Stripe
  * API version no longer exposes `subscription_details` on the top-level Invoice, so the
  * customer id is the reliable join key.
  *
@@ -341,7 +341,7 @@ export async function recordInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
     },
   });
   // Grant credits for the prepayment. Skip $0 invoices and any already-granted invoice
-  // (idempotency — the processed_webhook_events pre-check guards by event id; this guards
+  // (idempotency - the processed_webhook_events pre-check guards by event id; this guards
   // by invoice id for the rare same-invoice/different-event case).
   if (invoice.amount_paid > 0) {
     const existing = await unwrapMaybe(

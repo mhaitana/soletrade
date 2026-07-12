@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for the AI provider abstraction. The `env` object is parsed once at
  * module load from `process.env`, so each case stubs the relevant env vars, resets
- * the module registry, and re-imports the provider fresh — exercising `getAIModel`
+ * the module registry, and re-imports the provider fresh - exercising `getAIModel`
  * against each `AI_PROVIDER` value with/without the provider's API key.
  */
 describe("AI provider (platform/ai/provider)", () => {
@@ -50,7 +50,7 @@ describe("AI provider (platform/ai/provider)", () => {
     const { getAIModel, isMockProvider } = await import("@/platform/ai/provider");
     expect(isMockProvider()).toBe(false);
     const model = getAIModel() as unknown as { provider: string };
-    // The AI SDK stamps the provider id on the model — `anthropic.*` for the Anthropic factory.
+    // The AI SDK stamps the provider id on the model - `anthropic.*` for the Anthropic factory.
     expect(model.provider).toMatch(/^anthropic/);
   });
 

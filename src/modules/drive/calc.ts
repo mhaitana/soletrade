@@ -1,16 +1,16 @@
 /**
- * Pure Drive aggregation (Phase 7). No `server-only`, no DB, no time calls — unit-testable
+ * Pure Drive aggregation (Phase 7). No `server-only`, no DB, no time calls - unit-testable
  * in isolation, mirroring `@/modules/books/calc.ts` purity. The loader
  * (`@/app/(app)/drive/actions.ts`) fetches a period's earnings + trips and runs
  * `summarizeDrive` to produce the `/drive` summary header + per-platform breakdown + monthly
  * sparkline.
  *
  * Money is integer cents throughout; distance is integer meters (smallest unit, mirrors the
- * cents pattern). `amountCents` is always positive — defensively `Math.abs`'d so a stray
+ * cents pattern). `amountCents` is always positive - defensively `Math.abs`'d so a stray
  * negative can't inflate totals. `distanceMeters` likewise `Math.abs`'d.
  *
  * The platform catalog (`@/shared/constants/drive-platforms`) is intentionally NOT imported
- * here — `calc` stays catalog-free / pure. The UI joins human labels onto the `byPlatform`
+ * here - `calc` stays catalog-free / pure. The UI joins human labels onto the `byPlatform`
  * slugs via `platformLabel`.
  */
 
@@ -18,7 +18,7 @@
 export interface EarningSummaryInput {
   /** Integer cents, expected positive. `Math.abs` is applied defensively. */
   amountCents: number;
-  /** The earning's calendar date — drives the monthly grouping. */
+  /** The earning's calendar date - drives the monthly grouping. */
   date: Date;
   /** Platform slug (catalog validation lives at the action boundary). */
   platform: string;
@@ -28,7 +28,7 @@ export interface EarningSummaryInput {
 export interface TripSummaryInput {
   /** Integer meters, expected positive. `Math.abs` is applied defensively. */
   distanceMeters: number;
-  /** The trip's calendar date — drives the monthly grouping. */
+  /** The trip's calendar date - drives the monthly grouping. */
   date: Date;
   /** Platform slug (catalog validation lives at the action boundary). */
   platform: string;
@@ -54,7 +54,7 @@ export interface MonthlyDrivePoint {
   distanceMeters: number;
 }
 
-/** Weekly point (Wave 2) — keyed by the ISO Monday of the week ("YYYY-MM-DD"). */
+/** Weekly point (Wave 2) - keyed by the ISO Monday of the week ("YYYY-MM-DD"). */
 export interface WeeklyDrivePoint {
   /** The Monday anchoring this week, "YYYY-MM-DD" (UTC). Sortable + unambiguous. */
   week: string;
@@ -109,11 +109,11 @@ function weekKey(date: Date): string {
 }
 
 /**
- * Aggregate a set of earnings + trips into a Drive summary. Pure — no DB, no time calls.
+ * Aggregate a set of earnings + trips into a Drive summary. Pure - no DB, no time calls.
  * Empty input → zeros + empty arrays. Earnings and trips are independent; a platform with
  * trips but no earnings (or vice versa) still appears in `byPlatform`.
  *
- * `opts.settings` + `opts.expenses` (Wave 2) are optional — when supplied, the summary also
+ * `opts.settings` + `opts.expenses` (Wave 2) are optional - when supplied, the summary also
  * computes the mileage deduction, total vehicle expenses, and net profit. Omit them for
  * the pre-Wave-2 callers (the dashboard loader); the new fields default to 0.
  */
@@ -243,7 +243,7 @@ export function summarizeDrive(
 
 /**
  * Format an integer meter count as a kilometres string with one decimal, e.g. `45200` →
- * `"45.2 km"`. Pure — used by both server + client renders. `Math.abs` so a stray negative
+ * `"45.2 km"`. Pure - used by both server + client renders. `Math.abs` so a stray negative
  * never renders a minus sign on a distance.
  */
 export function formatKm(meters: number): string {

@@ -20,7 +20,7 @@ import {
  *   stream response. The caller wires `onFinish` to persist the assistant's text.
  * - **Mock provider**: `streamMockAssistant` emits a single text part from a
  *   pre-computed string (the route builds it by calling the `getWorkspaceOverview`
- *   tool's execute against real workspace data — so local dev/tests show real
+ *   tool's execute against real workspace data - so local dev/tests show real
  *   numbers without an API key and without running a tool-calling loop).
  *
  * Both paths set `X-Conversation-Id` on the response so the client can capture a
@@ -49,7 +49,7 @@ export interface StreamAssistantOptions {
  * Extract a readable message from an unknown error so the workspace admin can see
  * the real cause (a missing API key, an upstream 401, a tool-execution failure) in
  * the chat UI. This is the user's own workspace tool, so surfacing provider detail
- * is appropriate — the AI SDK's default `onError` hides it behind "An error occurred."
+ * is appropriate - the AI SDK's default `onError` hides it behind "An error occurred."
  */
 export function assistantErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message || "Assistant error.";
@@ -88,7 +88,7 @@ export async function streamAssistant(opts: StreamAssistantOptions): Promise<Res
 }
 
 /**
- * Return a UI-message stream that immediately errors with `error` — used when the
+ * Return a UI-message stream that immediately errors with `error` - used when the
  * real-provider path fails before streaming starts (e.g. `getAIModel()` throws
  * because the provider API key is unset). Emitting a proper error part (rather than
  * a plain JSON 500) keeps the client on the same `useChat` error path, so the real
@@ -111,7 +111,7 @@ export function streamAssistantError(error: unknown, conversationId: string): Re
 }
 
 /**
- * Stream a pre-computed mock reply as a single text part. No model, no tool loop —
+ * Stream a pre-computed mock reply as a single text part. No model, no tool loop -
  * the route has already produced `text` from real workspace data. Emits the same
  * chunk sequence a real stream would (`start` → `text-start` → `text-delta` →
  * `text-end` → `finish`) so the client treats it identically.

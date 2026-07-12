@@ -12,7 +12,7 @@
  * period so far). `previousPeriodRange` returns the **same-length window shifted back one
  * period** (e.g. today is July 5 → previous month = June 1–June 5), so period-over-period
  * deltas are a fair comparison, not partial-current-vs-full-previous. Returns `null` for
- * `"all"` (no meaningful previous period — deltas are `null` in that case).
+ * `"all"` (no meaningful previous period - deltas are `null` in that case).
  */
 
 export type Period = "week" | "month" | "quarter" | "year" | "calendar" | "all";
@@ -22,7 +22,7 @@ export interface PeriodOption {
   label: string;
 }
 
-// `"year"` is labelled "Current FY" — it reanchors to the workspace's financial year
+// `"year"` is labelled "Current FY" - it reanchors to the workspace's financial year
 // (see `periodRange`). `"calendar"` is the calendar-year window (1 Jan → now), independent
 // of the FY anchor. Order mirrors granularity, matching the existing "This year" slot.
 export const PERIODS: readonly PeriodOption[] = [
@@ -65,7 +65,7 @@ export function startOfWeek(now: Date): Date {
 }
 
 /** Default financial-year start month (1–12) when a caller doesn't pass one. `1` = January
- *  = calendar year, which is the historical `"year"`/`"quarter"` behaviour — so unthreaded
+ *  = calendar year, which is the historical `"year"`/`"quarter"` behaviour - so unthreaded
  *  call sites are unchanged. Loaders thread the workspace's configured `fyStartMonth`
  *  (DB default `7` = 1 July, Australian) so a real workspace's "year"/"quarter" windows
  *  reanchor to its financial year. Pure date math, no DB. */
@@ -129,7 +129,7 @@ export function periodRange(
  * The previous period's range, for period-over-period deltas. Same window length as the
  * current period-so-far, shifted back one period (week → previous 7 days, month → previous
  * calendar month, quarter → previous quarter, year/calendar → previous year). Returns
- * `null` for `"all"` — no meaningful previous, so the caller skips the delta. `fyStartMonth`
+ * `null` for `"all"` - no meaningful previous, so the caller skips the delta. `fyStartMonth`
  * threads through to `periodRange` so fiscal `"year"`/`"quarter"` shift by 12/3 months off
  * the workspace's FY anchor; `"calendar"` is FY-agnostic so the anchor is irrelevant for it.
  */
@@ -153,7 +153,7 @@ export function previousPeriodRange(
     start.setUTCMonth(start.getUTCMonth() - 3);
     end.setUTCMonth(end.getUTCMonth() - 3);
   } else {
-    // "year" (Current FY) | "calendar" — both are 12-month windows; shift back one year.
+    // "year" (Current FY) | "calendar" - both are 12-month windows; shift back one year.
     start.setUTCFullYear(start.getUTCFullYear() - 1);
     end.setUTCFullYear(end.getUTCFullYear() - 1);
   }

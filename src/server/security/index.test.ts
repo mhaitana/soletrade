@@ -15,7 +15,7 @@ function setHeaders(map: Record<string, string | undefined>): void {
   });
 }
 
-describe("getClientIp — IP header precedence", () => {
+describe("getClientIp - IP header precedence", () => {
   beforeEach(() => {
     mockHeaders.mockReset();
   });

@@ -115,7 +115,7 @@ export interface RemoveModuleResult {
 /**
  * Resolve the period-end timestamp for a keep-until-end cancellation, given the
  * workspace's billing state. Null when there's no active billing (the no-billing
- * fallback uses `now` as the effective time — disable immediately).
+ * fallback uses `now` as the effective time - disable immediately).
  */
 function periodEndFor(
   interval: Interval | null,
@@ -131,7 +131,7 @@ function periodEndFor(
  * (brief §10.6). The `option` controls the execution path:
  *
  *   - `keep_until_end_of_cycle` (Branch A): set `pendingCancellationAt = periodEnd` on
- *     the installation row and do NOT disable or touch Stripe — the module stays
+ *     the installation row and do NOT disable or touch Stripe - the module stays
  *     active/billable until the `module-cancel-finalize` cron finalizes it at period
  *     end. `refundCents` is 0 (access runs to term).
  *   - `immediate_credit` (Branch A, default): delete the Stripe item (promoting a new
@@ -141,7 +141,7 @@ function periodEndFor(
  *     and issue a pro-rated **card refund** via `refundToCard` (no ledger entry).
  *
  * Permissive on billing state: a canceled/unbilled workspace disabling a stray module
- * still works locally — keep-until-end with no billing degrades to an immediate disable
+ * still works locally - keep-until-end with no billing degrades to an immediate disable
  * (effectiveAt = now, refund 0), and the immediate paths skip the refund when billing
  * state is missing. The active set is captured BEFORE the disable so `moduleRefundCents`
  * can resolve the role the module held this cycle.
@@ -269,7 +269,7 @@ export async function removeModuleFromSubscription(
 }
 
 /**
- * Switch the workspace's billing interval (monthly↔annual). Effective next cycle — Stripe
+ * Switch the workspace's billing interval (monthly↔annual). Effective next cycle - Stripe
  * items are repriced with `proration_behavior: "none"` (no immediate charge/credit), and
  * the local `billingInterval` is flipped to match. The 4c ledger does NOT true-up the
  * switch (consistent with the established no-proration stance); the next `invoice.paid`
@@ -312,7 +312,7 @@ export async function switchBillingInterval(
  * Branch A "keep-until-end"). For each due row: delete the Stripe subscription item
  * (promoting a new anchor if the removed module was the anchor), disable the local
  * row, and publish `ModuleDisabled` (the scheduled `ModuleCancelled` event already
- * fired when the cancellation was booked). Idempotent — `disableModule` flips the row
+ * fired when the cancellation was booked). Idempotent - `disableModule` flips the row
  * to `cancelled` so a second run won't re-pick it. Returns the count finalized.
  *
  * Called by the `module-cancel-finalize` cron runner. Per-row try/catch keeps one

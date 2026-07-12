@@ -11,7 +11,7 @@ import type { ModuleKey } from "@/shared/constants/modules";
  * The header search trigger (Wave 3). A button styled like a search box (search icon +
  * "Search…" placeholder + a ⌘K kbd badge) that opens the `CommandPalette`, plus a global
  * `keydown` listener that toggles the palette on ⌘K / Ctrl+K. Owns the `open` state so the
- * AppShell stays a server component — only this small client island needs interactivity.
+ * AppShell stays a server component - only this small client island needs interactivity.
  *
  * The trigger is always visible (icon-only on small screens, full label + kbd on `sm+`) so
  * mobile users can still tap to open the palette; the ⌘K shortcut is desktop-only by nature.

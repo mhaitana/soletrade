@@ -47,7 +47,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           <span className="font-mono text-base text-muted-foreground">{data.quote.number}</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Save before sending — sent quotes are locked.
+          Save before sending - sent quotes are locked.
         </p>
       </div>
       <QuoteForm mode="edit" quote={data.quote} customers={data.customers} />

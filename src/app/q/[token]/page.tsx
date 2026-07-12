@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, Clock, FileText, XCircle } from "lucide-react";
 import { Badge } from "@/shared/ui/badge";
 import { getQuoteByPublicToken, markQuoteViewed, type PublicQuoteView } from "@/modules/quotes";
+import { brand } from "@/config/brand";
+import { Logo } from "@/shared/components/logo";
 import { QuoteAcceptForm } from "./quote-accept-form";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +30,7 @@ const STATUS_BADGE: Record<
 };
 
 function formatDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -52,14 +54,24 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
   return (
     <div className="min-h-dvh bg-[#F8FAFC] text-foreground">
       <div className="mx-auto max-w-md px-4 py-6 sm:py-10">
-        {/* Top bar: brand wordmark left, status badge right */}
-        <header className="mb-6 flex items-center justify-between">
-          <span className="font-mono text-sm font-semibold tracking-tight">soletrade labs</span>
-          <Badge variant={badge.variant}>{badge.label}</Badge>
+        {/* Top bar: issuing business dominant (left), status badge right. Soletrade stays subtle
+            (the `h` mark only) so it doesn't compete with the merchant's brand. */}
+        <header className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Logo variant="mark" href={null} className="shrink-0" />
+            {q.merchantName ? (
+              <span className="truncate text-base font-semibold tracking-tight">
+                {q.merchantName}
+              </span>
+            ) : null}
+          </div>
+          <Badge variant={badge.variant} className="shrink-0">
+            {badge.label}
+          </Badge>
         </header>
 
         <div className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">
-          {/* Document outline for screen readers — the visible hero uses styled <p>s. */}
+          {/* Document outline for screen readers - the visible hero uses styled <p>s. */}
           <h1 className="sr-only">Quote {q.number}</h1>
 
           {/* Hero */}
@@ -92,7 +104,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             ))}
           </div>
 
-          {/* Sections (Wave 2) — content blocks in position order, between line items and totals. */}
+          {/* Sections (Wave 2) - content blocks in position order, between line items and totals. */}
           {q.sections.length > 0 ? (
             <div className="mt-5 space-y-4 border-t border-border pt-5">
               {q.sections.map((s, i) => (
@@ -129,7 +141,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             </div>
           </dl>
 
-          {/* Terms & Conditions (Wave 2) — collapsible disclosure above the accept button. */}
+          {/* Terms & Conditions (Wave 2) - collapsible disclosure above the accept button. */}
           {q.termsConditions ? (
             <details id="terms" className="mt-5 rounded-md border border-border bg-muted/30 p-4">
               <summary className="cursor-pointer text-sm font-medium">
@@ -141,7 +153,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             </details>
           ) : null}
 
-          {/* Accept/Decline block — only while the customer can still act. */}
+          {/* Accept/Decline block - only while the customer can still act. */}
           {awaiting ? <QuoteAcceptForm token={token} termsConditions={q.termsConditions} /> : null}
 
           {q.status === "accepted" ? (
@@ -154,7 +166,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               <div className="text-sm">
                 <p className="font-medium text-emerald-800">Quote accepted</p>
                 <p className="text-emerald-700">
-                  Thank you — the business will be in touch with an invoice.
+                  Thank you - the business will be in touch with an invoice.
                 </p>
               </div>
             </div>
@@ -189,6 +201,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             {q.validUntil ? ` · Valid until ${formatDate(q.validUntil)}` : ""}
           </p>
           <p>This is a secure link. Do not share it with anyone else.</p>
+          <p className="pt-2 text-muted-foreground/80">Powered by {brand.productName}</p>
         </footer>
       </div>
     </div>

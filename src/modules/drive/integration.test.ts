@@ -17,7 +17,7 @@ import { registerBooksIntegration } from "@/modules/books/integration";
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
-/** Shape the assertions use — mapped from the raw snake_case PostgREST row. */
+/** Shape the assertions use - mapped from the raw snake_case PostgREST row. */
 interface BookTxRow {
   type: string;
   category: string;
@@ -58,7 +58,7 @@ describe.skipIf(!HAS_DB)("books DriveEarningsLogged integration (requires DATABA
     ]);
     ws1 = await createWorkspace(actor, "Drive Books Int One", `drive-books-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Drive Books Int Two", `drive-books-two-${Date.now()}`);
-    // Only ws1 has Books enabled — ws2 exercises the module-gate no-op.
+    // Only ws1 has Books enabled - ws2 exercises the module-gate no-op.
     await enableModule(ws1, "books", actor);
     await enableModule(ws1, "drive", actor);
     await enableModule(ws2, "drive", actor);
@@ -137,7 +137,7 @@ describe.skipIf(!HAS_DB)("books DriveEarningsLogged integration (requires DATABA
     expect(row!.notes).toBe("Auto-recorded from drive earnings (Uber).");
   });
 
-  it("is idempotent — a replayed DriveEarningsLogged does not duplicate the income row", async () => {
+  it("is idempotent - a replayed DriveEarningsLogged does not duplicate the income row", async () => {
     const earningId = createdEarningIds[0]!;
     const before = await countIncomeForEarning(ws1!, earningId);
     expect(before).toBe(1);
@@ -182,7 +182,7 @@ describe.skipIf(!HAS_DB)("books DriveEarningsLogged integration (requires DATABA
 
   it("ignores a DriveEarningsLogged event with missing metadata (no throw, no row)", async () => {
     const before = await dbRowCountForWorkspace(ws1!);
-    // Garbage metadata — no amountCents/currency/platform/date.
+    // Garbage metadata - no amountCents/currency/platform/date.
     await publishEvent({
       type: "DriveEarningsLogged",
       workspaceId: ws1!,
@@ -280,9 +280,9 @@ describe.skipIf(!HAS_DB)("books DriveEarningsLogged integration (requires DATABA
     const ok = await deleteEarning(ws1!, earningId, actor);
     expect(ok).toBe(true);
 
-    // The Books row is removed — no orphaned mirror.
+    // The Books row is removed - no orphaned mirror.
     expect(await countIncomeForEarning(ws1!, earningId)).toBe(0);
-    // Remove from cleanup list — already gone.
+    // Remove from cleanup list - already gone.
     const idx = createdEarningIds.indexOf(earningId);
     if (idx >= 0) createdEarningIds.splice(idx, 1);
   });

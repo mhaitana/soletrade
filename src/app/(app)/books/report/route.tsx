@@ -12,7 +12,7 @@ import { BooksPlDocument } from "@/server/pdf/documents/books-pl-document";
 /**
  * Books P&L report PDF (Wave 4). Streams a printable P&L for `?period=` (reusing the books page's
  * period selector, so the "Download report" button is a simple link). Aggregation reuses the pure
- * `summarizeTransactions` — single source of truth with the on-page summary. Auth: resolved
+ * `summarizeTransactions` - single source of truth with the on-page summary. Auth: resolved
  * workspace context (401) + `view:books` (403) + books module installed (404).
  */
 export const dynamic = "force-dynamic";
@@ -58,7 +58,7 @@ export async function GET(request: Request): Promise<Response> {
     })),
   );
 
-  // Build the element before the try/catch — see invoices pdf route for rationale.
+  // Build the element before the try/catch - see invoices pdf route for rationale.
   const element = (
     <BooksPlDocument
       summary={summary}

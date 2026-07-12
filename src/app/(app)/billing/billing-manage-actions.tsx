@@ -133,7 +133,7 @@ export function BillingManageActions({ interval }: BillingManageActionsProps) {
             <DialogTitle>Switch to {targetInterval} billing?</DialogTitle>
             <DialogDescription>
               Your prices update to {targetInterval} billing starting next cycle. No charge or
-              credit is issued now — the change takes effect on your next invoice.
+              credit is issued now - the change takes effect on your next invoice.
             </DialogDescription>
           </DialogHeader>
           {switchError ? (
@@ -175,7 +175,7 @@ export function BillingManageActions({ interval }: BillingManageActionsProps) {
           if (!o) setCancelPreview(null);
         }}
         title="Cancel your subscription?"
-        description="This ends your subscription and disables all paid modules (Branch B — offboarding). You can keep access until the current billing period ends, or cancel now for a pro-rated refund to your payment method. No platform credit is issued when cancelling the whole subscription."
+        description="This ends your subscription and disables all paid modules (Branch B - offboarding). You can keep access until the current billing period ends, or cancel now for a pro-rated refund to your payment method. No platform credit is issued when cancelling the whole subscription."
         periodEnd={cancelPreview?.periodEnd ?? null}
         options={cancelChoices}
         onConfirm={onConfirmCancel}

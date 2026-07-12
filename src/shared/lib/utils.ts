@@ -3,7 +3,7 @@ import { twMerge } from "tailwind-merge";
 
 /**
  * Merge Tailwind class names with conflict resolution.
- * Shared utility — must not import app/module/platform-specific code.
+ * Shared utility - must not import app/module/platform-specific code.
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

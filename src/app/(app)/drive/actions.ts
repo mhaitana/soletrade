@@ -80,7 +80,7 @@ export async function createEarningAction(input: unknown): Promise<CreateEarning
     revalidatePath("/drive");
     // Earnings auto-record a Books "gig" income transaction via the event bus
     // (registerBooksIntegration). The bus fully awaits its handlers, so the row exists
-    // by the time we return — invalidate /books + /dashboard so soft-nav shows it.
+    // by the time we return - invalidate /books + /dashboard so soft-nav shows it.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true, earningId: id };
@@ -235,7 +235,7 @@ export async function updateTripAction(input: unknown): Promise<UpdateTripResult
       ctx.user.id,
     );
     revalidatePath("/drive");
-    // The mirrored Books mileage row is reconciled via the bus — invalidate /books + /dashboard.
+    // The mirrored Books mileage row is reconciled via the bus - invalidate /books + /dashboard.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true };
@@ -279,7 +279,7 @@ export async function deleteTripAction(input: unknown): Promise<DriveActionResul
   try {
     await deleteTrip(ctx.workspaceId, branded<"DriveTripId">(parsed.data.tripId), ctx.user.id);
     revalidatePath("/drive");
-    // The mirrored Books mileage row is removed via the bus — invalidate /books + /dashboard.
+    // The mirrored Books mileage row is removed via the bus - invalidate /books + /dashboard.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true };
@@ -293,7 +293,7 @@ export async function deleteTripAction(input: unknown): Promise<DriveActionResul
 export type DriveView = "earnings" | "trips";
 
 // `periodRange` is imported from `@/shared/utils/periods` (extracted in Phase 9; the
-// per-module "date math may diverge" concern never materialized — Books + Drive were identical).
+// per-module "date math may diverge" concern never materialized - Books + Drive were identical).
 
 export type DrivePageData =
   | {
@@ -306,9 +306,9 @@ export type DrivePageData =
       search: string;
       period: Period;
       summary: DriveSummary;
-      /** Per-week earnings + distance (Wave 2) — used by the weekly sparkline. */
+      /** Per-week earnings + distance (Wave 2) - used by the weekly sparkline. */
       weekly: WeeklyDrivePoint[];
-      /** Workspace mileage rate (Wave 2) — the page surfaces it so users see the deduction basis. */
+      /** Workspace mileage rate (Wave 2) - the page surfaces it so users see the deduction basis. */
       mileageRateCentsPerKm: number;
     }
   | { installed: false };

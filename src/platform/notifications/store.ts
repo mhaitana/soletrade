@@ -9,7 +9,7 @@ import { branded, type NotificationId, type UserId, type WorkspaceId } from "@/s
  * filters `workspaceId = ? AND userId = ?` so a member can't read or mutate another
  * member's notifications (IDOR-safe across users AND workspaces, mirroring
  * `ai_conversations`). The route/action layer is the only caller; it always passes
- * the session-resolved ids — never a client-supplied id without an ownership check.
+ * the session-resolved ids - never a client-supplied id without an ownership check.
  *
  * Writes come from event subscribers in `index.ts` (merchant-facing events). Reads
  * come from the bell + `/notifications` page.
@@ -31,7 +31,7 @@ export interface NotificationRow {
 /** Cursor for keyset pagination (createdAt desc + id desc tiebreaker). */
 export interface NotificationCursor {
   /**
-   * Raw PostgREST ISO string for `created_at` — preserves full µs precision
+   * Raw PostgREST ISO string for `created_at` - preserves full µs precision
    * (`now()` is µs-precise; a JS `Date` truncates to ms, breaking the keyset
    * `eq`/`lt` when rows share a millisecond). Kept as a string, never a `Date`.
    */
@@ -139,7 +139,7 @@ export async function listNotifications(
     .eq("user_id", userId);
   if (opts.unreadOnly) query = query.is("read_at", null);
   if (opts.before) {
-    // Keyset: (created_at, id) strictly < before — created_at < cursor OR
+    // Keyset: (created_at, id) strictly < before - created_at < cursor OR
     // (created_at = cursor AND id < cursor). PostgREST expresses this as an `or`
     // with a nested `and(...)` for the tiebreaker. `opts.before.createdAt` is the
     // raw µs-precision ISO string (see NotificationCursor) so the comparison is exact.
@@ -157,7 +157,7 @@ export async function listNotifications(
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
   const items = pageRows.map(toNotificationRow);
   const last = pageRows[pageRows.length - 1];
-  // Cursor carries the raw `created_at` string (µs precision) — NOT a Date.
+  // Cursor carries the raw `created_at` string (µs precision) - NOT a Date.
   const nextCursor: NotificationCursor | null =
     hasMore && last ? { createdAt: last.created_at, id: branded<"NotificationId">(last.id) } : null;
   return { items, nextCursor };
@@ -177,7 +177,7 @@ export async function unreadCount(workspaceId: WorkspaceId, userId: UserId): Pro
 }
 
 /**
- * Mark a single notification read. Workspace + user scoped (IDOR-safe — a
+ * Mark a single notification read. Workspace + user scoped (IDOR-safe - a
  * cross-user id is a no-op). Returns true if a row was updated.
  */
 export async function markRead(
@@ -218,7 +218,7 @@ export async function markAllRead(workspaceId: WorkspaceId, userId: UserId): Pro
  * Resolve the active members of a workspace who hold a given permission
  * (e.g. `manage:quote`), returning their ids. Used by the event subscribers to
  * fan out one in-app row per qualifying merchant. Uses the pure `can()` from the
- * permissions platform (no DB permission table — roles carry the grants).
+ * permissions platform (no DB permission table - roles carry the grants).
  */
 export async function memberIdsWithPermission(
   workspaceId: WorkspaceId,

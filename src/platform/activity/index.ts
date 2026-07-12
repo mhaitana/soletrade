@@ -30,7 +30,7 @@ export interface ActivityRow {
 /** Cursor for keyset pagination (createdAt desc + id desc tiebreaker). */
 export interface ActivityCursor {
   /**
-   * Raw PostgREST ISO string for `created_at` — MUST preserve the full microsecond
+   * Raw PostgREST ISO string for `created_at` - MUST preserve the full microsecond
    * precision Postgres stores (`now()` is µs-precise). A JS `Date` only keeps
    * milliseconds, so round-tripping `new Date(iso).toISOString()` truncates the
    * sub-ms digits and the keyset `created_at.eq`/`.lt` then matches nothing when
@@ -115,7 +115,7 @@ export async function writeActivity(input: ActivityInput): Promise<ActivityEvent
 
 /**
  * List activity for a workspace, newest first. Always scoped to the workspace
- * (IDOR-safe — never returns another workspace's events). Optional filters by
+ * (IDOR-safe - never returns another workspace's events). Optional filters by
  * type / entity, and keyset cursor pagination.
  */
 export async function listActivity(
@@ -140,7 +140,7 @@ export async function listActivity(
     query = query.eq("entity_id", opts.entityId);
   }
   if (opts.before) {
-    // Keyset: (created_at, id) strictly < before — created_at < cursor OR
+    // Keyset: (created_at, id) strictly < before - created_at < cursor OR
     // (created_at = cursor AND id < cursor). PostgREST expresses this as an `or`
     // with a nested `and(...)` for the tiebreaker. `opts.before.createdAt` is the
     // raw µs-precision ISO string (see ActivityCursor) so the comparison is exact.
@@ -158,7 +158,7 @@ export async function listActivity(
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
   const items = pageRows.map(toActivityRow);
   const last = pageRows[pageRows.length - 1];
-  // Cursor carries the raw `created_at` string (µs precision) — NOT a Date.
+  // Cursor carries the raw `created_at` string (µs precision) - NOT a Date.
   const nextCursor: ActivityCursor | null =
     hasMore && last
       ? { createdAt: last.created_at, id: branded<"ActivityEventId">(last.id) }

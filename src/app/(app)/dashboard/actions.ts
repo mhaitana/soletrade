@@ -17,30 +17,30 @@ import { listEarnings, listTrips, summarizeDrive } from "@/modules/drive";
 import { listQuotes, summarizeQuotes } from "@/modules/quotes";
 
 /**
- * Cross-module dashboard loader (Phase 9). This is the **composition root** — it MAY import all
+ * Cross-module dashboard loader (Phase 9). This is the **composition root** - it MAY import all
  * four module services (the services stay decoupled; no module→module import). It fans out to
  * each installed module's service + pure aggregator in parallel, for the current AND previous
  * period, then shapes the results into the dashboard's KPI cards + per-module summary cards +
  * recent activity.
  *
- * All scoping comes from the session-derived `workspaceId` (`requireWorkspaceContext`) — a
+ * All scoping comes from the session-derived `workspaceId` (`requireWorkspaceContext`) - a
  * client-provided workspaceId is never trusted (per the brief's security constraints).
  *
  * The dashboard defaults to period `"month"` (Books/Drive pages default to `"year"`) so the
  * KPI deltas read "vs last month" per the design spec. For `"all"` there's no previous period,
  * so deltas are `null`. Current-state snapshots (outstanding invoices, overdue/draft counts,
- * pending-conversion quote value) have no delta — they're "right now".
+ * pending-conversion quote value) have no delta - they're "right now".
  *
  * **KPI deltas** are computed only for the two period-bound headline KPIs (Books net = "Cash
  * position", Invoices paid = "Revenue this period"); the other two KPIs (Outstanding, Pending
  * quotes) are snapshots. Drive has no headline KPI in the 4-card row (per the spec), so its
- * previous period isn't fetched — its summary card shows current-period metrics + sparkline.
+ * previous period isn't fetched - its summary card shows current-period metrics + sparkline.
  */
 
 const DASHBOARD_DEFAULT_PERIOD: Period = "month";
 const CURRENCY = "AUD";
 
-// --- Card data shapes (serializable — returned from the server action) ------
+// --- Card data shapes (serializable - returned from the server action) ------
 
 export interface KpiCardData {
   id: string;
@@ -74,7 +74,7 @@ export interface DashboardData {
   kpis: KpiCardData[];
   moduleCards: ModuleCardData[];
   activity: ActivityPage;
-  /** True when zero modules are installed — the page renders the onboarding stub instead. */
+  /** True when zero modules are installed - the page renders the onboarding stub instead. */
   onboarding: boolean;
 }
 
@@ -92,7 +92,7 @@ async function invoicesCards(
   revenue: KpiCardData;
   card: ModuleCardData;
 }> {
-  // listInvoices is capped at 200 and has no date-range filter — fetch once, bucket by date in
+  // listInvoices is capped at 200 and has no date-range filter - fetch once, bucket by date in
   // the pure aggregator (mirrors Books/Drive's "fetch rows + pure calc" pattern).
   const rows = await listInvoices(workspaceId, { limit: 200 });
   const toInput = rows.map((r) => ({
@@ -109,7 +109,7 @@ async function invoicesCards(
     id: "outstanding",
     label: "Outstanding invoices",
     value: cur.outstandingCents > 0 ? formatCents(cur.outstandingCents, CURRENCY) : null,
-    delta: null, // snapshot — no delta
+    delta: null, // snapshot - no delta
     href: "/invoices",
     emptyLabel: "No outstanding invoices",
   };
@@ -150,7 +150,7 @@ async function booksCards(
   currentRange: { start: Date | null; end: Date },
   previousRange: { start: Date; end: Date } | null,
 ): Promise<{ cash: KpiCardData; card: ModuleCardData }> {
-  // listTransactions accepts dateFrom/dateTo (cap 2000) — fetch current + previous separately.
+  // listTransactions accepts dateFrom/dateTo (cap 2000) - fetch current + previous separately.
   const [curRows, prevRows] = await Promise.all([
     listTransactions(workspaceId, {
       dateFrom: currentRange.start ?? undefined,
@@ -212,7 +212,7 @@ async function driveCard(
   currentRange: { start: Date | null; end: Date },
   booksEnabled: boolean,
 ): Promise<{ card: ModuleCardData }> {
-  // Drive has no headline KPI in the 4-card row, so no previous-period fetch — current period
+  // Drive has no headline KPI in the 4-card row, so no previous-period fetch - current period
   // only (earnings + trips in parallel).
   const [earn, trips] = await Promise.all([
     listEarnings(workspaceId, {
@@ -231,7 +231,7 @@ async function driveCard(
     trips.map((t) => ({ distanceMeters: t.distanceMeters, date: t.date, platform: t.platform })),
   );
 
-  // When Books is installed it is the single source of truth for dollar earnings/expenses —
+  // When Books is installed it is the single source of truth for dollar earnings/expenses -
   // the mirrored gig income already appears in the Books card. So the Drive card shows only
   // operational (non-dollar) metrics: distance + trips, with a distance trend. Drive-only
   // workspaces (no Books) still see dollar earnings here, since there's no Books to defer to.
@@ -272,7 +272,7 @@ async function quotesCards(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
 ): Promise<{ pending: KpiCardData; card: ModuleCardData }> {
-  // listQuotes is capped at 200, no date-range filter — fetch once, bucket by date. The Pending
+  // listQuotes is capped at 200, no date-range filter - fetch once, bucket by date. The Pending
   // KPI is a snapshot (accepted-but-not-converted value), so no previous-period fetch.
   const rows = await listQuotes(workspaceId, { limit: 200 });
   const toInput = rows.map((r) => ({
@@ -290,7 +290,7 @@ async function quotesCards(
     id: "pending-quotes",
     label: "Pending quotes",
     value: cur.acceptedValueCents > 0 ? formatCents(cur.acceptedValueCents, CURRENCY) : null,
-    delta: null, // snapshot — accepted-but-not-converted value, no delta
+    delta: null, // snapshot - accepted-but-not-converted value, no delta
     href: "/quotes",
     emptyLabel: "No accepted quotes pending",
   };

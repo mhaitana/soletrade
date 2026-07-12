@@ -10,12 +10,12 @@ import { MODULE_KEYS } from "@/shared/constants/modules";
  * given secret should assert its presence at their own boundary.
  *
  * Public (browser) env must be prefixed with NEXT_PUBLIC_ and is validated
- * here too for a single source of truth — but importing this module from
+ * here too for a single source of truth - but importing this module from
  * client code is blocked by `server-only`.
  */
 
 /**
- * Stripe Price object id env keys — one per (module × role × interval). Brief §10.1
+ * Stripe Price object id env keys - one per (module × role × interval). Brief §10.1
  * gives every module a standalone and an add-on price, each in monthly and annual
  * recurring variants = 4 modules × 2 roles × 2 intervals = 16 ids. `pnpm stripe:setup`
  * creates the Price objects and prints these keys for `.env.local`. Generated here
@@ -39,6 +39,13 @@ const envSchema = z.object({
 
   // App
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  // Public-facing URLs (branding pass). The app domain is never hard-coded - these drive
+  // metadata, sitemap/robots, email links, and legal/footer links. Defaults fall back to the
+  // marketing site (see `src/config/urls.ts`) so the app boots without them in dev.
+  NEXT_PUBLIC_MARKETING_URL: z.string().url().optional(),
+  NEXT_PUBLIC_SUPPORT_URL: z.string().url().optional(),
+  NEXT_PUBLIC_PRIVACY_URL: z.string().url().optional(),
+  NEXT_PUBLIC_TERMS_URL: z.string().url().optional(),
 
   // Supabase (auth + storage)
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
@@ -54,17 +61,17 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
-  // 16 Stripe Price object ids (module × role × interval) — see stripePriceKeyShape.
+  // 16 Stripe Price object ids (module × role × interval) - see stripePriceKeyShape.
   ...stripePriceKeyShape,
   // 5b: shared bearer secret for the /api/cron/invoice-overdue route (Vercel Cron sends it
-  // as `Authorization: Bearer <secret>`). Optional — the cron route 401s if unset/mismatched.
+  // as `Authorization: Bearer <secret>`). Optional - the cron route 401s if unset/mismatched.
   CRON_SECRET: z.string().optional(),
 
   // Email (Resend)
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().email().optional(),
 
-  // SMS (Twilio) — optional
+  // SMS (Twilio) - optional
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM_NUMBER: z.string().optional(),
@@ -87,7 +94,7 @@ const envSchema = z.object({
 
   // Rate limiting (Phase 11a). When both Upstash REST creds are set, the rate
   // limiter uses @upstash/ratelimit (shared across serverless replicas). When
-  // unset, it falls back to the in-memory fixed-window counter (dev/test only —
+  // unset, it falls back to the in-memory fixed-window counter (dev/test only -
   // per-instance, unsafe across replicas).
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
@@ -101,7 +108,7 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 function parseEnv(): Env {
-  // Treat empty strings as unset — `KEY=` lines in .env files are common and
+  // Treat empty strings as unset - `KEY=` lines in .env files are common and
   // should not fail validation (e.g. EMAIL_FROM="" must not trip `.email()`).
   const input: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -113,7 +120,7 @@ function parseEnv(): Env {
       "❌ Invalid environment variables:",
       JSON.stringify(parsed.error.flatten().fieldErrors, null, 2),
     );
-    throw new Error("Invalid environment variables — see logs above.");
+    throw new Error("Invalid environment variables - see logs above.");
   }
   return parsed.data;
 }

@@ -21,7 +21,7 @@ import {
 import { createTransaction } from "./index";
 
 /**
- * Receipt extraction pipeline (Wave 2 — Books headline feature). Uploads a receipt to
+ * Receipt extraction pipeline (Wave 2 - Books headline feature). Uploads a receipt to
  * the vision model (Anthropic via the AI SDK; the mock provider returns canned data for
  * dev/test), stores the structured result on a `receipt_extractions` row, and publishes
  * `ReceiptProcessed` (the event is declared in the catalog + activity labels but had no
@@ -29,7 +29,7 @@ import { createTransaction } from "./index";
  * applies it (creates a `book_transactions` row) or rejects it.
  *
  * Bytes are pulled server-side from Supabase Storage (`downloadFileBytes`) and fed to the
- * model as a `FilePart` — the existing assistant route only handles text parts, so this is
+ * model as a `FilePart` - the existing assistant route only handles text parts, so this is
  * the first image/file input path in the codebase. Credit metering is opt-in via
  * `RECEIPT_EXTRACTION_COST_CENTS` (default 0 = free); when > 0 this is the first production
  * caller of `consumeCredit`.
@@ -51,7 +51,7 @@ export interface ExtractedReceiptData {
     unitPriceCents: number;
     amountCents: number;
   }>;
-  /** 0..1 — surfaced in the queue so low-confidence rows get human review. */
+  /** 0..1 - surfaced in the queue so low-confidence rows get human review. */
   confidence: number;
 }
 
@@ -90,7 +90,7 @@ Analyse the attached receipt image or PDF and extract its details as JSON.
 
 Return ONLY the JSON object matching the schema.`;
 
-/** Canned extraction for the mock provider (no API key needed — dev/test path). */
+/** Canned extraction for the mock provider (no API key needed - dev/test path). */
 function mockExtractedData(now: Date): ExtractedReceiptData {
   const iso = now.toISOString().slice(0, 10);
   return {
@@ -191,7 +191,7 @@ export async function extractReceipt(
   const costCents = env.RECEIPT_EXTRACTION_COST_CENTS;
   if (costCents > 0) {
     // First production caller of consumeCredit. Throws InsufficientCreditError on a low
-    // balance — let it propagate so the action can surface "insufficient credit".
+    // balance - let it propagate so the action can surface "insufficient credit".
     await consumeCredit(
       workspaceId,
       {
@@ -427,7 +427,7 @@ export async function getExtraction(
   return row ? toExtractionRow(row as ExtractionRaw) : null;
 }
 
-/** Parse an ISO date string defensively — returns null if invalid. */
+/** Parse an ISO date string defensively - returns null if invalid. */
 function safeDate(iso: string): Date | null {
   if (!iso) return null;
   const d = new Date(iso);

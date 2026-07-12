@@ -26,7 +26,7 @@ import {
 } from "./index";
 import { createInvoice, getInvoice } from "@/modules/invoices";
 
-/** Canned acceptance metadata for tests (Wave 2 — acceptQuote now requires it). */
+/** Canned acceptance metadata for tests (Wave 2 - acceptQuote now requires it). */
 const ACCEPT_META: AcceptanceMeta = {
   accepterName: "Jane Buyer",
   accepterEmail: "jane@globex.com",
@@ -143,6 +143,8 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
     expect(pub!.number).toMatch(/^QUO-\d{4}-\d{4}$/);
     expect(pub!.status).toBe("sent");
     expect(pub!.customerName).toBe("Globex Corp");
+    // The issuing business (workspace) name is the dominant brand on the public page.
+    expect(pub!.merchantName).toBe("Quotes Public");
     expect(pub!.lineItems).toHaveLength(1);
     expect(pub!.lineItems[0]).toEqual({
       description: "Service",
@@ -150,7 +152,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
       unitPriceCents: 5000,
       amountCents: 10000,
     });
-    // Sanitized — no internal ids / notes / publicToken / workspaceId.
+    // Sanitized - no internal ids / notes / publicToken / workspaceId.
     expect("notes" in pub!).toBe(false);
     expect("publicToken" in pub!).toBe(false);
     expect("workspaceId" in pub!).toBe(false);
@@ -163,7 +165,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
     expect(ok1).toBe(true);
     expect(capturedOf("QuoteViewed", id)).toHaveLength(1);
 
-    // Second view is a no-op (already viewed) — no duplicate event.
+    // Second view is a no-op (already viewed) - no duplicate event.
     const ok2 = await markQuoteViewed(token);
     expect(ok2).toBe(false);
     expect(capturedOf("QuoteViewed", id)).toHaveLength(1);
@@ -190,7 +192,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
       accepterName: "Jane Buyer",
       ipAddress: "203.0.113.7",
     });
-    // Wave 2 — acceptance row written with the accepter evidence.
+    // Wave 2 - acceptance row written with the accepter evidence.
     const acc = await getAcceptance(ws!, id);
     expect(acc).not.toBeNull();
     expect(acc!.accepterName).toBe("Jane Buyer");
@@ -216,7 +218,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
     expect(q!.declinedAt).toBeInstanceOf(Date);
     expect(capturedOf("QuoteDeclined", id)).toHaveLength(1);
 
-    // Declined is terminal — a subsequent accept is a no-op.
+    // Declined is terminal - a subsequent accept is a no-op.
     const reAccept = await acceptQuote(token, ACCEPT_META);
     expect(reAccept).toBe(false);
     expect((await getQuote(ws!, id))!.status).toBe("declined");
@@ -261,7 +263,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
       invoiceNumber: invoice!.number,
     });
 
-    // Converted is terminal — re-converting is a no-op.
+    // Converted is terminal - re-converting is a no-op.
     const reConvert = await markQuoteConverted(
       ws!,
       id,
@@ -334,7 +336,7 @@ describe.skipIf(!HAS_DB)("quotes public + transitions (requires DATABASE_URL)", 
     expect((await getQuote(ws!, id))!.status).toBe("expired");
     const before = capturedOf("QuoteExpired", id).length;
     const marked = await markExpiredQuotes(now);
-    expect(marked).toBe(0); // already expired — no new flips
+    expect(marked).toBe(0); // already expired - no new flips
     expect(capturedOf("QuoteExpired", id).length).toBe(before);
   });
 });

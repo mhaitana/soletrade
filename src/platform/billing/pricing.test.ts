@@ -14,7 +14,7 @@ import {
   selectAnchor,
 } from "./pricing";
 
-describe("pricing engine — anchor/add-on model", () => {
+describe("pricing engine - anchor/add-on model", () => {
   describe("selectAnchor", () => {
     it("returns null for an empty set (workspace is unbilled)", () => {
       expect(selectAnchor([])).toBeNull();

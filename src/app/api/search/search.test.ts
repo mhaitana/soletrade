@@ -9,7 +9,7 @@ import { branded } from "@/shared/types/ids";
  *  - the `< 2` char guard returns `[]`
  *  - per-row tagging (label/sublabel/href) is correct
  *
- * The pure formatters (`formatCents`/`formatBytes`/`formatDate`) are left real — they have no
+ * The pure formatters (`formatCents`/`formatBytes`/`formatDate`) are left real - they have no
  * DB dependency. Only the DB-hitting list functions + module registry are mocked.
  */
 
@@ -69,7 +69,7 @@ describe("searchWorkspace", () => {
     expect(await searchWorkspace(WS, "a")).toEqual([]);
     expect(await searchWorkspace(WS, " ")).toEqual([]);
     expect(await searchWorkspace(WS, "")).toEqual([]);
-    // Nothing fetched — the guard short-circuits before any list call.
+    // Nothing fetched - the guard short-circuits before any list call.
     expect(listCustomersMock).not.toHaveBeenCalled();
     expect(getInstalledModulesMock).not.toHaveBeenCalled();
   });
@@ -128,7 +128,7 @@ describe("searchWorkspace", () => {
     ]);
     const groups = await searchWorkspace(WS, "office");
     // customers (empty, dropped), books (present), files (empty, dropped). No invoice/quote/drive
-    // groups — their list functions were never called because the modules aren't installed.
+    // groups - their list functions were never called because the modules aren't installed.
     expect(groups.map((g) => g.module)).toEqual(["books"]);
     expect(listInvoicesMock).not.toHaveBeenCalled();
     expect(listQuotesMock).not.toHaveBeenCalled();

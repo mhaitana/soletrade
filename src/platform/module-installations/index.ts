@@ -48,7 +48,7 @@ export async function isModuleEnabled(workspaceId: WorkspaceId, key: ModuleKey):
   return installed.includes(key);
 }
 
-/** Throw if a module isn't enabled — used to gate module routes/actions. */
+/** Throw if a module isn't enabled - used to gate module routes/actions. */
 export async function assertModuleEnabled(workspaceId: WorkspaceId, key: ModuleKey): Promise<void> {
   if (!(await isModuleEnabled(workspaceId, key))) {
     throw new ModuleNotEnabledError(key);
@@ -56,7 +56,7 @@ export async function assertModuleEnabled(workspaceId: WorkspaceId, key: ModuleK
 }
 
 /**
- * Full installation rows for a workspace (active rows only — `cancelledAt` null). Includes
+ * Full installation rows for a workspace (active rows only - `cancelledAt` null). Includes
  * `pendingCancellationAt` so the modules page can surface "Cancels on {date}" + an undo affordance
  * for keep-until-end scheduled cancellations (Wave 4). The lighter `getInstalledModules` returns
  * just the keys; this returns the full row for the loader.
@@ -89,14 +89,14 @@ export async function getModuleInstallations(workspaceId: WorkspaceId): Promise<
 
 /**
  * Enable a module for a workspace. Inserts/upserts the installation row. 4b adds
- * an optional `stripeSubscriptionItemId` — when provided (the 4b orchestrator
+ * an optional `stripeSubscriptionItemId` - when provided (the 4b orchestrator
  * path), it is written on insert AND on re-enable (overwriting a stale item id
  * from a prior cycle). When omitted (legacy/test/seed path), the column is
  * untouched on re-enable, preserving backward compatibility.
  *
  * `actorId` is optional so the webhook reconcile path
  * (`reconcileFromCheckoutSession` on `checkout.session.completed`) can call this
- * with no user actor — `publishEvent`/`writeAudit` both accept an undefined
+ * with no user actor - `publishEvent`/`writeAudit` both accept an undefined
  * `actorUserId`. Existing callers passing `ctx.user.id` are unaffected.
  */
 export async function enableModule(
@@ -151,10 +151,10 @@ export async function enableModule(
 
 /**
  * Disable (cancel) a module. `actorId` is optional so the webhook cascade
- * (`markCanceled` on `subscription.deleted`) can call this with no user actor —
+ * (`markCanceled` on `subscription.deleted`) can call this with no user actor -
  * `publishEvent`/`writeAudit` both accept an undefined `actorUserId`. Existing
  * callers passing `ctx.user.id` are unaffected. The `stripeSubscriptionItemId`
- * column is NOT nulled (per brief — the row retains the now-deleted item id).
+ * column is NOT nulled (per brief - the row retains the now-deleted item id).
  */
 export async function disableModule(
   workspaceId: WorkspaceId,
@@ -193,7 +193,7 @@ export async function disableModule(
 /**
  * Schedule a module to run until `effectiveAt` then cancel (Wave 1 cancellation engine,
  * brief §10.6 Branch A "keep-until-end"). Sets `pendingCancellationAt` on the active
- * installation row WITHOUT disabling it — the module stays billable and accessible
+ * installation row WITHOUT disabling it - the module stays billable and accessible
  * until the `module-cancel-finalize` cron picks it up at `effectiveAt`. Idempotent:
  * re-scheduling the same module updates the timestamp. Does NOT touch Stripe; the
  * finalize step deletes the subscription item when the timestamp lapses.

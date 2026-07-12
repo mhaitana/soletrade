@@ -22,7 +22,7 @@ export interface TestUser {
 
 /**
  * Insert test users directly into the `users` table (the public mirror that backs the
- * workspace/member FKs). Bypasses Supabase Auth — these rows exist only so workspace +
+ * workspace/member FKs). Bypasses Supabase Auth - these rows exist only so workspace +
  * member rows have a valid `user_id` FK. Idempotent-ish: callers use fixed, file-unique
  * UUIDs and clean them up in `cleanupWorkspaces`.
  */
@@ -45,7 +45,7 @@ export interface CleanupTable {
 
 /**
  * Tear down a test's workspace(s): delete the given module/extra tables **in order** (so
- * FK dependents go before their parents), then the common tail — `workspace_members`, the
+ * FK dependents go before their parents), then the common tail - `workspace_members`, the
  * `workspaces` rows, and finally the seed `users`. Pass every workspace-scoped table the
  * test touched (`customers`, `audit_logs`, `activity_events`, `credit_ledger`, the module
  * tables, …) in FK-dependency order. `workspace_members` is ALWAYS deleted by the helper

@@ -5,9 +5,9 @@ import { createSignedReadUrl, getFile } from "@/platform/files";
 import { branded } from "@/shared/types/ids";
 
 /**
- * Phase 11b — mint a short-TTL signed Storage read URL for a file the caller can
+ * Phase 11b - mint a short-TTL signed Storage read URL for a file the caller can
  * view. Bytes are served by Storage, not proxied through this server. Workspace-
- * scoped via `getFile` (IDOR-safe — a cross-workspace id returns null → 404).
+ * scoped via `getFile` (IDOR-safe - a cross-workspace id returns null → 404).
  *
  * Auth: resolved workspace context (401). `view:file` gates reads.
  */

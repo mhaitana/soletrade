@@ -1,8 +1,8 @@
 /**
- * RFC-4180 CSV serialiser (Wave 2 — Drive CSV export). Pure, no deps, no `server-only`.
+ * RFC-4180 CSV serialiser (Wave 2 - Drive CSV export). Pure, no deps, no `server-only`.
  * Used by the Drive export route handler (`src/app/api/drive/export/route.ts`) to stream
  * `text/csv`. Server Actions can't stream arbitrary bytes cleanly, so CSV export goes via a
- * route handler — this util is the reusable precedent (future Books ledger / invoice exports
+ * route handler - this util is the reusable precedent (future Books ledger / invoice exports
  * can share it).
  *
  * Rules (RFC 4180):

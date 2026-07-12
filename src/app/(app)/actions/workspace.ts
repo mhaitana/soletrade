@@ -44,7 +44,7 @@ const forbid = (msg = "You don't have permission to do that.") => ({
 });
 
 /**
- * Update the workspace's editable settings (Wave 4 — `/settings/general`): name + currency +
+ * Update the workspace's editable settings (Wave 4 - `/settings/general`): name + currency +
   invoice/quote prefixes + timezone. Gated `update:workspace` (owner/admin). The slug stays
  * immutable v1 (a separate `transfer:workspace` flow would own a slug change).
  */

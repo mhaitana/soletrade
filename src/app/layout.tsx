@@ -3,6 +3,8 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/shared/components/theme-provider";
 import { Toaster } from "@/shared/ui/sonner";
+import { brand } from "@/config/brand";
+import { urls } from "@/config/urls";
 
 const fontSans = Inter({
   variable: "--font-sans",
@@ -17,12 +19,27 @@ const fontMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(urls.app),
   title: {
-    default: "soletrade OS",
-    template: "%s · soletrade OS",
+    default: brand.productName,
+    template: `%s · ${brand.productName}`,
   },
-  description: "The business operating system for solo traders, freelancers, and small operators.",
-  applicationName: "soletrade OS",
+  description: brand.description,
+  applicationName: brand.productName,
+  creator: brand.companyName,
+  publisher: brand.companyName,
+  openGraph: {
+    type: "website",
+    siteName: brand.productName,
+    title: brand.productName,
+    description: brand.description,
+    url: urls.app,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: brand.productName,
+    description: brand.description,
+  },
 };
 
 // Tint the mobile browser chrome to match the app background per theme.

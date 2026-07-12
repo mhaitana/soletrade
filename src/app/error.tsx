@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { Logo } from "@/shared/components/logo";
 
 /**
- * Root error boundary (Wave 4 robustness) — last-resort fallback for public/marketing routes
+ * Root error boundary (Wave 4 robustness) - last-resort fallback for public/marketing routes
  * outside the `(app)` shell. Minimal chrome; logs only in dev.
  */
 export default function RootError({
@@ -22,7 +23,7 @@ export default function RootError({
   return (
     <div className="grid min-h-dvh place-items-center bg-background px-4 text-center">
       <div className="max-w-md space-y-3">
-        <p className="font-mono text-sm font-semibold tracking-tight">soletrade labs</p>
+        <Logo variant="full" href={null} />
         <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
         <p className="text-sm text-muted-foreground">
           An unexpected error occurred. Please try again.

@@ -13,7 +13,7 @@ const DEFAULT_LIMIT = 25;
 
 /** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip.
  *  `createdAt` is the raw µs-precision ISO string (never a Date) so the keyset
- *  comparison stays exact — see `FileCursor`. */
+ *  comparison stays exact - see `FileCursor`. */
 function encodeCursor(cursor: FileCursor): string {
   return `${cursor.createdAt}|${cursor.id}`;
 }

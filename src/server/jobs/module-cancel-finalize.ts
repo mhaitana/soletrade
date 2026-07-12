@@ -3,7 +3,7 @@ import { finalizeModuleCancellations } from "@/platform/billing/modules";
 
 /**
  * Module-cancel-finalize job runner (brief §10.6 Branch A "keep-until-end"). Pure
- * runner — no HTTP — so it's unit-testable directly and reusable from a CLI script.
+ * runner - no HTTP - so it's unit-testable directly and reusable from a CLI script.
  * The cron route (`/api/cron/module-cancel-finalize`) calls this after verifying the
  * CRON_SECRET.
  *

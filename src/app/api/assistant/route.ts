@@ -17,11 +17,12 @@ import { rateLimit } from "@/server/rate-limit";
 import { buildAssistantTools, buildMockAssistantReply } from "@/app/(app)/assistant/tools";
 import type { UIMessage } from "ai";
 import { branded, type AiConversationId } from "@/shared/types/ids";
+import { brand } from "@/config/brand";
 import type { WorkspaceContext } from "@/platform/context";
 
 /**
  * Streaming AI assistant endpoint (Phase 10). `POST` resolves the workspace
- * context (non-redirecting — 401 on no session), rate-limits per IP + per user,
+ * context (non-redirecting - 401 on no session), rate-limits per IP + per user,
  * validates the body, loads-or-creates the conversation, appends the user turn,
  * and streams back a UI-message stream. The new conversation id is sent on the
  * `X-Conversation-Id` response header so the client can update the URL.
@@ -31,7 +32,7 @@ import type { WorkspaceContext } from "@/platform/context";
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
-  // `nullish` (not just `optional`) — the client seeds `conversationId` state to `null`
+  // `nullish` (not just `optional`) - the client seeds `conversationId` state to `null`
   // for a new conversation and sends `body: { conversationId }` on every request, so the
   // first send of a new chat carries `"conversationId": null`. `.optional()` only accepts
   // `undefined`, which would 400 the very first message. `null`/undefined both fall through
@@ -39,7 +40,7 @@ const bodySchema = z.object({
   conversationId: z.string().uuid().nullish(),
   // The AI SDK `useChat` transport sends the full `messages` array; we only need the
   // latest user message's text (the route reconstructs full history from the persisted
-  // conversation — the client transcript isn't trusted as the source of truth).
+  // conversation - the client transcript isn't trusted as the source of truth).
   messages: z
     .array(
       z.object({
@@ -65,8 +66,8 @@ function buildSystemPrompt(
   writeEnabled: boolean,
 ): string {
   const lines = [
-    "You are the soletrade labs assistant, an AI helper inside a small-business SaaS workspace.",
-    "You answer questions about the user's business by calling read-only tools — never invent numbers.",
+    `You are the ${brand.productName} assistant, an AI helper inside a small-business SaaS workspace.`,
+    "You answer questions about the user's business by calling read-only tools - never invent numbers.",
     "Money is integer cents in the workspace currency (AUD). When displaying money, format as $X.XX.",
     "Keep answers concise and grounded in tool output. If a tool returns null/empty, say so plainly.",
     `The user's role is "${role}". Installed modules: ${installedModules.length ? installedModules.join(", ") : "none"}.`,
@@ -76,7 +77,7 @@ function buildSystemPrompt(
     lines.push(
       "",
       "WRITE TOOLS ARE ENABLED for this conversation. You may create customers, invoices, quotes, and transactions.",
-      "SAFETY RULE (must follow every time): before calling a write tool, state exactly what you will create — the entity type, customer (if any), line items or amount, and the total in $X.XX — then ask the user to confirm. Only call the write tool AFTER the user explicitly approves.",
+      "SAFETY RULE (must follow every time): before calling a write tool, state exactly what you will create - the entity type, customer (if any), line items or amount, and the total in $X.XX - then ask the user to confirm. Only call the write tool AFTER the user explicitly approves.",
       "If the user has not yet confirmed, do NOT call a write tool. Summarise the proposed action and wait. If the user asks to change something, restate the updated proposal and ask again.",
       "After a successful create, tell the user the new id/number and where to find it (e.g. /invoices).",
     );
@@ -173,7 +174,7 @@ export async function POST(request: Request): Promise<Response> {
   const system = buildSystemPrompt(ctx.role, installedModules, writeEnabled);
   const conversationIdStr = conversationId as string;
 
-  // 8. Mock provider — canned reply from real workspace data (no model/key).
+  // 8. Mock provider - canned reply from real workspace data (no model/key).
   if (isMockProvider()) {
     const text = await buildMockAssistantReply(ctx, installedModules);
     await appendMessage(ctx.workspaceId, ctx.user.id, conversationId, {
@@ -183,7 +184,7 @@ export async function POST(request: Request): Promise<Response> {
     return streamMockAssistant({ text, conversationId: conversationIdStr });
   }
 
-  // 9. Real provider — streamText tool-calling loop; persist the assistant turn on finish.
+  // 9. Real provider - streamText tool-calling loop; persist the assistant turn on finish.
   const tools = buildAssistantTools(ctx, installedModules, { writeEnabled });
   const persistCtx: WorkspaceContext = ctx;
   try {
@@ -205,7 +206,7 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
   } catch (err) {
-    // Synchronous failure before streaming starts — most commonly `getAIModel()`
+    // Synchronous failure before streaming starts - most commonly `getAIModel()`
     // throwing because the provider API key is unset. Surface the real cause as a
     // UI-message stream error part so the chat shows the message (a plain JSON 500
     // would surface as an opaque transport error). Mid-stream provider errors are

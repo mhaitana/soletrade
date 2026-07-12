@@ -73,7 +73,7 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
 
-  // Every quote must be linked to an emailable customer (no walk-in) — the email is used
+  // Every quote must be linked to an emailable customer (no walk-in) - the email is used
   // to send the quote. The picker disables no-email customers; the server enforces too.
   const customer = await getCustomer(
     ctx.workspaceId,
@@ -82,7 +82,7 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
   if (!customer || !customer.email) {
     return {
       ok: false,
-      error: "Selected customer has no email — add one in Customers before sending.",
+      error: "Selected customer has no email - add one in Customers before sending.",
       fieldErrors: { customerId: ["This customer has no email on file."] },
     };
   }
@@ -161,7 +161,7 @@ export async function updateQuoteAction(input: unknown): Promise<UpdateQuoteResu
   if (!customer || !customer.email) {
     return {
       ok: false,
-      error: "Selected customer has no email — add one in Customers before sending.",
+      error: "Selected customer has no email - add one in Customers before sending.",
       fieldErrors: { customerId: ["This customer has no email on file."] },
     };
   }
@@ -242,13 +242,13 @@ export type ConvertQuoteResult = { ok: true; invoiceId: string } | { ok: false; 
 
 /**
  * Convert an accepted quote to a **draft** invoice (the merchant reviews/edits before
- * sending). Orchestration lives in the action layer (the composition root — it MAY import
+ * sending). Orchestration lives in the action layer (the composition root - it MAY import
  * multiple modules; the two services stay decoupled, never importing each other):
- *   1. `getQuote` (quotes service) — guard status === "accepted".
- *   2. `createInvoice` (invoices service) — build the draft from the quote's customer +
+ *   1. `getQuote` (quotes service) - guard status === "accepted".
+ *   2. `createInvoice` (invoices service) - build the draft from the quote's customer +
  *      line items + totals + tax rate.
- *   3. `getInvoice` (invoices service) — read the new invoice's number for the event metadata.
- *   4. `markQuoteConverted` (quotes service) — flip status + store `convertedInvoiceId` +
+ *   3. `getInvoice` (invoices service) - read the new invoice's number for the event metadata.
+ *   4. `markQuoteConverted` (quotes service) - flip status + store `convertedInvoiceId` +
  *      fire `QuoteConvertedToInvoice`.
  * Returns `{ ok: true, invoiceId }` so the client navigates to the new draft invoice.
  */
@@ -362,7 +362,7 @@ export async function loadQuote(quoteId: string): Promise<QuoteDetailData> {
 
   const quote = await getQuote(ctx.workspaceId, branded<"QuoteId">(quoteId));
   const canManage = authorize(ctx.role, "manage:quote").ok;
-  // Fetch the acceptance row only for accepted quotes (read-only — view:quote suffices;
+  // Fetch the acceptance row only for accepted quotes (read-only - view:quote suffices;
   // the loader runs after the view:quotes gate at the page level). Saves a query otherwise.
   const acceptance =
     quote && quote.status === "accepted"

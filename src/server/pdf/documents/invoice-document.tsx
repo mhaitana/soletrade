@@ -1,7 +1,8 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { brand } from "@/config/brand";
 
 /**
- * Invoice PDF document (Wave 4). Renders to PDF bytes via `renderPdf` — a workspace-member-only
+ * Invoice PDF document (Wave 4). Renders to PDF bytes via `renderPdf` - a workspace-member-only
  * download + email attachment. Mirrors the public invoice page layout (brand + number + customer +
  * line items + totals + notes). The numbers come straight from the stored invoice row (already
  * computed via `computeLineItemTotals` on create/update), so this document is purely presentational.
@@ -42,7 +43,7 @@ function money(cents: number, currency: string): string {
 }
 
 function fmtDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -94,13 +95,13 @@ export function InvoiceDocument({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>soletrade labs</Text>
+        <Text style={styles.brand}>{brand.productName.toLowerCase()}</Text>
         <View style={styles.row}>
           <Text style={styles.label}>From</Text>
           <Text style={styles.label}>Invoice</Text>
         </View>
         <View style={styles.row}>
-          <Text>{workspaceName ?? "soletrade labs"}</Text>
+          <Text>{workspaceName ?? brand.productName}</Text>
           <Text style={styles.bold}>{invoice.number}</Text>
         </View>
         <View style={styles.row}>

@@ -9,7 +9,7 @@ import { MODULE_PRICES, priceSubscription, formatCents, type Interval } from "@/
 export const metadata = { title: "Pricing" };
 
 /**
- * Display the price table in the spec's order (Books, Quotes, Drive, Invoices) —
+ * Display the price table in the spec's order (Books, Quotes, Drive, Invoices) -
  * highest standalone first, which matches the anchor priority in §10.3.
  */
 const DISPLAY_ORDER: ModuleKey[] = ["books", "quotes", "drive", "invoices"];
@@ -34,7 +34,7 @@ export default function PricingPage() {
         </h1>
         <p className="mt-5 max-w-xl text-balance text-muted-foreground">
           Each product has a standalone price and a discounted add-on price. Your highest-priced
-          active product is your <strong>anchor app</strong> — you pay full standalone price for it.
+          active product is your <strong>anchor app</strong> - you pay full standalone price for it.
           Every other active product gets a flat $2.50/mo stack discount. Annual billing gives you 3
           months free (9 paid months).
         </p>
@@ -98,7 +98,7 @@ export default function PricingPage() {
               full standalone price.
             </p>
             <p>
-              Every other active product is billed at its add-on price — a flat $2.50/mo off
+              Every other active product is billed at its add-on price - a flat $2.50/mo off
               standalone ($22.50/yr off on annual).
             </p>
             <p className="text-foreground">

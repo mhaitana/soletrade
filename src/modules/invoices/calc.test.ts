@@ -18,7 +18,7 @@ function row(
   };
 }
 
-describe("modules/invoices/calc — summarizeInvoices", () => {
+describe("modules/invoices/calc - summarizeInvoices", () => {
   it("returns zeros + empty monthly for empty input", () => {
     const s = summarizeInvoices([], range);
     expect(s).toEqual({
@@ -32,7 +32,7 @@ describe("modules/invoices/calc — summarizeInvoices", () => {
     });
   });
 
-  it("outstandingCents sums totalCents for status in (sent, viewed, overdue) — all-time snapshot", () => {
+  it("outstandingCents sums totalCents for status in (sent, viewed, overdue) - all-time snapshot", () => {
     const s = summarizeInvoices(
       [
         row({ status: "sent", totalCents: 5000 }),
@@ -66,9 +66,9 @@ describe("modules/invoices/calc — summarizeInvoices", () => {
       [
         row({ status: "paid", totalCents: 10000, paidAt: new Date("2026-07-10T00:00:00Z") }),
         row({ status: "paid", totalCents: 20000, paidAt: new Date("2026-07-20T00:00:00Z") }),
-        // Paid before the range — excluded.
+        // Paid before the range - excluded.
         row({ status: "paid", totalCents: 99999, paidAt: new Date("2026-06-15T00:00:00Z") }),
-        // Paid after the range — excluded.
+        // Paid after the range - excluded.
         row({ status: "paid", totalCents: 88888, paidAt: new Date("2026-08-01T00:00:00Z") }),
       ],
       range,
@@ -83,9 +83,9 @@ describe("modules/invoices/calc — summarizeInvoices", () => {
         row({ status: "sent", sentAt: new Date("2026-07-05T00:00:00Z") }),
         row({ status: "viewed", sentAt: new Date("2026-07-06T00:00:00Z") }),
         row({ status: "paid", sentAt: new Date("2026-07-07T00:00:00Z") }),
-        // Sent before the range — excluded.
+        // Sent before the range - excluded.
         row({ status: "sent", sentAt: new Date("2026-06-30T00:00:00Z") }),
-        // Never sent (draft) — excluded.
+        // Never sent (draft) - excluded.
         row({ status: "draft", sentAt: null }),
       ],
       range,

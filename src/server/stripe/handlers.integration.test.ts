@@ -20,12 +20,12 @@ import { handleStripeEvent, recordProcessedEvent } from "./handlers";
  *
  * Skipped when DATABASE_URL is unset. Creates its own user + workspaces and cleans
  * everything up in `afterAll`. Uses synthetic Stripe objects (typed via
- * `as Stripe.*`) — no network, no real Stripe connection.
+ * `as Stripe.*`) - no network, no real Stripe connection.
  *
  * The `checkout.session.completed` path in `handleStripeEvent` retrieves the
  * subscription from Stripe (to map price ids → modules), which synthetic events
  * can't satisfy. So checkout DB effects are tested by calling
- * `reconcileFromCheckoutSession(session, { interval, items })` directly — that's
+ * `reconcileFromCheckoutSession(session, { interval, items })` directly - that's
  * the function the handler hands off to once it has resolved the items. The
  * non-checkout events (subscription.updated / .deleted / invoice.paid) carry
  * everything they need on the event object, so they go through `handleStripeEvent`.
@@ -124,7 +124,7 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
 
   it("a second delivery of the same event id is a no-op (pre-check idempotency)", async () => {
     const ws = await freshWorkspace("idempotent");
-    // Use subscription.updated for the idempotency pre-check — it carries
+    // Use subscription.updated for the idempotency pre-check - it carries
     // everything on the event (no Stripe retrieve), and writes exactly one
     // audit row on the first delivery (status change active → past_due).
     const event = makeEvent("customer.subscription.updated", `evt_idempotent_${ws}`, {
@@ -134,7 +134,7 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
     });
 
     await handleStripeEvent(event);
-    await handleStripeEvent(event); // retry — should be a no-op
+    await handleStripeEvent(event); // retry - should be a no-op
 
     const sub = await getSubscription(ws);
     expect(sub?.status).toBe("past_due");
@@ -209,7 +209,7 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
     const id = `evt_record_${Date.now()}`;
     allEventIds.push(id);
     await recordProcessedEvent(id, "invoice.paid");
-    await recordProcessedEvent(id, "invoice.paid"); // duplicate — no-op
+    await recordProcessedEvent(id, "invoice.paid"); // duplicate - no-op
     const rows = await unwrap(
       getDataClient().from("processed_webhook_events").select("id").eq("stripe_event_id", id),
     );
@@ -254,7 +254,7 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
         customer: `cus_test_${ws}`,
       }),
     );
-    // Second delivery: different event id, SAME invoice id — must NOT double-grant.
+    // Second delivery: different event id, SAME invoice id - must NOT double-grant.
     await handleStripeEvent(
       makeEvent("invoice.paid", `evt_invoiceidem_b_${ws}`, {
         id: invoiceId,
@@ -275,7 +275,7 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
 
   it("customer.subscription.deleted issues a prorated refund row per active module (4c)", async () => {
     const ws = await freshWorkspace("subrefund");
-    // Start billing with books (anchor) + invoices (addon) — both active this cycle.
+    // Start billing with books (anchor) + invoices (addon) - both active this cycle.
     await startBilling(ws, "subrefund", "monthly");
 
     const deleteEvent = makeEvent("customer.subscription.deleted", `evt_subrefund_${ws}`, {

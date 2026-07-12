@@ -6,7 +6,7 @@ Business product logic. Each module is independently enable/disable per workspac
 ## Boundary rules (enforced)
 
 - MAY import from `platform/*` and `shared/*`.
-- MUST NOT import from another module directly — cross-module side effects go through the
+- MUST NOT import from another module directly - cross-module side effects go through the
   internal event bus (`server/events`), e.g. `InvoicePaid` → Books income transaction.
 - MUST NOT be imported by `platform/*` or `shared/*`.
 

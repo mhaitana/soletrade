@@ -7,7 +7,7 @@ import { branded, type TaxPeriodId, type UserId, type WorkspaceId } from "@/shar
 
 /**
  * Tax-period / BAS lodgement service (Wave 2). `tax_periods` rows are written ONLY when a
- * workspace lodges a quarter — a locked snapshot of the GST position at lodgement time.
+ * workspace lodges a quarter - a locked snapshot of the GST position at lodgement time.
  * Un-lodged quarters are computed on the fly from `book_transactions.gstCents` (the source
  * of truth) via `summarizeGst` in `calc.ts`. This service handles the lodgement write +
  * the list/get reads for the `/books/tax` page.
@@ -83,7 +83,7 @@ function toTaxPeriodRow(r: {
 /**
  * Lodge a quarter: compute the GST snapshot from `book_transactions` for the quarter,
  * upsert a `tax_periods` row with `lodgedAt` + `lodgedByUserId`. Idempotent on
- * (workspaceId, periodLabel) — lodging an already-lodged quarter re-snapshots (updates the
+ * (workspaceId, periodLabel) - lodging an already-lodged quarter re-snapshots (updates the
  * amounts + re-stamps `lodgedAt`) so corrections after a re-open flow are captured. The
  * unique index guards against duplicate concurrent lodgements.
  */
@@ -101,7 +101,7 @@ export async function lodgeTaxPeriod(
   const supabase = getDataClient();
   // Sum GST collected (income) and paid (expense) for the quarter from transactions.
   // `date` is a `timestamp without time zone`; pass ISO-with-Z (matches Drizzle's Date
-  // serialization — the local Supabase Postgres session is UTC, so the cast is exact).
+  // serialization - the local Supabase Postgres session is UTC, so the cast is exact).
   const txRows = await unwrap(
     supabase
       .from("book_transactions")

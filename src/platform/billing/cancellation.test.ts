@@ -3,8 +3,8 @@ import { getCancellationOptions } from "./cancellation";
 
 const ANCHOR = new Date(Date.UTC(2026, 0, 1, 0, 0, 0)); // 2026-01-01T00:00:00Z
 
-describe("cancellation engine — getCancellationOptions", () => {
-  describe("Branch A — continuous (≥1 other module stays active)", () => {
+describe("cancellation engine - getCancellationOptions", () => {
+  describe("Branch A - continuous (≥1 other module stays active)", () => {
     it("offers all 3 options with credit recommended", () => {
       const now = new Date(ANCHOR.getTime() + 1_000);
       const res = getCancellationOptions({
@@ -66,7 +66,7 @@ describe("cancellation engine — getCancellationOptions", () => {
     });
   });
 
-  describe("Branch B — offboarding (removal leaves zero active modules)", () => {
+  describe("Branch B - offboarding (removal leaves zero active modules)", () => {
     it("offers only keep + refund (NO credit) when removing the last module", () => {
       const now = new Date(ANCHOR.getTime() + 1_000);
       const res = getCancellationOptions({

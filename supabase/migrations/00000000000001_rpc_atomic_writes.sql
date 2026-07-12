@@ -7,7 +7,7 @@
 -- Design: pure calc (totals, per-line amountCents, number sequencing) stays in TS
 -- (`computeInvoiceTotals`/`computeLineItemTotals`/`lineItemAmountCents`/`nextInvoiceNumber`);
 -- the TS passes pre-computed values + line items (as jsonb) into these thin atomic
--- inserters/updaters. The 3x unique-number retry stays in JS — on a number collision
+-- inserters/updaters. The 3x unique-number retry stays in JS - on a number collision
 -- the unique index raises SQLSTATE 23505 and the JS retries.
 --
 -- `publishEvent` / `writeAudit` previously ran inside the transactions; after the port

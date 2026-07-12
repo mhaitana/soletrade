@@ -121,7 +121,7 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
     // ws1 has all the entries above.
     const ws1Ledger = await listCreditLedger(ws1!);
     expect(ws1Ledger.length).toBeGreaterThan(0);
-    // Every returned row belongs to ws1 — never ws2.
+    // Every returned row belongs to ws1 - never ws2.
     expect(ws1Ledger.every((row) => row.workspaceId === ws1!)).toBe(true);
   });
 
@@ -151,7 +151,7 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
   });
 
   it("exposes no update/delete mutator (append-only by construction)", async () => {
-    // The module exports only grant/consume/refund/adjust/list/balance — there is
+    // The module exports only grant/consume/refund/adjust/list/balance - there is
     // no function that could mutate an existing ledger row. This is a structural
     // guarantee: the only mutator (appendCreditEntry) is module-private.
     const exports = await import("./credits");
@@ -213,7 +213,7 @@ describe.skipIf(!HAS_DB)("credit ledger integration (requires DATABASE_URL)", ()
     const firstRun = await markExpiredCredits(new Date());
     expect(firstRun).toBeGreaterThanOrEqual(1);
 
-    // Second run: idempotent — the already-expired grant is not reversed again.
+    // Second run: idempotent - the already-expired grant is not reversed again.
     const secondRun = await markExpiredCredits(new Date());
     expect(secondRun).toBe(0);
 

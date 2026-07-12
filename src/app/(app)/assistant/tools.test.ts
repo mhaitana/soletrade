@@ -9,7 +9,7 @@ import type { ModuleKey } from "@/shared/constants/modules";
  * services are mocked so we can assert **gating** (only permitted + installed
  * tools are offered) and **trimming** (each `execute` returns a JSON-serializable
  * shape with money as integer cents + ISO dates, never raw rows). `authorize` is
- * real — these tests exercise the actual permission model against real roles.
+ * real - these tests exercise the actual permission model against real roles.
  */
 
 const listInvoicesMock = vi.fn();
@@ -116,7 +116,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("buildAssistantTools — gating", () => {
+describe("buildAssistantTools - gating", () => {
   it("offers every tool to a readonly role when all modules are installed", async () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
@@ -172,7 +172,7 @@ describe("buildAssistantTools — gating", () => {
   });
 });
 
-describe("buildAssistantTools — execute trims + scopes to workspace", () => {
+describe("buildAssistantTools - execute trims + scopes to workspace", () => {
   it("listInvoices returns trimmed rows with ISO dates and calls the service with the ctx workspaceId", async () => {
     const issue = new Date("2026-01-15T00:00:00.000Z");
     listInvoicesMock.mockResolvedValue([
@@ -198,7 +198,7 @@ describe("buildAssistantTools — execute trims + scopes to workspace", () => {
     >[];
     expect(out).toHaveLength(1);
     const row = out[0]!;
-    // Trimmed shape — no id/workspaceId/notes; money as integer cents; dates as ISO strings.
+    // Trimmed shape - no id/workspaceId/notes; money as integer cents; dates as ISO strings.
     expect(row).toMatchObject({
       number: "INV-001",
       status: "overdue",
@@ -329,11 +329,11 @@ describe("buildAssistantTools — execute trims + scopes to workspace", () => {
 
 /**
  * Write tools (Phase 11d). The per-conversation `writeEnabled` flag is the hard
- * boundary — when off (the default), no write tools are offered at all. When on,
+ * boundary - when off (the default), no write tools are offered at all. When on,
  * each write tool is fail-closed on `manage:R` + module-install, and `execute`
  * re-checks `manage:R` (defense in depth) + returns a trimmed confirmation.
  */
-describe("buildAssistantTools — write tools", () => {
+describe("buildAssistantTools - write tools", () => {
   it("offers no write tools when writeEnabled is off (default)", async () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("owner"), ALL_MODULES);
@@ -388,7 +388,7 @@ describe("buildAssistantTools — write tools", () => {
 
   it("does not offer module-gated write tools when their module is uninstalled", async () => {
     const { buildAssistantTools } = await import("./tools");
-    // Only books installed — invoice/quote/drive write tools absent, books + customer present.
+    // Only books installed - invoice/quote/drive write tools absent, books + customer present.
     const tools = buildAssistantTools(ctx("owner"), ["books"], { writeEnabled: true });
     expect(tools.createCustomer).toBeDefined();
     expect(tools.updateCustomer).toBeDefined(); // customer tools are not module-gated.
@@ -523,7 +523,7 @@ describe("buildAssistantTools — write tools", () => {
       lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
     })) as { error: string };
     expect(out.error).toMatch(/couldn't find a customer with email nobody@x.test/);
-    // The service is NOT called — no half-created invoice.
+    // The service is NOT called - no half-created invoice.
     expect(createInvoiceMock).not.toHaveBeenCalled();
   });
 
@@ -589,7 +589,7 @@ describe("buildAssistantTools — write tools", () => {
   it("createCustomer returns the existing customer on a duplicate-email collision (no create, no audit)", async () => {
     // The service throws the partial-unique-index violation; the tool recovers by
     // returning the existing customer with `existed: true` so the model can say
-    // "already exists — using them" and continue, instead of a raw Postgres error.
+    // "already exists - using them" and continue, instead of a raw Postgres error.
     createCustomerMock.mockRejectedValue(
       new Error(
         'duplicate key value violates unique constraint "customers_workspace_email_unique"',
@@ -722,7 +722,7 @@ describe("buildAssistantTools — write tools", () => {
   it("createTransaction returns a friendly error listing valid slugs on a wrong category (no service call)", async () => {
     // The model picks a category freely; "supplies" is expense-only, not valid for income.
     // Pre-validation returns a friendly error listing the valid income slugs so the model
-    // can retry — instead of a raw "Unknown category" throw dumping into the chat.
+    // can retry - instead of a raw "Unknown category" throw dumping into the chat.
     createTransactionMock.mockResolvedValue("txn-new-id");
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });

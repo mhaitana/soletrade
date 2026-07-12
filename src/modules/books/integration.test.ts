@@ -31,7 +31,7 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
     await seedUsers([{ id: actor, email: "books-int@soletrade-test.local", fullName: "Books Int" }]);
     ws1 = await createWorkspace(actor, "Books Int One", `books-int-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Books Int Two", `books-int-two-${Date.now()}`);
-    // Only ws1 has Books enabled — ws2 exercises the module-gate no-op.
+    // Only ws1 has Books enabled - ws2 exercises the module-gate no-op.
     await enableModule(ws1, "books", actor);
     ws1Customer = await createCustomer(
       ws1,
@@ -112,7 +112,7 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
   }
 
   it("records Books income when an invoice is paid (happy path)", async () => {
-    const lineItems = [{ description: "Consulting — 3h", quantity: 3, unitPriceCents: 12000 }];
+    const lineItems = [{ description: "Consulting - 3h", quantity: 3, unitPriceCents: 12000 }];
     const invoiceId = await createInvoice(
       ws1!,
       { customerId: ws1Customer, issueDate: new Date("2026-07-01"), taxRate: 10, lineItems },
@@ -136,7 +136,7 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
     expect(row!.notes).toBe(`Auto-recorded from invoice ${inv!.number}.`);
   });
 
-  it("is idempotent — a replayed InvoicePaid does not duplicate the income row", async () => {
+  it("is idempotent - a replayed InvoicePaid does not duplicate the income row", async () => {
     const invoiceId = createdInvoiceIds[0]!;
     const before = await countIncomeForInvoice(ws1!, invoiceId);
     expect(before).toBe(1);
@@ -203,13 +203,13 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
     expect(row).not.toBeNull();
     expect(row!.type).toBe("income");
     expect(row!.amountCents).toBe(5000);
-    expect(row!.customerId).toBeNull(); // unlinked — income still recorded
+    expect(row!.customerId).toBeNull(); // unlinked - income still recorded
     expect(row!.sourceInvoiceId).toBe(invoiceId);
   });
 
   it("ignores an InvoicePaid event with missing metadata (no throw, no row)", async () => {
     const before = await dbRowCountForWorkspace(ws1!);
-    // Garbage metadata — no number/totalCents/currency.
+    // Garbage metadata - no number/totalCents/currency.
     await publishEvent({
       type: "InvoicePaid",
       workspaceId: ws1!,

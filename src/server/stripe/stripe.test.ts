@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Boundary unit tests for the Stripe client + webhook verifier + webhook route.
- * No network, no real Stripe keys required — these assert the boundary
+ * No network, no real Stripe keys required - these assert the boundary
  * behaviour: missing-secret errors surface clearly, and signature failures map
  * to 400.
  *

@@ -59,7 +59,7 @@ import {
 
 /**
  * Workspace-aware read-only tools for the AI assistant (Phase 10). This is the
- * **composition layer** — it lives in the app layer (not `src/platform/ai`)
+ * **composition layer** - it lives in the app layer (not `src/platform/ai`)
  * precisely because it imports module services, which the platform layer is
  * forbidden from doing. The route handler resolves the workspace context,
  * fetches the installed-module list, builds these tools (closured over the
@@ -67,7 +67,7 @@ import {
  *
  * Fail-closed: a tool the user can't use (no `view:R` grant, or its module
  * isn't installed) is **not offered** to the model. Each `execute` re-checks
- * the gate too — defence in depth — and returns a trimmed, JSON-serializable
+ * the gate too - defence in depth - and returns a trimmed, JSON-serializable
  * shape (money as integer cents + currency; the model formats for display).
  */
 
@@ -82,7 +82,7 @@ const clampLimit = (n: number | undefined, def: number, max: number): number =>
 
 /**
  * Resolve a customer reference (id or email) to an active customer id for the
- * invoice/quote write tools. **Email is the preferred, stable reference** — the
+ * invoice/quote write tools. **Email is the preferred, stable reference** - the
  * model carries it as plain text (e.g. "amos@miruku.com") where it can't
  * reliably transcribe a 36-char uuid across turns. Returns the resolved id,
  * `null` for a walk-in (no ref), or a friendly `error` the model can recover
@@ -99,7 +99,7 @@ async function resolveCustomerId(
       return {
         id: null,
         error:
-          "I couldn't find that customer — the id may be stale. Call listCustomers to get the current id, or pass the customer's email via customerEmail instead.",
+          "I couldn't find that customer - the id may be stale. Call listCustomers to get the current id, or pass the customer's email via customerEmail instead.",
       };
     }
     return { id: existing.id };
@@ -221,14 +221,14 @@ export async function computeWorkspaceOverview(
 
 /**
  * Build the assistant's tool set for the given context + installed modules.
- * Only permitted, installed tools are included — the record may be empty for
+ * Only permitted, installed tools are included - the record may be empty for
  * a fresh workspace with no modules (the model then answers from the system
  * prompt alone, or via `getWorkspaceOverview` which is always offered).
  *
- * Write tools (Phase 11d) are offered ONLY when `opts.writeEnabled` is true — the
+ * Write tools (Phase 11d) are offered ONLY when `opts.writeEnabled` is true - the
  * per-conversation opt-in flag is the hard safety boundary. Even then each write
  * tool is fail-closed on `manage:R` + module-install, and `execute` re-checks
- * `manage:R` (defense in depth — the closure could be stale if the flag toggled).
+ * `manage:R` (defense in depth - the closure could be stale if the flag toggled).
  * The system prompt instructs the model to state exactly what it will create and
  * ask the user to confirm before calling a write tool (human-in-the-loop via
  * turn-taking, persisted in `ai_messages`).
@@ -245,7 +245,7 @@ export function buildAssistantTools(
 
   const tools: ToolSet = {};
 
-  // 1. Workspace overview — always offered; returns nulls for uninstalled modules.
+  // 1. Workspace overview - always offered; returns nulls for uninstalled modules.
   tools.getWorkspaceOverview = tool({
     description:
       "Get a high-level overview of the workspace: installed modules, current-month cash position (Books net), outstanding invoices, revenue this month, pending quotes value, and the 5 most recent activity events. Call this first when the user asks a broad question like 'how's my business doing'.",
@@ -253,7 +253,7 @@ export function buildAssistantTools(
     execute: async () => computeWorkspaceOverview(ctx, installedModules),
   });
 
-  // 2. listInvoices — module-gated.
+  // 2. listInvoices - module-gated.
   if (hasModule("invoices") && can("view:invoice")) {
     tools.listInvoices = tool({
       description:
@@ -294,7 +294,7 @@ export function buildAssistantTools(
     });
   }
 
-  // 3. listQuotes — module-gated.
+  // 3. listQuotes - module-gated.
   if (hasModule("quotes") && can("view:quote")) {
     tools.listQuotes = tool({
       description:
@@ -334,7 +334,7 @@ export function buildAssistantTools(
     });
   }
 
-  // 4. listTransactions — module-gated (Books).
+  // 4. listTransactions - module-gated (Books).
   if (hasModule("books") && can("view:books")) {
     tools.listTransactions = tool({
       description:
@@ -377,7 +377,7 @@ export function buildAssistantTools(
     });
   }
 
-  // 5. listDriveEarnings — module-gated (Drive).
+  // 5. listDriveEarnings - module-gated (Drive).
   if (hasModule("drive") && can("view:drive")) {
     tools.listDriveEarnings = tool({
       description:
@@ -412,7 +412,7 @@ export function buildAssistantTools(
     });
   }
 
-  // 6. listCustomers — platform service, not module-gated.
+  // 6. listCustomers - platform service, not module-gated.
   if (can("view:customer")) {
     tools.listCustomers = tool({
       description:
@@ -443,7 +443,7 @@ export function buildAssistantTools(
     });
   }
 
-  // 7. listRecentActivity — platform service, not module-gated.
+  // 7. listRecentActivity - platform service, not module-gated.
   if (can("view:activity")) {
     tools.listRecentActivity = tool({
       description:
@@ -475,13 +475,13 @@ export function buildAssistantTools(
   // (defense in depth). The services already `publishEvent` + `writeAudit` (invoices,
   // quotes, books); `createCustomer` is platform-level + event-only, so the tool
   // wraps it with `writeAudit` to keep customer creates auditable. Each returns a
-  // trimmed confirmation ({ id, number? }) — never the full row.
+  // trimmed confirmation ({ id, number? }) - never the full row.
   if (writeEnabled) {
-    // 8. createCustomer — platform service, not module-gated. Needs manage:customer.
+    // 8. createCustomer - platform service, not module-gated. Needs manage:customer.
     if (can("manage:customer")) {
       tools.createCustomer = tool({
         description:
-          "Create a new customer in the workspace. Use after the user confirms. If a customer with the given email already exists, returns that existing customer with `existed: true` instead of creating a duplicate — tell the user and use the returned id. Required: name. Optional: email, phone, company, notes.",
+          "Create a new customer in the workspace. Use after the user confirms. If a customer with the given email already exists, returns that existing customer with `existed: true` instead of creating a duplicate - tell the user and use the returned id. Required: name. Optional: email, phone, company, notes.",
         inputSchema: z.object({
           name: z.string().min(1).max(200).describe("Customer display name."),
           email: z.string().email().optional().describe("Optional contact email."),
@@ -496,7 +496,7 @@ export function buildAssistantTools(
           }
           try {
             const id = await createCustomer(workspaceId, input, user.id);
-            // createCustomer is event-only (no audit) — audit it here so AI-created
+            // createCustomer is event-only (no audit) - audit it here so AI-created
             // customers are traceable, mirroring the invoice/quote/books services.
             await writeAudit({
               workspaceId,
@@ -508,10 +508,10 @@ export function buildAssistantTools(
             });
             return { id, name: input.name };
           } catch (err) {
-            // Duplicate email — the workspace already has an active customer with
+            // Duplicate email - the workspace already has an active customer with
             // that email (partial unique index `customers_workspace_email_unique`).
             // Recover by returning the existing customer so the model can say
-            // "X already exists — I'll use them" and continue (e.g. create the
+            // "X already exists - I'll use them" and continue (e.g. create the
             // invoice for that customer) instead of dumping a raw Postgres error
             // into the chat. Only an email-bearing input can hit the unique index;
             // a different failure re-throws so it surfaces honestly.
@@ -526,12 +526,12 @@ export function buildAssistantTools(
         },
       });
 
-      // 8b. updateCustomer — patch an existing customer (e.g. add a phone number).
+      // 8b. updateCustomer - patch an existing customer (e.g. add a phone number).
       // Same gate as create. The model resolves the customer id from listCustomers
       // or a prior createCustomer result; omitted fields are left unchanged.
       tools.updateCustomer = tool({
         description:
-          "Update an existing customer's fields (e.g. add or change a phone number, email, company, notes). Use after the user confirms. Pass the customer id (from listCustomers or a prior create) and only the fields to change — omitted fields are left unchanged. Returns { id, updated: true }.",
+          "Update an existing customer's fields (e.g. add or change a phone number, email, company, notes). Use after the user confirms. Pass the customer id (from listCustomers or a prior create) and only the fields to change - omitted fields are left unchanged. Returns { id, updated: true }.",
         inputSchema: z.object({
           customerId: z
             .string()
@@ -552,7 +552,7 @@ export function buildAssistantTools(
           const id = branded<"CustomerId">(customerId);
           try {
             await updateCustomer(workspaceId, id, patch, user.id);
-            // Like createCustomer, updateCustomer is event-only — audit it here so
+            // Like createCustomer, updateCustomer is event-only - audit it here so
             // AI-made changes are traceable.
             await writeAudit({
               workspaceId,
@@ -580,17 +580,17 @@ export function buildAssistantTools(
       });
     }
 
-    // 9. createInvoice — module-gated. Needs manage:invoice.
+    // 9. createInvoice - module-gated. Needs manage:invoice.
     if (hasModule("invoices") && can("manage:invoice")) {
       tools.createInvoice = tool({
         description:
-          'Create a draft invoice in the workspace. Use after the user confirms the line items + totals. Returns the new invoice id + number. Required: issueDate (ISO), taxRate (integer percent, 10 = 10%), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred — e.g. "amos@miruku.com") or customerId (from listCustomers); omit both for a walk-in invoice. Optional: dueDate (ISO), currency, notes.',
+          'Create a draft invoice in the workspace. Use after the user confirms the line items + totals. Returns the new invoice id + number. Required: issueDate (ISO), taxRate (integer percent, 10 = 10%), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred - e.g. "amos@miruku.com") or customerId (from listCustomers); omit both for a walk-in invoice. Optional: dueDate (ISO), currency, notes.',
         inputSchema: z.object({
           customerEmail: z
             .string()
             .email()
             .optional()
-            .describe("Customer email — preferred way to attach an existing customer."),
+            .describe("Customer email - preferred way to attach an existing customer."),
           customerId: z
             .string()
             .uuid()
@@ -653,7 +653,7 @@ export function buildAssistantTools(
             const message = err instanceof Error ? err.message : "";
             if (/unique|duplicate/i.test(message))
               return {
-                error: "Couldn't generate a unique invoice number just now — please try again.",
+                error: "Couldn't generate a unique invoice number just now - please try again.",
               };
             throw err;
           }
@@ -661,17 +661,17 @@ export function buildAssistantTools(
       });
     }
 
-    // 10. createQuote — module-gated. Needs manage:quote.
+    // 10. createQuote - module-gated. Needs manage:quote.
     if (hasModule("quotes") && can("manage:quote")) {
       tools.createQuote = tool({
         description:
-          'Create a draft quote in the workspace. Use after the user confirms the line items + totals. Returns the new quote id. Required: issueDate (ISO), taxRate (integer percent), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred — e.g. "amos@miruku.com") or customerId (from listCustomers); omit both for a walk-in quote. Optional: validUntil (ISO), currency, notes.',
+          'Create a draft quote in the workspace. Use after the user confirms the line items + totals. Returns the new quote id. Required: issueDate (ISO), taxRate (integer percent), lineItems (≥1). To attach an existing customer, pass customerEmail (preferred - e.g. "amos@miruku.com") or customerId (from listCustomers); omit both for a walk-in quote. Optional: validUntil (ISO), currency, notes.',
         inputSchema: z.object({
           customerEmail: z
             .string()
             .email()
             .optional()
-            .describe("Customer email — preferred way to attach an existing customer."),
+            .describe("Customer email - preferred way to attach an existing customer."),
           customerId: z
             .string()
             .uuid()
@@ -734,7 +734,7 @@ export function buildAssistantTools(
             const message = err instanceof Error ? err.message : "";
             if (/unique|duplicate/i.test(message))
               return {
-                error: "Couldn't generate a unique quote number just now — please try again.",
+                error: "Couldn't generate a unique quote number just now - please try again.",
               };
             throw err;
           }
@@ -742,11 +742,11 @@ export function buildAssistantTools(
       });
     }
 
-    // 11. createTransaction — module-gated (Books). Needs manage:books.
+    // 11. createTransaction - module-gated (Books). Needs manage:books.
     if (hasModule("books") && can("manage:books")) {
       tools.createTransaction = tool({
         description:
-          "Create a Books transaction (income or expense) in the workspace. Use after the user confirms. Returns the new transaction id. Required: type (income|expense), amountCents (positive integer), date (ISO), description, category (slug matching the type — e.g. income: sales|services|software|hardware|invoice|gig|other_income; expense: rent|utilities|supplies|travel|wages|software_expense|vehicle_expense|other_expense; note software=income, software_expense=expense). To link an existing customer, pass customerEmail (preferred) or customerId; omit both for a walk-in. Optional: notes.",
+          "Create a Books transaction (income or expense) in the workspace. Use after the user confirms. Returns the new transaction id. Required: type (income|expense), amountCents (positive integer), date (ISO), description, category (slug matching the type - e.g. income: sales|services|software|hardware|invoice|gig|other_income; expense: rent|utilities|supplies|travel|wages|software_expense|vehicle_expense|other_expense; note software=income, software_expense=expense). To link an existing customer, pass customerEmail (preferred) or customerId; omit both for a walk-in. Optional: notes.",
         inputSchema: z.object({
           type: z.enum(["income", "expense"]).describe("Transaction type."),
           amountCents: z.number().int().min(1).describe("Amount in integer cents (positive)."),
@@ -761,7 +761,7 @@ export function buildAssistantTools(
             .string()
             .email()
             .optional()
-            .describe("Customer email — preferred way to link an existing customer."),
+            .describe("Customer email - preferred way to link an existing customer."),
           customerId: z.string().uuid().optional().describe("Optional linked customer id."),
           notes: z.string().max(2000).optional().describe("Optional notes."),
         }),
@@ -771,7 +771,7 @@ export function buildAssistantTools(
           }
           // Pre-validate the category slug against the type's catalog BEFORE calling the
           // service, so a wrong slug (the model picks freely) returns a friendly error that
-          // lists the valid slugs for a retry — instead of a raw "Unknown category" throw.
+          // lists the valid slugs for a retry - instead of a raw "Unknown category" throw.
           // Catches the software (income) vs software_expense (expense) trap.
           const validSlugs = categoriesForType(input.type).map((c) => c.key);
           if (!validSlugs.includes(input.category)) {
@@ -779,7 +779,7 @@ export function buildAssistantTools(
               error: `Unknown category "${input.category}" for ${input.type} transactions. Valid ${input.type} categories: ${validSlugs.join(", ")}.`,
             };
           }
-          // Resolve the customer by email (preferred) or id — same recovery pattern as
+          // Resolve the customer by email (preferred) or id - same recovery pattern as
           // createInvoice, so a stale uuid no longer dumps "Customer not found in this
           // workspace." into the chat.
           const resolved = await resolveCustomerId(workspaceId, {
@@ -815,7 +815,7 @@ export function buildAssistantTools(
       });
     }
 
-    // 12. extractReceipt — module-gated (Books). Needs manage:books. The first write
+    // 12. extractReceipt - module-gated (Books). Needs manage:books. The first write
     // tool that may consume a credit: the service handles the
     // `RECEIPT_EXTRACTION_COST_CENTS` opt-in (default 0 = free). Returns the extracted
     // summary so the model can present it for human review before the user applies it
@@ -848,7 +848,7 @@ export function buildAssistantTools(
     // slug/enum up front (friendly error listing valid values) and wraps the service
     // call in try/catch.
 
-    // 13. createEarning — log gig earnings (Drive). Needs manage:drive.
+    // 13. createEarning - log gig earnings (Drive). Needs manage:drive.
     if (hasModule("drive") && can("manage:drive")) {
       tools.createEarning = tool({
         description:
@@ -898,11 +898,11 @@ export function buildAssistantTools(
         },
       });
 
-      // 14. createTrip — log mileage (Drive). Distance is collected in km and converted
+      // 14. createTrip - log mileage (Drive). Distance is collected in km and converted
       // to meters (the service stores INTEGER meters). Needs manage:drive.
       tools.createTrip = tool({
         description:
-          "Log a Drive mileage trip for the workspace (e.g. a 45 km shift). Use after the user confirms. Required: platform (slug — see createEarning), distanceKm (positive number of kilometers — converted to meters internally), date (ISO). Optional: purpose, notes. Returns the new trip id.",
+          "Log a Drive mileage trip for the workspace (e.g. a 45 km shift). Use after the user confirms. Required: platform (slug - see createEarning), distanceKm (positive number of kilometers - converted to meters internally), date (ISO). Optional: purpose, notes. Returns the new trip id.",
         inputSchema: z.object({
           platform: z.string().min(1).max(50).describe("Platform slug (e.g. uber, doordash)."),
           distanceKm: z.number().min(0.001).describe("Trip distance in kilometers (positive)."),
@@ -945,18 +945,18 @@ export function buildAssistantTools(
         },
       });
 
-      // 15. createExpense — log a vehicle expense (Drive). Resolve the vehicle by name
-      // (preferred — e.g. "Hilux") or id. Needs manage:drive.
+      // 15. createExpense - log a vehicle expense (Drive). Resolve the vehicle by name
+      // (preferred - e.g. "Hilux") or id. Needs manage:drive.
       tools.createExpense = tool({
         description:
-          "Log a Drive vehicle expense (fuel, maintenance, insurance, registration, other). Use after the user confirms. Required: vehicleName (preferred — exact vehicle name from listVehicles) or vehicleId, type (fuel|maintenance|insurance|registration|other), amountCents (positive integer), date (ISO), description. Optional: odometerKm, currency, notes. Returns the new expense id, or an error if the vehicle isn't found (call listVehicles first).",
+          "Log a Drive vehicle expense (fuel, maintenance, insurance, registration, other). Use after the user confirms. Required: vehicleName (preferred - exact vehicle name from listVehicles) or vehicleId, type (fuel|maintenance|insurance|registration|other), amountCents (positive integer), date (ISO), description. Optional: odometerKm, currency, notes. Returns the new expense id, or an error if the vehicle isn't found (call listVehicles first).",
         inputSchema: z.object({
           vehicleName: z
             .string()
             .min(1)
             .max(200)
             .optional()
-            .describe("Vehicle name (preferred — exact match against listVehicles)."),
+            .describe("Vehicle name (preferred - exact match against listVehicles)."),
           vehicleId: z.string().uuid().optional().describe("Optional vehicle id."),
           type: z
             .enum(["fuel", "maintenance", "insurance", "registration", "other"])
@@ -1030,11 +1030,11 @@ export function buildAssistantTools(
     // ── Books update/delete ─────────────────────────────────────────────────────
     // Gated manage:books + books module installed + writeEnabled.
 
-    // 16. updateTransaction — patch an existing Books transaction. Needs manage:books.
+    // 16. updateTransaction - patch an existing Books transaction. Needs manage:books.
     if (hasModule("books") && can("manage:books")) {
       tools.updateTransaction = tool({
         description:
-          "Update an existing Books transaction's fields (e.g. re-categorize an expense, fix an amount, change the date). Use after the user confirms. Pass the transaction id (from listTransactions) and only the fields to change — omitted fields are left unchanged. If you change the type, you must also pass a category valid for the new type (income: sales|services|software|hardware|invoice|gig|other_income; expense: rent|utilities|supplies|travel|wages|software_expense|vehicle_expense|other_expense). To link a customer, pass customerEmail (preferred) or customerId. Returns { id, updated: true }, or an error if the transaction isn't found or the category is invalid for the type.",
+          "Update an existing Books transaction's fields (e.g. re-categorize an expense, fix an amount, change the date). Use after the user confirms. Pass the transaction id (from listTransactions) and only the fields to change - omitted fields are left unchanged. If you change the type, you must also pass a category valid for the new type (income: sales|services|software|hardware|invoice|gig|other_income; expense: rent|utilities|supplies|travel|wages|software_expense|vehicle_expense|other_expense). To link a customer, pass customerEmail (preferred) or customerId. Returns { id, updated: true }, or an error if the transaction isn't found or the category is invalid for the type.",
         inputSchema: z.object({
           transactionId: z.string().uuid().describe("The transaction id (from listTransactions)."),
           type: z.enum(["income", "expense"]).optional().describe("New transaction type."),
@@ -1064,7 +1064,7 @@ export function buildAssistantTools(
           // wrong slug returns a friendly error listing the valid slugs instead of a raw
           // "Unknown category" throw. When only the category changes, validate against the
           // new type if supplied, else defer to the service (it validates vs the existing
-          // type and throws "Unknown category" — mapped below).
+          // type and throws "Unknown category" - mapped below).
           if (patch.category !== undefined && patch.type !== undefined) {
             const validSlugs = categoriesForType(patch.type).map((c) => c.key);
             if (!validSlugs.includes(patch.category)) {
@@ -1112,11 +1112,11 @@ export function buildAssistantTools(
         },
       });
 
-      // 17. deleteTransaction — hard-delete a Books transaction. Destructive: the system
+      // 17. deleteTransaction - hard-delete a Books transaction. Destructive: the system
       // prompt's confirm-before-write rule covers it. Needs manage:books.
       tools.deleteTransaction = tool({
         description:
-          "Permanently delete a Books transaction. Destructive — confirm the exact transaction with the user first (state the description + amount). Required: transactionId (from listTransactions). Returns { id, deleted: true }, or an error if the transaction isn't found.",
+          "Permanently delete a Books transaction. Destructive - confirm the exact transaction with the user first (state the description + amount). Required: transactionId (from listTransactions). Returns { id, deleted: true }, or an error if the transaction isn't found.",
         inputSchema: z.object({
           transactionId: z.string().uuid().describe("The transaction id (from listTransactions)."),
         }),
@@ -1138,17 +1138,17 @@ export function buildAssistantTools(
       });
     }
 
-    // ── Invoice/quote action tools (resolve by number — human-meaningful) ──────────
+    // ── Invoice/quote action tools (resolve by number - human-meaningful) ──────────
     // The model carries a short, stable document number the user actually said
     // ("send INV-2026-0007"), never a uuid. Each action resolves the number to the
     // row first, then calls the service.
 
-    // 18. sendInvoice — outward-facing (emails the customer a payment link). Needs
+    // 18. sendInvoice - outward-facing (emails the customer a payment link). Needs
     // manage:invoice + invoices module installed.
     if (hasModule("invoices") && can("manage:invoice")) {
       tools.sendInvoice = tool({
         description:
-          "Send a draft invoice to its customer — this emails them a payment link (outward-facing, so confirm the exact invoice number with the user first). Required: invoiceNumber (e.g. INV-2026-0007). Returns { sent: true, number }, or an error if the invoice isn't a draft (it may already be sent) or isn't found.",
+          "Send a draft invoice to its customer - this emails them a payment link (outward-facing, so confirm the exact invoice number with the user first). Required: invoiceNumber (e.g. INV-2026-0007). Returns { sent: true, number }, or an error if the invoice isn't a draft (it may already be sent) or isn't found.",
         inputSchema: z.object({
           invoiceNumber: z
             .string()
@@ -1165,13 +1165,13 @@ export function buildAssistantTools(
           const sent = await sendInvoice(workspaceId, resolved.id, user.id);
           if (!sent)
             return {
-              error: `Invoice ${input.invoiceNumber} isn't a draft — it may already be sent, paid, or void.`,
+              error: `Invoice ${input.invoiceNumber} isn't a draft - it may already be sent, paid, or void.`,
             };
           return { sent: true, number: resolved.number };
         },
       });
 
-      // 19. voidInvoice — void a draft or sent invoice. Needs manage:invoice.
+      // 19. voidInvoice - void a draft or sent invoice. Needs manage:invoice.
       tools.voidInvoice = tool({
         description:
           "Void an invoice (draft or sent → void). Required: invoiceNumber. Returns { voided: true, number }, or an error if the invoice is already paid/void or isn't found.",
@@ -1191,17 +1191,17 @@ export function buildAssistantTools(
           const voided = await voidInvoice(workspaceId, resolved.id, user.id);
           if (!voided)
             return {
-              error: `Invoice ${input.invoiceNumber} can't be voided — it may be paid or already void.`,
+              error: `Invoice ${input.invoiceNumber} can't be voided - it may be paid or already void.`,
             };
           return { voided: true, number: resolved.number };
         },
       });
 
-      // 20. markInvoicePaid — mark a sent invoice paid (manual / offline payment). Needs
+      // 20. markInvoicePaid - mark a sent invoice paid (manual / offline payment). Needs
       // manage:invoice.
       tools.markInvoicePaid = tool({
         description:
-          "Mark a sent invoice as paid (manual / offline payment — e.g. cash, bank transfer). Required: invoiceNumber. Returns { paid: true, number }, or an error if the invoice isn't sent yet (or is already paid/void) or isn't found.",
+          "Mark a sent invoice as paid (manual / offline payment - e.g. cash, bank transfer). Required: invoiceNumber. Returns { paid: true, number }, or an error if the invoice isn't sent yet (or is already paid/void) or isn't found.",
         inputSchema: z.object({
           invoiceNumber: z
             .string()
@@ -1218,14 +1218,14 @@ export function buildAssistantTools(
           const paid = await markInvoicePaid(workspaceId, resolved.id, user.id);
           if (!paid)
             return {
-              error: `Invoice ${input.invoiceNumber} isn't sent yet — send it before marking it paid.`,
+              error: `Invoice ${input.invoiceNumber} isn't sent yet - send it before marking it paid.`,
             };
           return { paid: true, number: resolved.number };
         },
       });
     }
 
-    // 21. convertQuoteToInvoice — composite: get an accepted quote → create a draft
+    // 21. convertQuoteToInvoice - composite: get an accepted quote → create a draft
     // invoice from its line items → mark the quote converted. Needs manage:quote +
     // manage:invoice + both modules installed.
     if (
@@ -1253,7 +1253,7 @@ export function buildAssistantTools(
           if (!quote) return { error: `Quote ${input.quoteNumber} not found.` };
           if (quote.status !== "accepted") {
             return {
-              error: `Quote ${input.quoteNumber} isn't accepted yet — the customer must accept it before it can be converted.`,
+              error: `Quote ${input.quoteNumber} isn't accepted yet - the customer must accept it before it can be converted.`,
             };
           }
           try {
@@ -1288,7 +1288,7 @@ export function buildAssistantTools(
               // The invoice was created but the quote transition failed (e.g. it was
               // converted by someone else in the race window). Surface honestly.
               return {
-                error: `Quote ${input.quoteNumber} couldn't be marked converted (it may have been converted already). Invoice ${invoiceNumber || invoiceId} was created — review it in Invoices.`,
+                error: `Quote ${input.quoteNumber} couldn't be marked converted (it may have been converted already). Invoice ${invoiceNumber || invoiceId} was created - review it in Invoices.`,
               };
             }
             return { invoiceId, invoiceNumber };
@@ -1296,7 +1296,7 @@ export function buildAssistantTools(
             const message = err instanceof Error ? err.message : "";
             if (/unique|duplicate/i.test(message))
               return {
-                error: "Couldn't generate a unique invoice number just now — please try again.",
+                error: "Couldn't generate a unique invoice number just now - please try again.",
               };
             throw err;
           }

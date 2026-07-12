@@ -1,17 +1,17 @@
 /**
- * Period-over-period delta helper (Phase 9). Pure — no `server-only`, no DB — used by the
+ * Period-over-period delta helper (Phase 9). Pure - no `server-only`, no DB - used by the
  * cross-module dashboard's KPI cards to render "+12% vs last month" badges.
  *
  * `percentDelta(current, previous)` returns a tagged result so the UI never has to special-case
  * division-by-zero:
- * - `none`  — both zero (no change, nothing to compare).
- * - `new`   — previous zero, current positive (new this period; no meaningful percentage).
- * - `flat`  — current === previous, both non-zero (0% change).
- * - `up`/`down` — signed percentage, rounded to the nearest whole percent.
+ * - `none`  - both zero (no change, nothing to compare).
+ * - `new`   - previous zero, current positive (new this period; no meaningful percentage).
+ * - `flat`  - current === previous, both non-zero (0% change).
+ * - `up`/`down` - signed percentage, rounded to the nearest whole percent.
  *
  * `formatDelta` turns the result into the accessible badge text per the design spec
  * (`pages/dashboard.md`: "delta vs previous period (arrow + accessible text)"). The caller
- * renders the arrow icon + color separately — the text here is the a11y label + visible string.
+ * renders the arrow icon + color separately - the text here is the a11y label + visible string.
  */
 
 export type DeltaKind = "up" | "down" | "flat" | "new" | "none";

@@ -12,8 +12,8 @@ const profileSchema = z.object({
 export type UpdateProfileResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Update the signed-in user's full name on the `public.users` mirror (Wave 4 — `/settings/account`).
- * No workspace permission gate — a user always edits their own profile. The session resolves the
+ * Update the signed-in user's full name on the `public.users` mirror (Wave 4 - `/settings/account`).
+ * No workspace permission gate - a user always edits their own profile. The session resolves the
  * user id (never trusted from client input).
  */
 export async function updateProfileAction(input: unknown): Promise<UpdateProfileResult> {

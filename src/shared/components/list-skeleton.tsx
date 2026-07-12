@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/shared/ui/card";
 /**
  * Shared route-loading skeleton (Wave 4 robustness). Used by `loading.tsx` boundaries on
  * list-heavy `(app)` routes so the shift from skeleton to content is layout-stable (no CLS).
- * Pure presentational — no app/module/platform imports (shared boundary).
+ * Pure presentational - no app/module/platform imports (shared boundary).
  */
 export function ListPageSkeleton({
   titleWidth = "w-40",

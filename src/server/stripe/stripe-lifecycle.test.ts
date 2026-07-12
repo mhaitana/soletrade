@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * Asserts the env-boundary + state-boundary errors surface clearly when Stripe/price
  * secrets are unset or billing hasn't started. To test the unset path we set/unset
  * process.env, register `vi.doMock` for the DB-touching deps, `vi.resetModules()`, then
- * dynamic-import — the order matters: mocks must be registered before the module
+ * dynamic-import - the order matters: mocks must be registered before the module
  * resolves its imports.
  */
 

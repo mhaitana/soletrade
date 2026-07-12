@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/server/auth/session";
 
-// Auth-scoped page — never statically prerendered.
+// Auth-scoped page - never statically prerendered.
 export const dynamic = "force-dynamic";
 import { listUserWorkspaces } from "@/platform/workspaces";
 import { Logo } from "@/shared/components/logo";
@@ -13,7 +13,7 @@ export default async function OnboardingPage() {
   const user = await requireUser();
   // Brand-new users land here with zero workspaces (via /auth/callback +
   // requireWorkspaceContext); existing users arrive via the WorkspaceSwitcher's
-  // "Create workspace" link to add another. We no longer redirect the latter —
+  // "Create workspace" link to add another. We no longer redirect the latter -
   // the page branches its copy instead so both audiences are served.
   const workspaces = await listUserWorkspaces(user.id);
   const hasWorkspace = workspaces.length > 0;
@@ -25,12 +25,12 @@ export default async function OnboardingPage() {
           <Logo />
         </div>
         <h1 className="text-center text-2xl font-semibold tracking-tight">
-          {hasWorkspace ? "Create a new workspace" : "Create your workspace"}
+          {hasWorkspace ? "Create a new workspace" : "Welcome to soletrade Workspace"}
         </h1>
         <p className="mt-2 text-center text-sm text-muted-foreground">
           {hasWorkspace
             ? "You'll switch into the new workspace once it's created."
-            : "A workspace holds your customers, modules, and billing. You can rename it later."}
+            : "Bring your invoices, quotes, books, mileage, and business activity together in one place."}
         </p>
         {hasWorkspace ? (
           <p className="mt-4 text-center text-sm">

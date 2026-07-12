@@ -16,13 +16,13 @@ import { branded } from "@/shared/types/ids";
 import type { BillingInterval } from "@/server/db/enums";
 
 /**
- * Stripe webhook dispatcher (brief §4 — signature verification on every webhook,
+ * Stripe webhook dispatcher (brief §4 - signature verification on every webhook,
  * then idempotent handling).
  *
  * Idempotency is layered:
  *   1. `handleStripeEvent` pre-checks `processed_webhook_events` by `stripeEventId`
  *      and returns early if the event was already processed. This is the primary
- *      guard because `writeAudit` is append-only — without it a retried event
+ *      guard because `writeAudit` is append-only - without it a retried event
  *      would re-run reconcile and duplicate the audit row even though the
  *      subscription upsert is itself idempotent.
  *   2. Each reconcile function checks current state before writing
@@ -123,18 +123,18 @@ async function reconcileCheckoutSession(session: Stripe.Checkout.Session): Promi
     const priceId = typeof si.price === "string" ? si.price : si.price?.id;
     if (!priceId) continue;
     const mapping = priceMap.get(priceId);
-    if (!mapping) continue; // unrelated price — skip defensively
+    if (!mapping) continue; // unrelated price - skip defensively
     items.push({ moduleKey: mapping.moduleKey, role: mapping.role, itemId: si.id });
   }
   await reconcileFromCheckoutSession(session, { interval, items });
 }
 
 /**
- * `payment_intent.succeeded` (5b — customer paying a soletrade invoice, NOT the subscription
+ * `payment_intent.succeeded` (5b - customer paying a soletrade invoice, NOT the subscription
  * billing invoice handled by `recordInvoicePaid` above). The PaymentIntent carries
  * `metadata.invoiceId` + `metadata.workspaceId` set by `createInvoicePaymentIntentAction`.
  * Hands off to the invoices service, which atomically flips the invoice to `paid` (idempotent
- * — the `processed_webhook_events` pre-check by event id is the primary guard; the service
+ * - the `processed_webhook_events` pre-check by event id is the primary guard; the service
  * `inArray(status, ["sent","viewed","overdue"])` guard is defense-in-depth for the rare
  * same-PI/different-event case). PIs without our metadata are ignored defensively.
  */
@@ -142,7 +142,7 @@ export async function reconcileInvoicePayment(pi: Stripe.PaymentIntent): Promise
   const invoiceId = pi.metadata?.invoiceId;
   const workspaceId = pi.metadata?.workspaceId;
   if (!invoiceId || !workspaceId) {
-    // Not a PI we created (e.g. test/legacy) — nothing to reconcile.
+    // Not a PI we created (e.g. test/legacy) - nothing to reconcile.
     return;
   }
   const latestChargeId =

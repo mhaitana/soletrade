@@ -13,7 +13,7 @@ import { startBillingCheckoutAction } from "./actions";
  * (charged standalone); the rest are add-ons (standalone − $2.50/mo / $22.50/yr).
  *
  * Calls the server action to create a Checkout Session, then redirects the browser
- * to the hosted Checkout URL (`window.location.href` — the URL is external, so
+ * to the hosted Checkout URL (`window.location.href` - the URL is external, so
  * `router.push` would not work). No client Stripe SDK is loaded.
  */
 export function BillingStartCard() {

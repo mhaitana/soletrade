@@ -42,7 +42,7 @@ describe("auth action rate limits", () => {
     // Default: every Supabase call "fails" with an invalid-credentials error. The
     // rate-limit check runs first, so for the over-the-limit cases Supabase is
     // never reached; for the under-the-limit cases the action surfaces this error,
-    // which is fine — we only assert on the rate-limit outcome.
+    // which is fine - we only assert on the rate-limit outcome.
     signInWithPassword.mockResolvedValue({ error: { message: "Invalid credentials" } });
     signInWithOtp.mockResolvedValue({ error: null });
     signUp.mockResolvedValue({ data: { session: null, user: null }, error: null });
@@ -64,7 +64,7 @@ describe("auth action rate limits", () => {
       const res = await signInWithPasswordAction(input);
       expect(res.ok).toBe(false);
       expect(res.ok === false && res.error).toBe(THROTTLED);
-      // Supabase was hit exactly 10 times — the 11th was blocked before the call.
+      // Supabase was hit exactly 10 times - the 11th was blocked before the call.
       expect(signInWithPassword).toHaveBeenCalledTimes(10);
     });
 

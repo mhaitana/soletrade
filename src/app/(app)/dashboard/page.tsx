@@ -37,7 +37,7 @@ export default async function DashboardPage({
   const sp = await searchParams;
   const rawPeriod = typeof sp.period === "string" ? sp.period : undefined;
   // Dashboard default is "month" (parsePeriod's own default is "year") so the KPI deltas read
-  // "vs last month". "all" is allowed — its KPIs just render no delta badge (no previous period).
+  // "vs last month". "all" is allowed - its KPIs just render no delta badge (no previous period).
   const period: Period = rawPeriod ? parsePeriod(rawPeriod) : "month";
   const data = await loadDashboardPage({ period });
   const periodNoun: string = period === "all" ? "" : PERIOD_NOUN[period];
@@ -47,9 +47,9 @@ export default async function DashboardPage({
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Your workspace</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Welcome to your workspace. Enable a module to get started.
+            Your workspace is ready. Enable your first module to start managing your business.
           </p>
         </div>
 
@@ -79,7 +79,10 @@ export default async function DashboardPage({
         </Card>
 
         <section>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Modules</h2>
+          <h2 className="mb-1 text-sm font-medium text-muted-foreground">Build your workspace</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Start with the module you need today. Add more whenever your business grows.
+          </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {MODULE_KEYS.map((key) => {
               const m = MODULES[key];
@@ -88,7 +91,7 @@ export default async function DashboardPage({
                 <Card key={key} className="transition-colors hover:border-primary/40">
                   <CardHeader>
                     <Icon className="size-5 text-primary" aria-hidden />
-                    <CardTitle className="mt-3 text-sm">soletrade {m.name}</CardTitle>
+                    <CardTitle className="mt-3 text-sm">{m.name}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-xs text-muted-foreground">{m.description}</p>
@@ -125,10 +128,10 @@ export default async function DashboardPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your business at a glance — {period === "all" ? "all time" : `this ${period}`}.
+            Your business at a glance - {period === "all" ? "all time" : `this ${period}`}.
           </p>
         </div>
-        {/* Period selector — SegmentedControl; active period highlighted. */}
+        {/* Period selector - SegmentedControl; active period highlighted. */}
         <SegmentedControl
           label="Dashboard period"
           items={PERIODS.map((p) => ({

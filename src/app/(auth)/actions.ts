@@ -60,7 +60,7 @@ function emailRedirectTo(): string {
  * safe same-origin path) or `/dashboard`.
  */
 export async function signInWithPasswordAction(input: unknown): Promise<AuthActionResult> {
-  // IP limit first — catches raw volume / distributed guessing before any work.
+  // IP limit first - catches raw volume / distributed guessing before any work.
   const ip = await getClientIp();
   if (!(await rateLimit(`auth:signin:${ip}`, { max: 10, windowMs: WINDOW_MS }))) {
     return { ok: false, error: THROTTLED };
@@ -74,7 +74,7 @@ export async function signInWithPasswordAction(input: unknown): Promise<AuthActi
     };
   }
   const { email, password, next } = parsed.data;
-  // Per-email limit — protects a single account from targeted credential stuffing
+  // Per-email limit - protects a single account from targeted credential stuffing
   // across many IPs.
   if (!(await rateLimit(`auth:signin-email:${email}`, { max: 10, windowMs: WINDOW_MS }))) {
     return { ok: false, error: THROTTLED };
@@ -121,7 +121,7 @@ export async function signUpAction(input: unknown): Promise<AuthActionResult> {
     return { ok: false, error: error.message };
   }
   if (data.session && data.user) {
-    // Autoconfirm path — mirror the auth user into public.users so workspace
+    // Autoconfirm path - mirror the auth user into public.users so workspace
     // creation's FK is satisfied.
     await ensureUserMirror({
       id: branded<"UserId">(data.user.id),
@@ -130,7 +130,7 @@ export async function signUpAction(input: unknown): Promise<AuthActionResult> {
     });
     return { ok: true, redirectTo: "/onboarding" };
   }
-  // Email-confirmation path — Supabase sent a verification link.
+  // Email-confirmation path - Supabase sent a verification link.
   return { ok: true, checkEmail: true };
 }
 
@@ -138,7 +138,7 @@ export async function signUpAction(input: unknown): Promise<AuthActionResult> {
  * Send a magic-link sign-in / sign-up email. `mode: "signup"` allows creating a
  * new user if one doesn't exist; `"signin"` only signs in existing users. The
  * link click lands at /auth/callback, which exchanges the code and establishes
- * the session. No redirect here — the form shows a "check your email" notice.
+ * the session. No redirect here - the form shows a "check your email" notice.
  */
 export async function signInWithOtpAction(input: unknown): Promise<AuthActionResult> {
   const ip = await getClientIp();

@@ -18,14 +18,14 @@ import {
 
 /**
  * Drive module service (Phase 7). Workspace-scoped CRUD for gig-economy earnings + mileage
- * trips. All queries filter `.eq("workspace_id", workspaceId)` — never trust a client
+ * trips. All queries filter `.eq("workspace_id", workspaceId)` - never trust a client
  * workspace id; the caller resolves it from the session (`requireWorkspaceContext`).
  *
  * Two independent entity types:
- * - **Earnings** — a dated money entry (platform, amount, currency, description, notes).
- * - **Trips**    — a dated distance entry (platform, distance in meters, purpose, notes).
+ * - **Earnings** - a dated money entry (platform, amount, currency, description, notes).
+ * - **Trips**    - a dated distance entry (platform, distance in meters, purpose, notes).
  *
- * No lifecycle / status — a row is a dated ledger entry. Money is integer cents; distance is
+ * No lifecycle / status - a row is a dated ledger entry. Money is integer cents; distance is
  * integer meters (smallest unit, mirrors the cents pattern). Platforms are slugs from the pure
  * `drive-platforms` catalog, validated here as a defensive guard (the action already
  * validates). Delete is hard-delete + audit-logged; soft-delete is a later phase.
@@ -33,13 +33,13 @@ import {
  * Events fire on **every mutation**: creates publish `DriveEarningsLogged` /
  * `VehicleExpenseLogged` / `MileageLogged` (the meaningful "logged" moment for the activity
  * feed), and edits/deletes publish `*Updated` / `*Deleted` so the Books mirror stays in sync
- * (the `@/modules/books/integration` subscribers reconcile the mirrored row — "Drive wins",
+ * (the `@/modules/books/integration` subscribers reconcile the mirrored row - "Drive wins",
  * unconditional overwrite). `MileageLogged` carries the computed deduction amount
  * (distance × workspace mileage rate) so the Books expense row is created at log time. All
  * mutations write audit (`drive.earning.*` / `drive.trip.*`); the action layer does not audit
  * (mirrors Books).
  *
- * `actorId` is **required** for every mutation — earnings/trips are always user-logged, so
+ * `actorId` is **required** for every mutation - earnings/trips are always user-logged, so
  * there is no system-actor path (unlike Books' optional `actorId` for the InvoicePaid
  * subscriber). The audit log + event carry `actorUserId: actorId`.
  */
@@ -246,7 +246,7 @@ export async function updateEarning(
   }
 
   const supabase = getDataClient();
-  // Explicit column-keyed shape (not a loose Record<string, unknown>) — the generated
+  // Explicit column-keyed shape (not a loose Record<string, unknown>) - the generated
   // `.update()` type rejects an `unknown` index signature.
   const set: {
     updated_at: string;
@@ -374,7 +374,7 @@ export async function listEarnings(
 }
 
 /**
- * Fetch a single earning, scoped to the workspace. IDOR-safe — returns null when the earning
+ * Fetch a single earning, scoped to the workspace. IDOR-safe - returns null when the earning
  * belongs to another workspace.
  */
 export async function getEarning(
@@ -588,7 +588,7 @@ export async function listTrips(
 }
 
 /**
- * Fetch a single trip, scoped to the workspace. IDOR-safe — returns null when the trip
+ * Fetch a single trip, scoped to the workspace. IDOR-safe - returns null when the trip
  * belongs to another workspace.
  */
 export async function getTrip(
@@ -1064,7 +1064,7 @@ export async function listExpenses(
   opts?: {
     vehicleId?: VehicleId;
     type?: VehicleExpenseType;
-    /** Leading-wildcard ILIKE on `description` + `notes` (index-backed via `pg_trgm` — migration 0017). */
+    /** Leading-wildcard ILIKE on `description` + `notes` (index-backed via `pg_trgm` - migration 0017). */
     search?: string;
     dateFrom?: Date;
     dateTo?: Date;
@@ -1122,7 +1122,7 @@ export interface DriveSettingsRow {
 
 /**
  * Get the workspace's drive settings (mileage rate + default vehicle). Returns sensible
- * defaults (ATO 85c/km, no default vehicle) when no row exists yet — callers don't need to
+ * defaults (ATO 85c/km, no default vehicle) when no row exists yet - callers don't need to
  * distinguish "unset" from "set to defaults".
  */
 export async function getDriveSettings(workspaceId: WorkspaceId): Promise<DriveSettingsRow> {
@@ -1197,7 +1197,7 @@ export async function upsertDriveSettings(
 /**
  * Re-publish `DriveEarningsLogged` / `VehicleExpenseLogged` / `MileageLogged` for every
  * existing Drive row in the workspace. The Books subscribers' check-then-insert makes this
- * idempotent — already-mirrored rows are skipped, missing ones are created. Used when Books
+ * idempotent - already-mirrored rows are skipped, missing ones are created. Used when Books
  * is enabled for a workspace that already has Drive entries (the create-time subscribers
  * no-op'd while Books was disabled). Orchestrated from `src/instrumentation.ts` on the
  * `ModuleEnabled` event so the Books module never imports Drive directly (cross-module

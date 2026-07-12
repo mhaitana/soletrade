@@ -41,7 +41,7 @@ describe("shared periods", () => {
   });
 });
 
-describe("shared periods — startOfWeek", () => {
+describe("shared periods - startOfWeek", () => {
   it("rolls back to Monday (Australian week starts Monday)", () => {
     // 2026-07-08 is a Wednesday → Monday is 2026-07-06.
     expect(startOfWeek(new Date("2026-07-08T10:30:00Z"))).toEqual(new Date("2026-07-06T00:00:00Z"));
@@ -57,7 +57,7 @@ describe("shared periods — startOfWeek", () => {
   });
 });
 
-describe("shared periods — periodRange", () => {
+describe("shared periods - periodRange", () => {
   // A fixed "now" so the assertions are deterministic: 2026-07-05 10:30 UTC.
   const now = new Date("2026-07-05T10:30:00Z");
 
@@ -112,7 +112,7 @@ describe("shared periods — periodRange", () => {
   });
 });
 
-describe("shared periods — previousPeriodRange", () => {
+describe("shared periods - previousPeriodRange", () => {
   const now = new Date("2026-07-05T10:30:00Z");
 
   it("returns null for 'all' (no meaningful previous period)", () => {
@@ -171,7 +171,7 @@ describe("shared periods — previousPeriodRange", () => {
 // behaviour for unthreaded callers (covered by the blocks above). These tests exercise the
 // fiscal reanchor when a workspace's configured fyStartMonth is threaded through.
 
-describe("shared periods — fiscalYearStart", () => {
+describe("shared periods - fiscalYearStart", () => {
   it("AU (fyStartMonth=7): Jul–Dec is in the FY that started this year", () => {
     expect(fiscalYearStart(new Date("2026-07-05T10:30:00Z"), 7)).toEqual(
       new Date("2026-07-01T00:00:00Z"),
@@ -190,7 +190,7 @@ describe("shared periods — fiscalYearStart", () => {
     );
   });
 
-  it("NZ (fyStartMonth=4): Apr–Mar FY — Apr starts this year, Feb rolls back", () => {
+  it("NZ (fyStartMonth=4): Apr–Mar FY - Apr starts this year, Feb rolls back", () => {
     expect(fiscalYearStart(new Date("2026-04-01T00:00:00Z"), 4)).toEqual(
       new Date("2026-04-01T00:00:00Z"),
     );
@@ -209,7 +209,7 @@ describe("shared periods — fiscalYearStart", () => {
   });
 });
 
-describe("shared periods — fiscalQuarterStart", () => {
+describe("shared periods - fiscalQuarterStart", () => {
   it("AU (fyStartMonth=7): Q1=Jul, Q2=Oct, Q3=Jan, Q4=Apr", () => {
     expect(fiscalQuarterStart(new Date("2026-08-15T00:00:00Z"), 7)).toEqual(
       new Date("2026-07-01T00:00:00Z"),
@@ -250,7 +250,7 @@ describe("shared periods — fiscalQuarterStart", () => {
   });
 });
 
-describe("shared periods — periodRange with fyStartMonth", () => {
+describe("shared periods - periodRange with fyStartMonth", () => {
   it("'year' reanchors to the financial year (AU July)", () => {
     // Jul 5 2026 → FY2026-27 started Jul 1 2026.
     expect(periodRange("year", new Date("2026-07-05T10:30:00Z"), 7).start).toEqual(
@@ -301,7 +301,7 @@ describe("shared periods — periodRange with fyStartMonth", () => {
   });
 });
 
-describe("shared periods — previousPeriodRange with fyStartMonth", () => {
+describe("shared periods - previousPeriodRange with fyStartMonth", () => {
   it("'year' shifts the fiscal window back 12 months (AU July)", () => {
     // now = Jul 5 2026 → current FY start Jul 1 2026; previous = Jul 1 2025 – Jul 5 2025.
     const r = previousPeriodRange("year", new Date("2026-07-05T10:30:00Z"), 7)!;

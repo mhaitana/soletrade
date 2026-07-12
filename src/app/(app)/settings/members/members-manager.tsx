@@ -28,7 +28,7 @@ import {
 const ROLE_OPTIONS = ["admin", "manager", "accountant", "employee", "readonly"] as const;
 const initialState: InviteMemberResult = { ok: false, error: "" };
 
-/** Roles a member can be changed to (excludes owner — ownership transfer is separate). */
+/** Roles a member can be changed to (excludes owner - ownership transfer is separate). */
 const CHANGEABLE_ROLES = ROLE_OPTIONS;
 
 function roleLabel(role: string) {

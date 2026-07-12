@@ -9,7 +9,7 @@ import { env } from "@/shared/lib/env";
  * that need Stripe call `getStripe()` at their top, which surfaces the missing
  * secret as an actionable error rather than a cryptic Stripe SDK failure.
  *
- * 4a: scaffold only — no flow calls this yet. 4b uses it for customer + unified
+ * 4a: scaffold only - no flow calls this yet. 4b uses it for customer + unified
  * subscription creation on Pro upgrade.
  */
 

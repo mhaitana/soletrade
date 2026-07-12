@@ -51,7 +51,7 @@ export function AuditFeed({ items }: { items: AuditRow[] }) {
       <div className={cn("rounded-lg border border-dashed border-border p-8 text-center")}>
         <p className="text-sm text-muted-foreground">No audit entries yet.</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Sensitive mutations — billing, members, modules — are recorded here.
+          Sensitive mutations - billing, members, modules - are recorded here.
         </p>
       </div>
     );

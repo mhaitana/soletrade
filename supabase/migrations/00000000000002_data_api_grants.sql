@@ -2,11 +2,11 @@
 --
 -- Drizzle connected to the database as the `postgres` superuser/owner over a direct
 -- connection string, so it never needed explicit GRANTs. The Supabase data client talks
--- to PostgREST (the HTTP API), which runs each request as the role encoded in the JWT —
+-- to PostgREST (the HTTP API), which runs each request as the role encoded in the JWT -
 -- for this project, `service_role` (the service-role admin client; see
 -- `src/server/db/client.ts`). The consolidated Drizzle baseline migration created all 29
 -- tables without granting DML to any Data API role, so `service_role` had only the
--- structural grants (REFERENCES/TRIGGER/TRUNCATE) Supabase adds by default — and every
+-- structural grants (REFERENCES/TRIGGER/TRUNCATE) Supabase adds by default - and every
 -- direct `.from(table).select()/insert()/update()/delete()` failed with SQLSTATE 42501
 -- "permission denied for table". (The Phase-2 atomic writers didn't hit this because
 -- they are PL/pgSQL `SECURITY DEFINER` functions running as their `postgres` owner.)

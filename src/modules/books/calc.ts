@@ -1,5 +1,5 @@
 /**
- * Pure Books P&L aggregation (Phase 6b). No `server-only`, no DB, no time calls —
+ * Pure Books P&L aggregation (Phase 6b). No `server-only`, no DB, no time calls -
  * unit-testable in isolation, mirroring `@/modules/invoices/totals.ts` purity. The loader
  * (`@/app/(app)/books/actions.ts`) fetches a period's transactions and runs
  * `summarizeTransactions` to produce the `/books` summary header + category breakdown +
@@ -10,7 +10,7 @@
  * `type`); defensively `Math.abs`'d so a stray negative expense can't inflate income.
  *
  * The category catalog (`@/shared/constants/books-categories`) is intentionally NOT
- * imported here — `calc` stays catalog-free / pure. The UI joins human labels onto the
+ * imported here - `calc` stays catalog-free / pure. The UI joins human labels onto the
  * `byCategory` slugs via `categoryLabel`.
  */
 
@@ -21,13 +21,13 @@ export interface TransactionSummaryInput {
   type: BookType;
   /** Integer cents, expected positive. `Math.abs` is applied defensively. */
   amountCents: number;
-  /** The transaction's calendar date — drives the monthly grouping. */
+  /** The transaction's calendar date - drives the monthly grouping. */
   date: Date;
   /** Category slug (catalog validation lives at the action boundary). */
   category: string;
   /**
    * GST portion of this transaction in cents (Wave 2). Optional for backward-compat
-   * with callers that don't carry GST — defaults to 0. Income GST is "collected"
+   * with callers that don't carry GST - defaults to 0. Income GST is "collected"
    * (remittable); expense GST is "paid" (claimable as an input tax credit).
    */
   gstCents?: number;
@@ -75,7 +75,7 @@ function monthKey(date: Date): string {
 }
 
 /**
- * Aggregate a set of transactions into a P&L summary. Pure — no DB, no time calls.
+ * Aggregate a set of transactions into a P&L summary. Pure - no DB, no time calls.
  * Empty input → zeros + empty arrays.
  */
 export function summarizeTransactions(
@@ -166,7 +166,7 @@ export interface GstSummaryInput {
   type: BookType;
   /** GST portion in cents (income = collected, expense = paid/claimable). */
   gstCents: number;
-  /** The transaction's calendar date — drives the quarter grouping. */
+  /** The transaction's calendar date - drives the quarter grouping. */
   date: Date;
 }
 
@@ -191,7 +191,7 @@ export interface GstSummary {
 
 /**
  * Map a calendar date to the financial-year quarter. `fyStartMonth` is 1–12 (1 = January =
- * calendar year); default `7` = 1 July (Australian) — the historical behaviour, so
+ * calendar year); default `7` = 1 July (Australian) - the historical behaviour, so
  * unthreaded callers + existing tests stay green. Quarters start at `fyStartMonth`, +3, +6,
  * +9 months. `fiscalYear` is the year the FY *started* (e.g. AU FY2026–27 → fiscalYear 2026;
  * NZ FY2026–27 starting 1 Apr 2026 → fiscalYear 2026).
@@ -209,7 +209,7 @@ export function fiscalQuarter(
 }
 
 /**
- * Aggregate GST per financial-year quarter (the BAS / tax-runway view). Pure — no DB, no
+ * Aggregate GST per financial-year quarter (the BAS / tax-runway view). Pure - no DB, no
  * time calls. Empty input → zeros + empty array. `gstCents` is `Math.abs`'d defensively.
  * `fyStartMonth` (1–12, default `7` = July) threads through to `fiscalQuarter` so the
  * quarter labels follow the workspace's financial-year anchor.

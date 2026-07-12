@@ -17,7 +17,7 @@ import { deleteEarningAction, deleteTripAction } from "./actions";
 /**
  * Delete dialog for a Drive earning or trip (mirrors `book-detail-actions.tsx`). The list
  * row's edit page renders this alongside the form's "Save changes" so a user can delete from
- * the edit page. Drive has no read-only detail page (deferred) — the edit page shows all
+ * the edit page. Drive has no read-only detail page (deferred) - the edit page shows all
  * fields.
  */
 export function DriveDeleteButton({ kind, id }: { kind: "earning" | "trip"; id: string }) {

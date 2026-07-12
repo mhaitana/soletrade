@@ -4,7 +4,7 @@ import { safeNext } from "@/shared/lib/safe-redirect";
 import { branded } from "@/shared/types/ids";
 import { ensureUserMirror } from "@/platform/users";
 
-// Auth callback exchanges the PKCE code for a session — never statically prerendered.
+// Auth callback exchanges the PKCE code for a session - never statically prerendered.
 export const dynamic = "force-dynamic";
 
 /**
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * public.users, then redirect to a safe `next` or /onboarding.
  *
  * This route lives under `src/app/auth/` (NOT the `(auth)` route group), so it
- * gets no layout — correct for a pure redirect endpoint.
+ * gets no layout - correct for a pure redirect endpoint.
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -21,7 +21,7 @@ export async function GET(request: Request): Promise<Response> {
   const next = url.searchParams.get("next");
 
   if (!code) {
-    // No code to exchange — nothing to do here. Bounce to login.
+    // No code to exchange - nothing to do here. Bounce to login.
     redirect("/login");
   }
 

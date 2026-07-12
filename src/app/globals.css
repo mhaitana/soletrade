@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Neutral Pro — ink-on-warm-white, flat, hairline, data-dense.
+ * Neutral Pro - ink-on-warm-white, flat, hairline, data-dense.
  * Source of truth: design-system/soletrade/MASTER.md
  * In-app overrides: design-system/soletrade/pages/dashboard.md
  * Public page overrides: design-system/soletrade/pages/public-invoice-quote.md
@@ -62,21 +62,21 @@
 }
 
 /*
- * Neutral Pro — ink-on-warm-white, flat, hairline, data-dense.
+ * Neutral Pro - ink-on-warm-white, flat, hairline, data-dense.
  * Source of truth: design-system/soletrade/MASTER.md
  * In-app overrides: design-system/soletrade/pages/dashboard.md
  * Public page overrides: design-system/soletrade/pages/public-invoice-quote.md
  */
 :root {
-  /* Surfaces — warm white (stone) */
+  /* Surfaces - warm white (stone) */
   --background: #fafaf9; /* stone-50 */
-  --foreground: #1c1917; /* stone-900 — ink */
+  --foreground: #1c1917; /* stone-900 - ink */
   --card: #ffffff;
   --card-foreground: #1c1917;
   --popover: #ffffff;
   --popover-foreground: #1c1917;
 
-  /* Primary — ink (highest-value actions) */
+  /* Primary - ink (highest-value actions) */
   --primary: #1c1917; /* stone-900 */
   --primary-foreground: #fafaf9;
 
@@ -92,11 +92,11 @@
   /* Semantic */
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --success: #059669; /* paid green — semantic only */
+  --success: #059669; /* paid green - semantic only */
   --success-foreground: #ffffff;
   --warning: #ea580c;
   --warning-foreground: #ffffff;
-  --brand-blue: #2563eb; /* single accent — links, focus, interactive */
+  --brand-blue: #2563eb; /* single accent - links, focus, interactive */
 
   --border: #e7e5e4; /* stone-200 hairline */
   --input: #e7e5e4;
@@ -182,7 +182,7 @@
     @apply font-sans;
     text-rendering: optimizeLegibility;
   }
-  /* Tabular figures for money/data — apply via .tabular-nums utility where needed. */
+  /* Tabular figures for money/data - apply via .tabular-nums utility where needed. */
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }

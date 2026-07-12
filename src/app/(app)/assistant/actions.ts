@@ -17,7 +17,7 @@ import { branded, type AiConversationId } from "@/shared/types/ids";
  * Server actions for the AI assistant page (Phase 10). The streaming exchange itself
  * goes through the `POST /api/assistant` route handler; these actions cover page load
  * (sidebar + active conversation) and sidebar delete. The route creates a conversation
- * lazily on the first send, so there's no "new conversation" action — a plain link to
+ * lazily on the first send, so there's no "new conversation" action - a plain link to
  * `/assistant` (no `?c=`) starts a fresh chat.
  */
 
@@ -67,10 +67,10 @@ export type SetWriteEnabledResult = { ok: true; enabled: boolean } | { ok: false
 
 /**
  * Toggle write-tools for a conversation (Phase 11d). The hard opt-in boundary: write
- * tools are only offered when this is on. IDOR-safe — `setConversationWriteEnabled`
+ * tools are only offered when this is on. IDOR-safe - `setConversationWriteEnabled`
  * filters by workspace + user, so a cross-user id is a no-op. Revalidates `/assistant`
  * so the toggle reflects immediately. No-op (returns ok with current state) when the
- * conversation doesn't exist for this user — the UI treats it as a fresh conversation.
+ * conversation doesn't exist for this user - the UI treats it as a fresh conversation.
  */
 export async function setWriteEnabledAction(input: unknown): Promise<SetWriteEnabledResult> {
   const ctx = await requireWorkspaceContext();

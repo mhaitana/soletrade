@@ -43,7 +43,7 @@ const ALL_CATEGORY = { label: "All activity", types: [] as string[] };
 
 /** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip.
  *  `createdAt` is the raw µs-precision ISO string (never a Date) so the keyset
- *  comparison stays exact — see `ActivityCursor`. */
+ *  comparison stays exact - see `ActivityCursor`. */
 function encodeCursor(cursor: ActivityCursor): string {
   return `${cursor.createdAt}|${cursor.id}`;
 }

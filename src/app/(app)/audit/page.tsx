@@ -30,7 +30,7 @@ const ALL_CATEGORY: { label: string; prefix?: string } = { label: "All entries" 
 
 /** Cursor is encoded as `<isoCreatedAt>|<id>` so it survives a GET round-trip.
  *  `createdAt` is the raw µs-precision ISO string (never a Date) so the keyset
- *  comparison stays exact — see `AuditCursor`. */
+ *  comparison stays exact - see `AuditCursor`. */
 function encodeCursor(cursor: AuditCursor): string {
   return `${cursor.createdAt}|${cursor.id}`;
 }

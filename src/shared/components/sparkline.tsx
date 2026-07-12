@@ -1,12 +1,12 @@
 /**
  * Shared inline-SVG sparkline (Phase 9). Extracted verbatim from the near-duplicate
- * `BooksSparkline` (`books-summary.tsx`) + `DriveSparkline` (`drive-summary.tsx`) — the two
+ * `BooksSparkline` (`books-summary.tsx`) + `DriveSparkline` (`drive-summary.tsx`) - the two
  * differed only in which numeric field they plotted + the `aria-label`. This generic version
  * takes pre-shaped `points` so it stays boundary-clean: **shared imports nothing app-specific**
  * (no `@/platform/*`, no `@/modules/*`), so the caller formats the per-point tooltip `label`
  * (e.g. via `formatCents`) and passes it in.
  *
- * Server component — pure SVG, no client JS, no `"use client"`. Each point renders a `<circle>`
+ * Server component - pure SVG, no client JS, no `"use client"`. Each point renders a `<circle>`
  * with a native `<title>` tooltip (`{month}: {label}`). Degenerate cases (1 point, all-zero)
  * render a flat line + an "Insufficient data" caption rather than a misleading chart. A dashed
  * zero baseline is drawn only when the series crosses zero (min < 0 && max > 0), so the same
@@ -17,13 +17,13 @@
  * (rendered via the `--chart-2` token so it tracks the theme).
  * Hover tooltips are native `<title>` tags (no client JS); a richer Recharts view with axis
  * labels / dashed secondary series is a later opt-in (the user chose the shared-SVG approach
- * for Phase 9 — no new dependency, server-rendered).
+ * for Phase 9 - no new dependency, server-rendered).
  */
 
 export interface SparklinePoint {
-  /** ISO month "YYYY-MM" (or any x-axis caption key — rendered in the date-range caption). */
+  /** ISO month "YYYY-MM" (or any x-axis caption key - rendered in the date-range caption). */
   month: string;
-  /** The numeric value to plot (signed cents, meters, counts — whatever the caller passes). */
+  /** The numeric value to plot (signed cents, meters, counts - whatever the caller passes). */
   value: number;
   /** Pre-formatted tooltip text for this point, e.g. "$1,234.56" or "12 paid". */
   label: string;
@@ -39,7 +39,7 @@ const SVG_W = 160;
 const SVG_H = 48;
 const PAD = 4;
 // Read from the theme token so the line/area adapt in dark mode (chart-2 is #2563eb in
-// light, #60a5fa in dark — a hardcoded #2563EB is too-dark blue on the dark background).
+// light, #60a5fa in dark - a hardcoded #2563EB is too-dark blue on the dark background).
 const PRIMARY = "var(--chart-2)";
 
 export function Sparkline({ points, ariaLabel }: SparklineProps) {

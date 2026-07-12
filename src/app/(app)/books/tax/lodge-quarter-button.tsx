@@ -5,7 +5,7 @@ import { Button } from "@/shared/ui/button";
 import { lodgeTaxPeriodAction } from "./actions";
 
 /**
- * "Lodge this quarter" button — calls `lodgeTaxPeriodAction` with the current
+ * "Lodge this quarter" button - calls `lodgeTaxPeriodAction` with the current
  * financial-year quarter. Mirrors `book-detail-actions.tsx`: `useTransition` for
  * the pending state, local error state. The server action is fail-closed on
  * `manage:books` (the page only renders this button when `canManage`).

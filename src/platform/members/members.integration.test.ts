@@ -54,11 +54,11 @@ describe.skipIf(!HAS_DB)("updateMemberRole integration (requires DATABASE_URL)",
 
   it("allows demotion when another owner/admin remains (owner is always present)", async () => {
     // The workspace has owner + admin + employee. The last-admin guard refuses
-    // a demotion that would leave zero owner/admin — but every workspace has an
+    // a demotion that would leave zero owner/admin - but every workspace has an
     // immovable owner, so the guard only bites once ownership transfer exists.
     // Here we assert the allow path: demote admin → employee (owner remains).
     await expect(updateMemberRole(ws!, admin, "employee", owner)).resolves.toBeUndefined();
-    // Promote employee → admin, then demote them again — still allowed.
+    // Promote employee → admin, then demote them again - still allowed.
     await expect(updateMemberRole(ws!, employee, "admin", owner)).resolves.toBeUndefined();
     await expect(updateMemberRole(ws!, employee, "readonly", owner)).resolves.toBeUndefined();
   });

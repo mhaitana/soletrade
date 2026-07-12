@@ -88,7 +88,7 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
         type: "income",
         amountCents: 12000,
         date: new Date("2026-01-15"),
-        description: "Consulting — January",
+        description: "Consulting - January",
         category: "services",
         customerId: ws1Customer,
       },
@@ -101,7 +101,7 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     expect(tx!.type).toBe("income");
     expect(tx!.amountCents).toBe(12000);
     expect(tx!.currency).toBe("AUD");
-    expect(tx!.description).toBe("Consulting — January");
+    expect(tx!.description).toBe("Consulting - January");
     expect(tx!.category).toBe("services");
     expect(tx!.customerId).toBe(ws1Customer);
     expect(tx!.customerName).toBe("Initech Pty Ltd");
@@ -201,12 +201,12 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     await updateTransaction(
       ws1!,
       createdTxIds[0]!,
-      { amountCents: 15000, description: "Consulting — January (revised)" },
+      { amountCents: 15000, description: "Consulting - January (revised)" },
       actor,
     );
     const tx = await getTransaction(ws1!, createdTxIds[0]!);
     expect(tx!.amountCents).toBe(15000);
-    expect(tx!.description).toBe("Consulting — January (revised)");
+    expect(tx!.description).toBe("Consulting - January (revised)");
     const after = captured.filter((e) => e.type === "TransactionUpdated").length;
     expect(after).toBe(before + 1);
   });
@@ -248,7 +248,7 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
         type: "income",
         amountCents: 2000,
         date: new Date("2026-02-15T12:00:00Z"),
-        description: "Range — Feb",
+        description: "Range - Feb",
         category: "sales",
       },
       actor,
@@ -260,7 +260,7 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
         type: "income",
         amountCents: 3000,
         date: new Date("2026-04-15T12:00:00Z"),
-        description: "Range — Apr",
+        description: "Range - Apr",
         category: "sales",
       },
       actor,
@@ -373,7 +373,7 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     // Wrong source id → null.
     const otherEarning = branded<"DriveEarningId">("00000000-0000-9000-8000-0000000000f2");
     expect(await findTransactionIdBySource(ws1!, { sourceEarningId: otherEarning })).toBeNull();
-    // Workspace isolation — the earning looks absent from ws2.
+    // Workspace isolation - the earning looks absent from ws2.
     expect(await findTransactionIdBySource(ws2!, { sourceEarningId: earningId })).toBeNull();
     // No source keys supplied → null.
     expect(await findTransactionIdBySource(ws1!, {})).toBeNull();

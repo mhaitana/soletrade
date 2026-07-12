@@ -58,7 +58,7 @@ describe.skipIf(!HAS_DB)("quotes integration (requires DATABASE_URL)", () => {
     await cleanupWorkspaces(workspaceIds, [actor, otherActor], tables);
   });
 
-  it("creates a draft quote with the stored fields + line items (no event — audit only)", async () => {
+  it("creates a draft quote with the stored fields + line items (no event - audit only)", async () => {
     const before = captured.length;
     const id = await createQuote(
       ws1!,
@@ -94,7 +94,7 @@ describe.skipIf(!HAS_DB)("quotes integration (requires DATABASE_URL)", () => {
     expect(q!.lineItems[0]!.description).toBe("Design work");
     expect(q!.lineItems[0]!.amountCents).toBe(40000);
 
-    // Draft creation is audit-only — no QuoteSent event.
+    // Draft creation is audit-only - no QuoteSent event.
     expect(captured.length).toBe(before);
   });
 
@@ -225,7 +225,7 @@ describe.skipIf(!HAS_DB)("quotes integration (requires DATABASE_URL)", () => {
   });
 });
 
-/** Helper used by the missing-customer-flow test below — kept outside the suite. */
+/** Helper used by the missing-customer-flow test below - kept outside the suite. */
 async function countQuotesForWorkspace(workspaceId: WorkspaceId): Promise<number> {
   const rows = await unwrap(
     getDataClient().from("quotes").select("id").eq("workspace_id", workspaceId),

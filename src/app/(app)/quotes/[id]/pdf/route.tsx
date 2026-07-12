@@ -28,7 +28,7 @@ export async function GET(
   const quote = await getQuote(ctx.workspaceId, branded<"QuoteId">(id));
   if (!quote) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  // Build the element before the try/catch — see invoices pdf route for rationale.
+  // Build the element before the try/catch - see invoices pdf route for rationale.
   const workspace = await getWorkspace(ctx.workspaceId).catch(() => null);
   const element = <QuoteDocument quote={quote} workspaceName={workspace?.name ?? null} />;
   try {

@@ -47,7 +47,7 @@ interface CancellationModalProps {
 }
 
 function formatDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -66,7 +66,7 @@ export function CancellationModal({
   const defaultSelected = recommended?.value ?? options[0]?.value ?? "";
   // Selection is seeded from the recommended option. Callers pass a `key` that changes
   // per preview so React remounts this component (re-initializing `selected`) when a
-  // fresh preview is loaded — no effect or render-time ref needed.
+  // fresh preview is loaded - no effect or render-time ref needed.
   const [selected, setSelected] = useState<string>(defaultSelected);
 
   const selectedChoice = options.find((o) => o.value === selected) ?? options[0];
@@ -115,7 +115,7 @@ export function CancellationModal({
                   className="shrink-0 text-sm font-medium tabular-nums"
                   aria-label={`Amount: ${formatCents(o.amountCents)}`}
                 >
-                  {o.amountCents > 0 ? `+${formatCents(o.amountCents)}` : "—"}
+                  {o.amountCents > 0 ? `+${formatCents(o.amountCents)}` : "-"}
                 </span>
               </label>
             );

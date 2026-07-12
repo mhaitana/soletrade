@@ -35,7 +35,7 @@ export const SEARCH_MODULE_LABEL: Record<SearchModule, string> = {
   files: "Files",
 };
 
-/** Canonical group order — customers first (most-likely intent), then modules in nav order. */
+/** Canonical group order - customers first (most-likely intent), then modules in nav order. */
 export const SEARCH_GROUP_ORDER: SearchModule[] = [
   "customers",
   "invoices",

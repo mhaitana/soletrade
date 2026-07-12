@@ -18,11 +18,11 @@ import { toCsv, type CsvColumn } from "@/shared/utils/csv";
 
 /**
  * Drive CSV export (Wave 2). Streams `text/csv` for `?type=earnings|trips|expenses&period=...`.
- * Route-handler precedent — Server Actions can't stream arbitrary bytes cleanly, so CSV export
+ * Route-handler precedent - Server Actions can't stream arbitrary bytes cleanly, so CSV export
  * goes via a GET route (future Books ledger / invoice exports can reuse `toCsv` + this pattern).
  *
  * Auth: resolved workspace context (401 if none). `manage:drive` gates the export. The session
- * workspace id is resolved server-side — the client never supplies it.
+ * workspace id is resolved server-side - the client never supplies it.
  */
 export const dynamic = "force-dynamic";
 

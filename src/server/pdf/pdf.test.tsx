@@ -5,7 +5,7 @@ import { renderPdf, pdfResponse } from "./index";
 /**
  * PDF pipeline smoke tests (Wave 4 G1). Renders a minimal document with the real
  * `@react-pdf/renderer` (no headless browser, no DB) and asserts the bytes are a valid PDF.
- * The `pdfResponse` helper is pure — it slices the buffer's bytes out as a standalone
+ * The `pdfResponse` helper is pure - it slices the buffer's bytes out as a standalone
  * `ArrayBuffer` and sets the download headers.
  */
 describe("renderPdf + pdfResponse", () => {

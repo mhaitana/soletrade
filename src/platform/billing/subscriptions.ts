@@ -5,13 +5,13 @@ import type { BillingInterval } from "@/server/db/enums";
 import { branded, type SubscriptionId, type WorkspaceId } from "@/shared/types/ids";
 
 /**
- * Subscription service (brief §10 — one unified subscription per workspace).
+ * Subscription service (brief §10 - one unified subscription per workspace).
  *
  * One row per workspace (`workspaceId` is unique). The row exists from workspace
  * creation onward with `billingInterval = null` (billing not started) and null Stripe
  * ids. `billingInterval` + the Stripe ids are populated when the workspace starts
  * billing via Stripe Checkout (Phase 4b lifecycle). `anchorBillingDate` is set on the
- * FIRST start-billing and never touched again — the anchor billing date is preserved
+ * FIRST start-billing and never touched again - the anchor billing date is preserved
  * across later module/anchor changes.
  *
  * The local row is the cache of Stripe's truth; webhooks reconcile it. Money math lives
@@ -76,7 +76,7 @@ export async function getSubscription(workspaceId: WorkspaceId): Promise<Subscri
 /**
  * Idempotently create an unbilled subscription row for a workspace if none exists.
  * Called by the WorkspaceCreated event handler (in instrumentation) and lazily by the
- * billing loader. Safe to call repeatedly — always returns the row.
+ * billing loader. Safe to call repeatedly - always returns the row.
  */
 export async function ensureSubscription(workspaceId: WorkspaceId): Promise<SubscriptionRow> {
   const supabase = getDataClient();
@@ -101,7 +101,7 @@ export async function ensureSubscription(workspaceId: WorkspaceId): Promise<Subs
  * Flip the workspace's `billingInterval` (monthly↔annual). Used by the 4c interval-switch
  * orchestrator AFTER the Stripe-side reprice (`switchSubscriptionInterval`) succeeds, so
  * the local column always reflects the prices Stripe is now billing. The `anchorBillingDate`
- * is preserved — switching interval does not reset the anchor.
+ * is preserved - switching interval does not reset the anchor.
  */
 export async function setBillingInterval(
   workspaceId: WorkspaceId,

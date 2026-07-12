@@ -6,7 +6,7 @@ import prettier from "eslint-config-prettier";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Prettier compatibility — turn off conflicting formatting rules.
+  // Prettier compatibility - turn off conflicting formatting rules.
   prettier,
   globalIgnores([
     ".next/**",
@@ -14,7 +14,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "coverage/**",
-    "src/shared/ui/**", // shadcn primitives — vendored, do not lint
+    "src/shared/ui/**", // shadcn primitives - vendored, do not lint
   ]),
 ]);
 

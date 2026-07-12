@@ -18,7 +18,7 @@ const markReadSchema = z.object({ notificationId: z.string().uuid() });
 /**
  * Server actions for the in-app notification center (Phase 11c). All scoping comes
  * from the session (`requireWorkspaceContext` resolves `workspaceId` + `user.id`)
- * — a client-provided id is never trusted. The store double-checks
+ * - a client-provided id is never trusted. The store double-checks
  * `workspaceId AND userId` on every read/write (IDOR-safe across users AND
  * workspaces).
  */
@@ -71,7 +71,7 @@ export async function loadNotificationsPage(
 
 export async function markReadAction(notificationId: string): Promise<void> {
   const parsed = markReadSchema.safeParse({ notificationId });
-  if (!parsed.success) return; // malformed id — no-op (the store is IDOR-safe regardless)
+  if (!parsed.success) return; // malformed id - no-op (the store is IDOR-safe regardless)
   const ctx = await requireWorkspaceContext();
   await markRead(
     ctx.workspaceId,

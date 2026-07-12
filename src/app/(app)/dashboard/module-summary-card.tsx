@@ -7,11 +7,11 @@ import type { ModuleCardData } from "./actions";
 
 /**
  * Per-module summary card for the cross-module dashboard (Phase 9). Server component. One card
- * per **enabled** module (gated by `getInstalledModules` in the loader) — disabled modules don't
+ * per **enabled** module (gated by `getInstalledModules` in the loader) - disabled modules don't
  * get a card; the zero-module case is handled by the page's onboarding branch.
  *
  * Renders the module icon + name (looked up from the shared `MODULES` registry so the card data
- * stays serializable — no component references cross the server-action boundary), the period's
+ * stays serializable - no component references cross the server-action boundary), the period's
  * monthly `<Sparkline>`, 2-3 key metrics (`tabular-nums`), and a "View →" link to the module.
  */
 export function ModuleSummaryCard({ card }: { card: ModuleCardData }) {

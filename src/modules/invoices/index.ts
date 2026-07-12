@@ -29,7 +29,7 @@ import type { InvoiceEmailMeta } from "@/platform/notifications/templates";
 
 /**
  * Invoices module service (Phase 5). Workspace-scoped CRUD + status transitions.
- * All queries filter `.eq("workspace_id", workspaceId)` — never trust a client
+ * All queries filter `.eq("workspace_id", workspaceId)` - never trust a client
  * workspace id; the caller resolves it from the session (`requireWorkspaceContext`).
  *
  * Status flow (5a): `draft → sent → paid | void`. `viewed`/`overdue` are unreachable
@@ -38,7 +38,7 @@ import type { InvoiceEmailMeta } from "@/platform/notifications/templates";
  * preserved. Invoice numbers (`INV-YYYY-NNNN`) are workspace-unique per calendar year.
  *
  * The two atomic create/update sites run through PL/pgSQL RPCs (`create_invoice_with_lines`
- * / `update_invoice_with_lines`) — PostgREST has no multi-statement transaction, so the
+ * / `update_invoice_with_lines`) - PostgREST has no multi-statement transaction, so the
  * insert-invoice + insert-lines + unique-number guard + draft-status re-validation live in
  * one `SECURITY DEFINER` function. Everything else is direct PostgREST reads/writes.
  */
@@ -105,7 +105,7 @@ export interface InvoiceWithItems extends InvoiceRow {
 }
 
 const INVOICE_COLUMNS =
-  "id, workspace_id, customer_id, number, status, issue_date, due_date, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, public_token, sent_at, paid_at, stripe_payment_intent_id, stripe_charge_id, created_at, updated_at, customers!left ( name )";
+  "id, workspace_id, customer_id, number, status, issue_date, due_date, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, public_token, sent_at, paid_at, stripe_payment_intent_id, stripe_charge_id, created_at, updated_at, customers!left ( name ), workspaces!left ( name )";
 
 const LINE_ITEM_COLUMNS =
   "id, invoice_id, description, quantity, unit_price_cents, amount_cents, position";
@@ -134,13 +134,15 @@ interface InvoiceRaw {
   created_at: string;
   updated_at: string;
   customers: { name: string } | null;
+  /** Embedded merchant (workspace) name - the issuing business shown on the public page. */
+  workspaces: { name: string } | null;
 }
 
 interface LineItemRaw {
   id: string;
   invoice_id: string;
   description: string;
-  /** numeric(12,2) — the generated type says `number`, but PostgREST returns a STRING at
+  /** numeric(12,2) - the generated type says `number`, but PostgREST returns a STRING at
    *  runtime; `Number()` coerces either way (Number("2.5") === 2.5, Number(2.5) === 2.5). */
   quantity: number;
   unit_price_cents: number;
@@ -204,7 +206,7 @@ async function nextInvoiceNumber(
 ): Promise<string> {
   const supabase = getDataClient();
   const yearPrefix = `${prefix}${year}-`;
-  // PostgREST has no COUNT(*) aggregate — use a head count (`head:true, count:"exact"`).
+  // PostgREST has no COUNT(*) aggregate - use a head count (`head:true, count:"exact"`).
   const n = await unwrapCount(
     supabase
       .from("invoices")
@@ -228,7 +230,7 @@ async function assertCustomerInWorkspace(
 /**
  * Create a draft invoice. The number is generated per workspace+year; on a rare unique
  * race (two concurrent creates pick the same seq), the insert throws and we retry up to
- * 3× (best-effort — a dedicated `sequences` table would be more robust; see limitations).
+ * 3× (best-effort - a dedicated `sequences` table would be more robust; see limitations).
  */
 export async function createInvoice(
   workspaceId: WorkspaceId,
@@ -295,7 +297,7 @@ export async function createInvoice(
   const id = branded<"InvoiceId">(invoiceId);
 
   // publishEvent/writeAudit run AFTER the rpc returns (a tiny non-atomic gap between the
-  // row writes and the event/audit rows — acceptable: the event bus is best-effort and
+  // row writes and the event/audit rows - acceptable: the event bus is best-effort and
   // consumers are idempotent). Previously these ran inside the Drizzle transaction.
   await publishEvent({
     type: "InvoiceCreated",
@@ -379,7 +381,7 @@ export async function updateInvoice(
     );
   }
 
-  // Build the patch as a snake_case jsonb object — only keys present change; a null value
+  // Build the patch as a snake_case jsonb object - only keys present change; a null value
   // sets the column to null. The RPC overlays this onto the locked row with
   // jsonb_populate_record (untouched columns keep their existing value), then optionally
   // replaces the line items. updated_at is set by the RPC, so it's omitted here.
@@ -419,7 +421,7 @@ export async function updateInvoice(
     throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
   }
 
-  // Draft edits are audit-only — not surfaced to the activity feed (too noisy). The feed
+  // Draft edits are audit-only - not surfaced to the activity feed (too noisy). The feed
   // shows the lifecycle milestones (created/sent/paid/voided), not every edit.
   await writeAudit({
     workspaceId,
@@ -446,7 +448,7 @@ export async function listInvoices(
     // PostgREST `or` can't reference embedded/foreign columns (PGRST100), so replicate the
     // Drizzle leftJoin + `or(ilike number, ilike customers.name, ilike customers.company)` in
     // two local-only steps: (1) find customer ids matching the name/company ILIKE (no
-    // deleted_at filter — the original leftJoin didn't exclude soft-deleted customers);
+    // deleted_at filter - the original leftJoin didn't exclude soft-deleted customers);
     // (2) `or(number.ilike.X, customer_id.in.(ids))` on invoices. UUIDs are comma-safe in `in.(...)`.
     const term = pgQuote(`%${search}%`);
     const matching = await unwrap(
@@ -474,7 +476,7 @@ export async function listInvoices(
 }
 
 /**
- * Fetch a single invoice with its line items, scoped to the workspace. IDOR-safe —
+ * Fetch a single invoice with its line items, scoped to the workspace. IDOR-safe -
  * returns null when the invoice belongs to another workspace.
  */
 export async function getInvoice(
@@ -525,7 +527,7 @@ async function transition(
   }>,
 ): Promise<{ number: string } | null> {
   const supabase = getDataClient();
-  // Explicit column-keyed shape (not a loose Record<string, unknown>) — the generated
+  // Explicit column-keyed shape (not a loose Record<string, unknown>) - the generated
   // `.update()` type rejects an `unknown` index signature.
   const update: {
     status: InvoiceStatus;
@@ -596,7 +598,7 @@ async function fetchInvoiceEmailContext(
  * Send a draft invoice: `draft → sent`, sets `sentAt` + a random `publicToken` (for the
  * 5b public page). 5c enriches the `InvoiceSent` event with the email-render context so the
  * notifications platform can email the customer. Returns false if the invoice wasn't a draft
- * (already sent / voided / not found) — idempotent.
+ * (already sent / voided / not found) - idempotent.
  */
 export async function sendInvoice(
   workspaceId: WorkspaceId,
@@ -630,8 +632,8 @@ export async function sendInvoice(
 }
 
 /**
- * Mark a sent invoice paid (manual / offline payment — no Stripe in 5a): `sent → paid`,
- * sets `paidAt`. Returns false if it wasn't sent (or not found) — idempotent via the
+ * Mark a sent invoice paid (manual / offline payment - no Stripe in 5a): `sent → paid`,
+ * sets `paidAt`. Returns false if it wasn't sent (or not found) - idempotent via the
  * atomic `transition`. 5b augments this with the Stripe webhook path (idempotent on
  * payment intent id).
  */
@@ -663,7 +665,7 @@ export async function markInvoicePaid(
 }
 
 /** Void a draft or sent invoice: `draft|sent → void`. Returns false if not in an allowed
- *  state or not found — idempotent via the atomic `transition`. */
+ *  state or not found - idempotent via the atomic `transition`. */
 export async function voidInvoice(
   workspaceId: WorkspaceId,
   invoiceId: InvoiceId,
@@ -691,7 +693,7 @@ export async function voidInvoice(
 }
 
 /**
- * Hard-delete a draft invoice (cascades line items). Only drafts — a sent/paid/voided
+ * Hard-delete a draft invoice (cascades line items). Only drafts - a sent/paid/voided
  * invoice is never deleted (the audit trail + history are preserved). Returns false if
  * not a draft or not found.
  */
@@ -725,19 +727,21 @@ export async function deleteInvoice(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 5b — public payment page + Stripe reconcile + overdue job
+// Phase 5b - public payment page + Stripe reconcile + overdue job
 // ---------------------------------------------------------------------------
 
 /**
  * Sanitized invoice shape for the **public** payment page. Deliberately omits all
  * workspace-internal ids (`workspaceId`, internal `customerId`, internal invoice/line-item
- * ids) per the design-system security spec — the public HTML must only expose what the
+ * ids) per the design-system security spec - the public HTML must only expose what the
  * customer needs to pay. `stripeChargeId` is the receipt reference shown on the paid screen.
  */
 export interface PublicInvoiceView {
   number: string;
   status: InvoiceStatus;
   customerName: string | null;
+  /** Issuing business (workspace) name - shown as the dominant brand on the public invoice page. */
+  merchantName: string | null;
   issueDate: Date;
   dueDate: Date | null;
   currency: string;
@@ -763,7 +767,7 @@ export interface PublicInvoiceView {
  * Look up an invoice by its public token for the `/i/[token]` page. Returns null if the
  * token doesn't match OR the invoice is still a draft (a draft was never sent → not
  * publicly payable). The partial unique index on `publicToken` makes this lookup indexed.
- * No `workspaceId` param — the token IS the credential (unguessable 122-bit random).
+ * No `workspaceId` param - the token IS the credential (unguessable 122-bit random).
  */
 export async function getInvoiceByPublicToken(token: string): Promise<PublicInvoiceView | null> {
   const supabase = getDataClient();
@@ -787,13 +791,14 @@ export async function getInvoiceByPublicToken(token: string): Promise<PublicInvo
       .order("position", { ascending: true }),
   );
 
-  // Build the public view explicitly — never spread the internal row (it carries internal
+  // Build the public view explicitly - never spread the internal row (it carries internal
   // ids, private `notes`, `publicToken`, `stripePaymentIntentId`, timestamps). Only the
   // fields the customer needs to pay leak to the public HTML.
   return {
     number: r.number,
     status: r.status as InvoiceStatus,
     customerName: r.customers?.name ?? null,
+    merchantName: r.workspaces?.name ?? null,
     issueDate: parsePgTimestamp(r.issue_date),
     dueDate: r.due_date ? parsePgTimestamp(r.due_date) : null,
     currency: r.currency,
@@ -821,7 +826,7 @@ export async function getInvoiceByPublicToken(token: string): Promise<PublicInvo
  * Record a customer view of a sent invoice: `sent → viewed`, idempotent. Returns true if the
  * status changed (first view), false if already viewed / not sent (no-op, no duplicate event).
  * The `transition` `.in("status", ["sent"])` clause makes a concurrent double-view
- * race-safe — only one wins. The workspaceId is resolved internally and never returned.
+ * race-safe - only one wins. The workspaceId is resolved internally and never returned.
  */
 export async function markInvoiceViewed(token: string): Promise<boolean> {
   const supabase = getDataClient();
@@ -860,7 +865,7 @@ export async function markInvoiceViewed(token: string): Promise<boolean> {
 
 /**
  * Mark an invoice paid by a Stripe payment (5b webhook path): `sent|viewed|overdue → paid`,
- * sets `paidAt` + `stripePaymentIntentId` + `stripeChargeId`. Idempotent — the atomic
+ * sets `paidAt` + `stripePaymentIntentId` + `stripeChargeId`. Idempotent - the atomic
  * `transition` matches zero rows if the invoice is already paid (or not found / voided),
  * returning false without re-publishing. Distinct from the manual `markInvoicePaid` (no
  * Stripe ids, manual source). Returns true if this call performed the transition.
@@ -919,7 +924,7 @@ export async function markOverdueInvoices(now: Date = new Date()): Promise<numbe
   if (rows.length === 0) return 0;
 
   // One batched select to fetch the email-render context (join customers) for every flipped
-  // invoice — keeps the cron at one extra query rather than N (nightly, not hot, but cheap).
+  // invoice - keeps the cron at one extra query rather than N (nightly, not hot, but cheap).
   const ids = rows.map((r) => r.id);
   const ctxRows = await unwrap(
     supabase
@@ -931,7 +936,7 @@ export async function markOverdueInvoices(now: Date = new Date()): Promise<numbe
   );
   const ctxById = new Map(ctxRows.map((r) => [r.id, r]));
 
-  // Publish events + audit per flipped invoice (best-effort, sequential — cron isn't hot).
+  // Publish events + audit per flipped invoice (best-effort, sequential - cron isn't hot).
   for (const row of rows) {
     const ctx = ctxById.get(row.id);
     const workspaceId = branded<"WorkspaceId">(row.workspace_id);

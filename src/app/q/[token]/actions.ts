@@ -6,13 +6,13 @@ import { rateLimit } from "@/server/rate-limit";
 import { acceptQuote, declineQuote, type AcceptanceMeta, type DeclineMeta } from "@/modules/quotes";
 
 /**
- * Public accept/decline actions for the `/q/[token]` page. No auth — the publicToken is the
+ * Public accept/decline actions for the `/q/[token]` page. No auth - the publicToken is the
  * credential (122-bit unguessable). Rate-limited per IP (defense-in-depth) mirroring the
  * invoice payment-intent action. Returns `{ ok: true }` on success or `{ ok: false, error }`.
  *
  * Wave 2: accept captures the accepter's name + optional signature (typed name or canvas
  * data-URL) + the request IP/UA, threaded into `acceptQuote` which writes a `quote_acceptances`
- * row. Decline captures IP/UA (no name needed — declines aren't legally significant).
+ * row. Decline captures IP/UA (no name needed - declines aren't legally significant).
  */
 
 const acceptSchema = z.object({
@@ -29,7 +29,7 @@ const declineSchema = z.object({
 
 export type QuoteAcceptResult = { ok: true } | { ok: false; error: string };
 
-/** Extract IP + User-Agent from the request headers (defensive — "unknown" if absent). */
+/** Extract IP + User-Agent from the request headers (defensive - "unknown" if absent). */
 async function readRequestMeta(): Promise<{ ip: string; userAgent: string }> {
   const h = await headers();
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";

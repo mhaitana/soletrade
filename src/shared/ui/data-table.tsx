@@ -3,13 +3,13 @@ import * as React from "react";
 import { cn } from "@/shared/lib/utils";
 
 /**
- * <DataTable> — shared presentational wrapper for the list/detail tables that
+ * <DataTable> - shared presentational wrapper for the list/detail tables that
  * were copy-pasted across invoices, quotes, books, drive, and the billing
  * ledger. Encapsulates the Neutral Pro table chrome: hairline container,
  * uppercase muted header, divided rows, hover state. Numeric columns render in
  * JetBrains Mono with tabular figures and right alignment so amounts line up.
  *
- * Presentational only — callers own cell content (including any links) via the
+ * Presentational only - callers own cell content (including any links) via the
  * `cell` callback, so this stays an RSC and never needs client JS.
  */
 export type Column<T> = {

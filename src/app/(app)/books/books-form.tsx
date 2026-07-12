@@ -27,7 +27,7 @@ function dollarsToCents(s: string): number {
   return Math.round(n * 100);
 }
 
-/** Default AU GST rate (10%). Hardcoded for now — no workspace GST-rate setting exists. */
+/** Default AU GST rate (10%). Hardcoded for now - no workspace GST-rate setting exists. */
 const GST_RATE = 10;
 
 /**
@@ -83,7 +83,7 @@ export function BookForm({
   // Receipt link (Phase 11b). Null = no receipt; a FileId = uploaded + linked.
   const [receiptFileId, setReceiptFileId] = useState<FileId | null>(tx?.receiptFileId ?? null);
   // GST (Wave 2). "GST included" toggle + a numeric GST amount input (in dollars). When
-  // the toggle is on, the GST amount auto-computes from the transaction amount at 10% —
+  // the toggle is on, the GST amount auto-computes from the transaction amount at 10% -
   // the user can override the input for edge cases (mixed / different-rate supplies).
   const [gstIncluded, setGstIncluded] = useState<boolean>((tx?.gstCents ?? 0) > 0);
   const [gstDollars, setGstDollars] = useState<string>(
@@ -255,7 +255,7 @@ export function BookForm({
             value={gstDollars}
             onChange={(e) => setGstDollars(e.target.value)}
             disabled={!gstIncluded}
-            placeholder={gstIncluded ? "0.00" : "—"}
+            placeholder={gstIncluded ? "0.00" : "-"}
             aria-invalid={Boolean(fieldErr("gstCents"))}
             className="tabular-nums"
           />

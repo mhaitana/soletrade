@@ -218,7 +218,7 @@ function AcceptanceCard({
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-muted-foreground">Email</dt>
-          <dd>{acceptance.accepterEmail || "—"}</dd>
+          <dd>{acceptance.accepterEmail || "-"}</dd>
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-muted-foreground">IP address</dt>

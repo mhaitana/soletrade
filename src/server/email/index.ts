@@ -3,7 +3,7 @@ import { Resend } from "resend";
 import { env } from "@/shared/lib/env";
 
 /**
- * Email server client (Phase 5c — Resend). Server-only infra, sibling to `src/server/stripe`.
+ * Email server client (Phase 5c - Resend). Server-only infra, sibling to `src/server/stripe`.
  *
  * Unlike `getStripe()` (which throws when the key is missing, because Stripe flows are
  * request-critical), email is **best-effort**: if `RESEND_API_KEY` or `EMAIL_FROM` is unset,
@@ -11,7 +11,7 @@ import { env } from "@/shared/lib/env";
  * keeps the app bootable + functional in dev without a Resend account, and means the
  * notifications platform can no-op silently when email isn't wired (mirroring how the
  * activity-feed persister is best-effort). A failed send (network/API error) is logged + returns
- * `{ ok: false, reason: "send-failed" }` — never throws to the caller, so a Resend outage can't
+ * `{ ok: false, reason: "send-failed" }` - never throws to the caller, so a Resend outage can't
  * break an invoice send / webhook reconcile.
  *
  * The client is lazily constructed on first use + cached. Tests inject a fake via
@@ -30,7 +30,7 @@ export interface EmailPayload {
   subject: string;
   html: string;
   text: string;
-  /** Optional attachments (Wave 4 — invoice/quote PDF attachments). Omitted = no attachments. */
+  /** Optional attachments (Wave 4 - invoice/quote PDF attachments). Omitted = no attachments. */
   attachments?: EmailAttachment[];
 }
 
@@ -62,7 +62,7 @@ class ResendClient implements EmailClient {
       })),
     });
     if (error) {
-      throw new Error(`resend: ${error.name} — ${error.message}`);
+      throw new Error(`resend: ${error.name} - ${error.message}`);
     }
     return data?.id ? { id: data.id } : null;
   }
@@ -72,7 +72,7 @@ let cached: EmailClient | null | undefined; // undefined = not yet resolved
 let testOverride: EmailClient | null | undefined = undefined; // undefined = no override
 
 /** Resolve the active email client (real Resend, or the test override). Returns null when
- *  email is not configured (no key / no `EMAIL_FROM`) — callers treat as a graceful no-op. */
+ *  email is not configured (no key / no `EMAIL_FROM`) - callers treat as a graceful no-op. */
 export function getEmailClient(): EmailClient | null {
   if (testOverride !== undefined) return testOverride;
   if (cached !== undefined) return cached;
@@ -86,7 +86,7 @@ export function getEmailClient(): EmailClient | null {
   return cached;
 }
 
-/** Send a transactional email. Never throws — failures are logged + returned. */
+/** Send a transactional email. Never throws - failures are logged + returned. */
 export async function sendEmail(payload: EmailPayload): Promise<SendResult> {
   const client = getEmailClient();
   if (!client) return { ok: false, reason: "not-configured" };

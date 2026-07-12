@@ -6,9 +6,9 @@
 
 ---
 
-**Project:** soletrade OS
-**Category:** Business operating system (B2B SaaS — solo traders, freelancers, gig operators)
-**Direction:** Neutral Pro — ink-on-warm-white, flat, hairline, data-dense
+**Project:** soletrade Workspace
+**Category:** Business workspace (B2B SaaS - solo traders, freelancers, gig operators)
+**Direction:** Neutral Pro - ink-on-warm-white, flat, hairline, data-dense
 
 ---
 
@@ -33,24 +33,24 @@ JetBrains Mono so amounts and document numbers align and read as "data".
 | Border (hairline) | `#E7E5E4` (stone-200) | `--color-border` |
 | Accent (single) | `#2563EB` (blue-600) | `--color-brand-blue` |
 | Ring / focus | `#2563EB` | `--color-ring` |
-| Success / paid | `#059669` (emerald-600) — **semantic only** | `--color-success` |
-| Warning | `#EA580C` (orange-600) — **semantic only** | `--color-warning` |
+| Success / paid | `#059669` (emerald-600) - **semantic only** | `--color-success` |
+| Warning | `#EA580C` (orange-600) - **semantic only** | `--color-warning` |
 | Destructive | `#DC2626` (red-600) | `--color-destructive` |
 
 **Dark mode** is warm-tinted stone (`#0C0A09` bg, `#E7E5E4` fg, inverted ink primary). Defined in `globals.css :root`/`.dark`.
 
 **Color rules**
-- One accent. `--color-brand-blue` is the *only* non-semantic accent — links, focus rings, interactive highlights.
+- One accent. `--color-brand-blue` is the *only* non-semantic accent - links, focus rings, interactive highlights.
 - Emerald/amber/red are **semantic**: paid, warning, destructive/overdue. Never decorative.
 - Status badges use tinted variants (`bg-success/10 text-success`), not saturated fills. Always icon + text, never color alone.
-- No raw hex in components — use tokens. No `bg-white`/`bg-[#...]` on app or public surfaces (use `bg-card`).
+- No raw hex in components - use tokens. No `bg-white`/`bg-[#...]` on app or public surfaces (use `bg-card`).
 
 ## Typography
 
 - **Sans:** Inter (loaded via `next/font` as `--font-sans`).
-- **Mono:** JetBrains Mono (loaded as `--font-mono`) — used for **numerics**: KPI values, table money/amount columns, document numbers, audit codes, prefix previews.
+- **Mono:** JetBrains Mono (loaded as `--font-mono`) - used for **numerics**: KPI values, table money/amount columns, document numbers, audit codes, prefix previews.
 - **Body:** Inter 14px base (16px mobile). Line-height 1.5.
-- **Headings:** Inter 600/700 — page title 24px (`text-2xl`), section 16px (`text-base font-semibold`), card title 14px.
+- **Headings:** Inter 600/700 - page title 24px (`text-2xl`), section 16px (`text-base font-semibold`), card title 14px.
 - **Type scale:** 12 14 16 18 24 30.
 - **Numbers:** `font-mono tabular-nums` on amount/quantity cells and KPI values; Inter `tabular-nums` for inline body numbers.
 
@@ -61,24 +61,24 @@ JetBrains Mono so amounts and document numbers align and read as "data".
 ## Radius & Elevation
 
 - `--radius: 0.5rem` (8px). Scale: sm 0.3 · md 0.4 · lg 1.0 · xl 1.4 · 2xl 1.8 (× `--radius`).
-- **No card shadows.** Cards are `rounded-xl border border-border bg-card` — flat, hairline only.
+- **No card shadows.** Cards are `rounded-xl border border-border bg-card` - flat, hairline only.
 - **Overlays only** (Dialog, Sheet, DropdownMenu, Popover) keep a single `shadow-lg` for elevation separation from the flat surface layer.
 
 ## Component Specs
 
 ### Buttons
 - **Primary (default):** `bg-primary text-primary-foreground` (ink) · `h-9 px-4` · `rounded-md` · 200ms color transition · hover `bg-primary/90`. No shadow.
-- **Outline:** `border border-border bg-background hover:bg-muted` — hairline, flat.
-- **Destructive:** `bg-destructive text-white` — reserved for delete/void/irreversible.
+- **Outline:** `border border-border bg-background hover:bg-muted` - hairline, flat.
+- **Destructive:** `bg-destructive text-white` - reserved for delete/void/irreversible.
 - **Ghost / Link:** link variant uses `text-brand-blue underline-offset-4 hover:underline`.
 - One primary CTA per screen; secondary actions visually subordinate.
 
 ### Cards
-- `rounded-xl border border-border bg-card` — **no shadow**. No lift on hover (layout-shift-avoid).
+- `rounded-xl border border-border bg-card` - **no shadow**. No lift on hover (layout-shift-avoid).
 - Optional hover: subtle `hover:bg-muted/40` (color only, no transform).
 
 ### Inputs
-- `h-9 rounded-md border border-input bg-transparent` — no shadow.
+- `h-9 rounded-md border border-input bg-transparent` - no shadow.
 - Focus: `border-ring ring-[3px] ring-ring/40` (blue accent ring).
 
 ### Tables (use `<DataTable>` primitive)
@@ -86,7 +86,7 @@ JetBrains Mono so amounts and document numbers align and read as "data".
 - Numeric columns: `text-right font-mono tabular-nums`.
 
 ### Lists (use `<ListRows>` primitive)
-- `rounded-lg border border-border divide-y divide-border` — flat.
+- `rounded-lg border border-border divide-y divide-border` - flat.
 
 ### Badges
 - Tinted status variants: `success` (`bg-success/10 text-success border-success/20`), `warning`, `destructive`.
@@ -109,17 +109,17 @@ JetBrains Mono so amounts and document numbers align and read as "data".
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ **Card shadows** — flat hairline only (overlays excepted).
-- ❌ **Multi-accent color** — one blue accent; emerald/amber/red are semantic only.
-- ❌ **Raw hex / `bg-white` / `bg-[#...]`** on app or public surfaces — use tokens.
-- ❌ **Saturated status badges** — use tinted variants.
-- ❌ **Layout-shifting hovers** (scale/translate) — color/background only.
-- ❌ **Emojis as icons** — Lucide SVG only.
+- ❌ **Card shadows** - flat hairline only (overlays excepted).
+- ❌ **Multi-accent color** - one blue accent; emerald/amber/red are semantic only.
+- ❌ **Raw hex / `bg-white` / `bg-[#...]`** on app or public surfaces - use tokens.
+- ❌ **Saturated status badges** - use tinted variants.
+- ❌ **Layout-shifting hovers** (scale/translate) - color/background only.
+- ❌ **Emojis as icons** - Lucide SVG only.
 - ❌ **Missing `cursor-pointer`** on clickable elements.
-- ❌ **Low contrast text** — 4.5:1 minimum (test dark mode separately).
-- ❌ **Instant state changes** — 150–300ms transitions.
-- ❌ **Invisible focus states** — blue `ring-ring/40` ring required.
-- ❌ **Decorative-only motion** — motion must convey state change; respect `prefers-reduced-motion`.
+- ❌ **Low contrast text** - 4.5:1 minimum (test dark mode separately).
+- ❌ **Instant state changes** - 150–300ms transitions.
+- ❌ **Invisible focus states** - blue `ring-ring/40` ring required.
+- ❌ **Decorative-only motion** - motion must convey state change; respect `prefers-reduced-motion`.
 
 ## Pre-Delivery Checklist
 

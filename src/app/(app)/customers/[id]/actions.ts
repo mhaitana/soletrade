@@ -12,7 +12,7 @@ import { branded } from "@/shared/types/ids";
 import type { TimelineEntry, TimelineTone } from "@/shared/types/timeline";
 
 /**
- * Customer timeline loader (Wave 3 — pragmatic customer 360). A composition root in the app
+ * Customer timeline loader (Wave 3 - pragmatic customer 360). A composition root in the app
  * layer (mirrors `dashboard/actions.ts`): fetches the customer (IDOR-safe) + fans out to the
  * invoices/quotes/transactions list functions' existing `{ customerId }` filters + the activity
  * `listActivity({ entityType: "customer", entityId })` filter, then merges invoices/quotes/
@@ -24,7 +24,7 @@ import type { TimelineEntry, TimelineTone } from "@/shared/types/timeline";
  * (that event has `entityType: "invoice"`, so the `entityType:"customer"` filter won't return it).
  *
  * The timeline is visible to any member (`manage:customer` gates only the Edit button). The
- * session-resolved `workspaceId` is used everywhere — the client-provided `customerId` is branded
+ * session-resolved `workspaceId` is used everywhere - the client-provided `customerId` is branded
  * + the underlying list functions are workspace-scoped (IDOR-safe at the source).
  */
 
@@ -105,7 +105,7 @@ export async function loadCustomerTimeline(customerId: string): Promise<Customer
       id: t.id,
       label: t.description,
       sublabel: `${t.type === "income" ? "+" : "−"}${formatCents(t.amountCents, t.currency)}`,
-      // Books has no per-transaction detail route — deep-link to the books list for now.
+      // Books has no per-transaction detail route - deep-link to the books list for now.
       href: "/books",
       tone: (t.type === "income" ? "positive" : "negative") as TimelineTone,
     })),

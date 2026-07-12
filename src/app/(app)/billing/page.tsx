@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { MODULES } from "@/shared/constants/modules";
+import { brand } from "@/config/brand";
 import { formatCents } from "@/platform/billing";
 import { loadBillingOverview } from "./actions";
 import { BillingStartCard } from "./billing-start-card";
@@ -194,7 +195,7 @@ export default async function BillingPage() {
                         </td>
                         <td className="py-2 pr-4 text-muted-foreground">{row.reason}</td>
                         <td className="py-2 pr-4 text-muted-foreground">
-                          {row.moduleKey ? MODULES[row.moduleKey].name : "—"}
+                          {row.moduleKey ? MODULES[row.moduleKey].name : "-"}
                         </td>
                         <td className={`py-2 pr-4 text-right tabular-nums ${amountClass}`}>
                           {formatCents(amount, row.currency)}
@@ -224,6 +225,8 @@ export default async function BillingPage() {
         for plan details. Cancelling your subscription refunds unused time in the current period to
         your credit balance, pro-rated per module; switching interval takes effect next cycle.
       </p>
+
+      <p className="text-xs text-muted-foreground">Billing provided by {brand.productName}.</p>
     </div>
   );
 }

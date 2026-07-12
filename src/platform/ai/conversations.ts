@@ -8,10 +8,10 @@ import { branded, type AiConversationId, type UserId, type WorkspaceId } from "@
  * every query filters `workspaceId = ? AND userId = ?` so a member can't read or
  * mutate another member's chats (IDOR-safe across workspaces AND users). The
  * route handler is the only caller; it always passes the session-resolved
- * `workspaceId` + `userId` — never a client-supplied id without an ownership check.
+ * `workspaceId` + `userId` - never a client-supplied id without an ownership check.
  *
  * Only `user` and `assistant` text rows are stored (tool calls/results are not
- * persisted — the assistant re-derives real data each turn via read-only tools).
+ * persisted - the assistant re-derives real data each turn via read-only tools).
  */
 
 export interface ConversationSummary {
@@ -58,7 +58,7 @@ export async function listConversations(
 
 /**
  * Load one conversation with its messages, oldest-first. Returns `null` when the
- * conversation doesn't exist OR isn't owned by this user in this workspace — the
+ * conversation doesn't exist OR isn't owned by this user in this workspace - the
  * caller maps that to a 404 (IDOR-safe: no leaking that it belongs to someone else).
  */
 export async function getConversation(
@@ -123,7 +123,7 @@ export async function createConversation(
 
 /**
  * Append a message to a conversation and bump its `updatedAt`. Verifies ownership
- * first (IDOR-safe) — a throw if the conversation isn't this user's in this
+ * first (IDOR-safe) - a throw if the conversation isn't this user's in this
  * workspace, so the caller surfaces a 404/403 rather than silently writing to a
  * row the user doesn't own.
  */
@@ -200,7 +200,7 @@ export async function renameConversation(
 /**
  * Toggle write-tools for a conversation (Phase 11d). The hard opt-in boundary: write
  * tools are only offered when this is `true` AND the role holds `manage:R` AND the
- * module is installed. IDOR-safe ownership filter — a cross-user/cross-workspace id
+ * module is installed. IDOR-safe ownership filter - a cross-user/cross-workspace id
  * updates zero rows (no leaking that it belongs to someone else). Bumps `updatedAt`
  * so the conversation jumps to the top of the sidebar.
  */

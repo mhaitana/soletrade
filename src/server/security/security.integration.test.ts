@@ -9,7 +9,7 @@ import { clearEventBus } from "@/server/events";
 /**
  * Integration tests for the server-side security glue (`authorizeOrAudit`) against a
  * real Postgres. Asserts that every permission *denial* appends an `authz.denied` audit
- * row with the actor + permission, while an allow writes nothing — and that an audit
+ * row with the actor + permission, while an allow writes nothing - and that an audit
  * failure never alters the authz outcome.
  *
  *   DATABASE_URL="postgresql://..." pnpm test:ci

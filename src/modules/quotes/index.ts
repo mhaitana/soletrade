@@ -31,23 +31,23 @@ import type {
 import type { QuoteEmailMeta, QuoteMerchantMeta } from "@/platform/notifications/templates";
 
 /**
- * Quotes module service (Phase 8) — the fourth and final launch module. A quote is a
+ * Quotes module service (Phase 8) - the fourth and final launch module. A quote is a
  * proposal sent to a customer: the merchant drafts it, sends a shareable public link,
  * the customer accepts or declines, and on acceptance the merchant converts it to a
- * draft invoice (orchestrated in the action layer — this service never imports
+ * draft invoice (orchestrated in the action layer - this service never imports
  * `@/modules/invoices`). Mirrors `@/modules/invoices/index.ts` (line items, totals,
  * customer link, public token, numbering) but has **no Stripe payment** (quotes aren't
  * paid; they're accepted then converted).
  *
  * Status flow: `draft → sent → viewed → (accepted | declined | expired)`; `accepted →
- * converted` (terminal). All queries filter `.eq("workspace_id", workspaceId)` — never
+ * converted` (terminal). All queries filter `.eq("workspace_id", workspaceId)` - never
  * trust a client workspace id; the caller resolves it from the session
  * (`requireWorkspaceContext`). Money is integer cents; totals are denormalized onto the
  * quote row via the pure `computeLineItemTotals` so a sent quote's history is preserved.
  * Quote numbers (`QUO-YYYY-NNNN`) are workspace-unique per calendar year.
  *
  * The two atomic create/update sites run through PL/pgSQL RPCs (`create_quote_with_lines`
- * / `update_quote_with_lines`) — PostgREST has no multi-statement transaction, so the
+ * / `update_quote_with_lines`) - PostgREST has no multi-statement transaction, so the
  * insert-quote + insert-lines + insert-sections + unique-number guard + draft-status
  * re-validation live in one `SECURITY DEFINER` function. Everything else is direct
  * PostgREST reads/writes.
@@ -142,7 +142,7 @@ export interface QuoteWithItems extends QuoteRow {
 }
 
 const QUOTE_COLUMNS =
-  "id, workspace_id, customer_id, number, status, issue_date, valid_until, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, terms_conditions, public_token, sent_at, accepted_at, declined_at, converted_at, converted_invoice_id, created_at, updated_at, customers!left ( name )";
+  "id, workspace_id, customer_id, number, status, issue_date, valid_until, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, terms_conditions, public_token, sent_at, accepted_at, declined_at, converted_at, converted_invoice_id, created_at, updated_at, customers!left ( name ), workspaces!left ( name )";
 
 const LINE_ITEM_COLUMNS =
   "id, quote_id, description, quantity, unit_price_cents, amount_cents, position";
@@ -178,13 +178,15 @@ interface QuoteRaw {
   created_at: string;
   updated_at: string;
   customers: { name: string } | null;
+  /** Embedded merchant (workspace) name - the issuing business shown on the public quote page. */
+  workspaces: { name: string } | null;
 }
 
 interface QuoteLineItemRaw {
   id: string;
   quote_id: string;
   description: string;
-  /** numeric(12,2) — generated type says `number`, runtime returns a STRING; `Number()` coerces both. */
+  /** numeric(12,2) - generated type says `number`, runtime returns a STRING; `Number()` coerces both. */
   quantity: number;
   unit_price_cents: number;
   amount_cents: number;
@@ -318,7 +320,7 @@ async function assertCustomerInWorkspace(
 /**
  * Create a draft quote. The number is generated per workspace+year; on a rare unique race
  * (two concurrent creates pick the same seq), the insert throws and we retry up to 3×.
- * Draft creation is **audit-only** (no `QuoteCreated` event) — the activity feed shows the
+ * Draft creation is **audit-only** (no `QuoteCreated` event) - the activity feed shows the
  * lifecycle milestones (sent/accepted/declined/converted/expired), not draft creation,
  * mirroring how invoice draft edits are audit-only.
  */
@@ -395,7 +397,7 @@ export async function createQuote(
   const id = branded<"QuoteId">(quoteId);
 
   // writeAudit runs AFTER the rpc returns (was inside the Drizzle transaction). Draft
-  // creation is audit-only — no activity event.
+  // creation is audit-only - no activity event.
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -468,7 +470,7 @@ export async function updateQuote(
     );
   }
 
-  // Build the patch as a snake_case jsonb object — only keys present change; a null value
+  // Build the patch as a snake_case jsonb object - only keys present change; a null value
   // sets the column to null. The RPC overlays this onto the locked row with
   // jsonb_populate_record, then optionally replaces line items + sections. Pass `[]` to
   // clear sections; omit (null) to keep them. updated_at is set by the RPC, so omitted.
@@ -519,7 +521,7 @@ export async function updateQuote(
     throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
   }
 
-  // Draft edits are audit-only — not surfaced to the activity feed (too noisy).
+  // Draft edits are audit-only - not surfaced to the activity feed (too noisy).
   await writeAudit({
     workspaceId,
     actorUserId: actorId,
@@ -545,7 +547,7 @@ export async function listQuotes(
     // PostgREST `or` can't reference embedded/foreign columns (PGRST100), so replicate the
     // Drizzle leftJoin + `or(ilike number, ilike customers.name, ilike customers.company)` in
     // two local-only steps: (1) find customer ids matching the name/company ILIKE (no
-    // deleted_at filter — the original leftJoin didn't exclude soft-deleted customers);
+    // deleted_at filter - the original leftJoin didn't exclude soft-deleted customers);
     // (2) `or(number.ilike.X, customer_id.in.(ids))` on quotes.
     const term = pgQuote(`%${search}%`);
     const matching = await unwrap(
@@ -573,7 +575,7 @@ export async function listQuotes(
 }
 
 /**
- * Fetch a single quote with its line items + sections, scoped to the workspace. IDOR-safe —
+ * Fetch a single quote with its line items + sections, scoped to the workspace. IDOR-safe -
  * returns null when the quote belongs to another workspace.
  */
 export async function getQuote(
@@ -638,7 +640,7 @@ async function transition(
   }>,
 ): Promise<{ number: string } | null> {
   const supabase = getDataClient();
-  // Explicit column-keyed shape (not a loose Record<string, unknown>) — the generated
+  // Explicit column-keyed shape (not a loose Record<string, unknown>) - the generated
   // `.update()` type rejects an `unknown` index signature.
   const update: {
     status: QuoteStatus;
@@ -738,7 +740,7 @@ async function fetchQuoteMerchantMeta(
  * Send a draft quote: `draft → sent`, sets `sentAt` + a random `publicToken` (for the
  * public page). Enriches the `QuoteSent` event with the email-render context so the
  * notifications platform can email the customer. Returns false if the quote wasn't a
- * draft (already sent / not found) — idempotent.
+ * draft (already sent / not found) - idempotent.
  */
 export async function sendQuote(
   workspaceId: WorkspaceId,
@@ -772,7 +774,7 @@ export async function sendQuote(
 }
 
 /**
- * Hard-delete a draft quote (cascades line items). Only drafts — a sent/accepted/declined/
+ * Hard-delete a draft quote (cascades line items). Only drafts - a sent/accepted/declined/
  * expired/converted quote is never deleted (the audit trail + history are preserved).
  * Returns false if not a draft or not found.
  */
@@ -805,13 +807,13 @@ export async function deleteQuote(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 8 — public page + accept/decline + convert + expire job
+// Phase 8 - public page + accept/decline + convert + expire job
 // ---------------------------------------------------------------------------
 
 /**
  * Sanitized quote shape for the **public** `/q/[token]` page. Deliberately omits all
  * workspace-internal ids (`workspaceId`, internal `customerId`, internal quote/line-item
- * ids) and the private `notes` per the design-system security spec — the public HTML must
+ * ids) and the private `notes` per the design-system security spec - the public HTML must
  * only expose what the customer needs to accept/decline. `convertedInvoiceId` is exposed
  * so the public page can show "converted to an invoice" without leaking the invoice URL
  * (the merchant shares the invoice separately).
@@ -820,6 +822,8 @@ export interface PublicQuoteView {
   number: string;
   status: QuoteStatus;
   customerName: string | null;
+  /** Issuing business (workspace) name - shown as the dominant brand on the public quote page. */
+  merchantName: string | null;
   issueDate: Date;
   validUntil: Date | null;
   currency: string;
@@ -852,9 +856,9 @@ export interface PublicQuoteView {
 /**
  * Look up a quote by its public token for the `/q/[token]` page. Returns null if the
  * token doesn't match OR the quote is a draft (never sent) / expired / converted /
- * declined — only `sent` / `viewed` / `accepted` quotes are publicly viewable (once
+ * declined - only `sent` / `viewed` / `accepted` quotes are publicly viewable (once
  * accepted the customer can still see it to confirm). The partial unique index on
- * `publicToken` makes this lookup indexed. No `workspaceId` param — the token IS the
+ * `publicToken` makes this lookup indexed. No `workspaceId` param - the token IS the
  * credential (unguessable 122-bit random).
  */
 export async function getQuoteByPublicToken(token: string): Promise<PublicQuoteView | null> {
@@ -894,6 +898,7 @@ export async function getQuoteByPublicToken(token: string): Promise<PublicQuoteV
     number: r.number,
     status: r.status as QuoteStatus,
     customerName: r.customers?.name ?? null,
+    merchantName: r.workspaces?.name ?? null,
     issueDate: parsePgTimestamp(r.issue_date),
     validUntil: r.valid_until ? parsePgTimestamp(r.valid_until) : null,
     currency: r.currency,
@@ -929,7 +934,7 @@ export async function getQuoteByPublicToken(token: string): Promise<PublicQuoteV
  * Record a customer view of a sent quote: `sent → viewed`, idempotent. Returns true if the
  * status changed (first view), false if already viewed / not sent (no-op, no duplicate event).
  * The `transition` `.in("status", ["sent"])` clause makes a concurrent double-view
- * race-safe — only one wins. The workspaceId is resolved internally and never returned.
+ * race-safe - only one wins. The workspaceId is resolved internally and never returned.
  */
 export async function markQuoteViewed(token: string): Promise<boolean> {
   const supabase = getDataClient();
@@ -968,7 +973,7 @@ export async function markQuoteViewed(token: string): Promise<boolean> {
 /**
  * Acceptance metadata captured at accept time (Wave 2). `accepterName` is required (the
  * customer types their name); the rest is captured from the request by the public action
- * and threaded in. `signature` is a typed name or a canvas-captured data-URL — acceptance
+ * and threaded in. `signature` is a typed name or a canvas-captured data-URL - acceptance
  * evidence, not a cryptographic signature.
  */
 export interface AcceptanceMeta {
@@ -981,11 +986,11 @@ export interface AcceptanceMeta {
 
 /**
  * Customer accepts a quote (public action): `sent|viewed → accepted`, sets `acceptedAt`,
- * and writes a `quote_acceptances` row capturing who accepted + from where (Wave 2 — the
+ * and writes a `quote_acceptances` row capturing who accepted + from where (Wave 2 - the
  * legally-meaningful evidence the spec calls for; the prior implementation stored only
  * `acceptedAt`). Publishes `QuoteAccepted` enriched with merchant-notification metadata
  * (including `accepterName` + `ipAddress`) so the notifications platform can email workspace
- * members. Returns false if the quote isn't in an allowed state or not found — idempotent
+ * members. Returns false if the quote isn't in an allowed state or not found - idempotent
  * via the atomic `transition` (a duplicate accept writes no second acceptance row because
  * the transition matches zero rows).
  */
@@ -1010,7 +1015,7 @@ export async function acceptQuote(token: string, metaInput: AcceptanceMeta): Pro
   });
   if (!result) return false;
 
-  // Record the acceptance (one row per accept event — full audit trail). Written after the
+  // Record the acceptance (one row per accept event - full audit trail). Written after the
   // transition succeeds; a duplicate accept can't reach here (transition matched zero rows).
   await unwrap(
     supabase.from("quote_acceptances").insert({
@@ -1053,7 +1058,7 @@ export async function acceptQuote(token: string, metaInput: AcceptanceMeta): Pro
   return true;
 }
 
-/** Decline metadata captured at decline time (Wave 2). No `decline_declines` table — IP/UA
+/** Decline metadata captured at decline time (Wave 2). No `decline_declines` table - IP/UA
  *  are stored in the event metadata + audit only (declines are less legally significant). */
 export interface DeclineMeta {
   ipAddress: string;
@@ -1064,7 +1069,7 @@ export interface DeclineMeta {
 /**
  * Customer declines a quote (public action): `sent|viewed → declined`, sets `declinedAt`.
  * Publishes `QuoteDeclined` enriched with merchant-notification metadata + IP/UA. Returns
- * false if the quote isn't in an allowed state or not found — idempotent.
+ * false if the quote isn't in an allowed state or not found - idempotent.
  */
 export async function declineQuote(token: string, metaInput: DeclineMeta): Promise<boolean> {
   const supabase = getDataClient();
@@ -1109,7 +1114,7 @@ export async function declineQuote(token: string, metaInput: DeclineMeta): Promi
   return true;
 }
 
-/** An acceptance record (Wave 2) — the merchant detail page renders this when `status === accepted`. */
+/** An acceptance record (Wave 2) - the merchant detail page renders this when `status === accepted`. */
 export interface QuoteAcceptanceRow {
   id: QuoteAcceptanceId;
   quoteId: QuoteId;
@@ -1122,7 +1127,7 @@ export interface QuoteAcceptanceRow {
 }
 
 /**
- * Fetch the most recent acceptance for a quote (Wave 2 — merchant detail page). Workspace-
+ * Fetch the most recent acceptance for a quote (Wave 2 - merchant detail page). Workspace-
  * scoped (IDOR-safe). Returns null if the quote has no acceptance row (not accepted, or
  * accepted before Wave 2). Re-acceptances create a new row each time; this returns the
  * latest by `acceptedAt` so the merchant sees the current acceptance evidence.
@@ -1149,9 +1154,9 @@ export async function getAcceptance(
  * Mark an accepted quote converted to an invoice: `accepted → converted`, sets
  * `convertedInvoiceId` + `convertedAt`. Called by the convert action **after**
  * `createInvoice` succeeds (the action layer orchestrates quotes→invoices; this service
- * never imports `@/modules/invoices`). Publishes `QuoteConvertedToInvoice` (activity-only —
+ * never imports `@/modules/invoices`). Publishes `QuoteConvertedToInvoice` (activity-only -
  * no email; the merchant is the one who clicked convert). Returns false if the quote isn't
- * accepted or not found — idempotent via the atomic `transition`.
+ * accepted or not found - idempotent via the atomic `transition`.
  */
 export async function markQuoteConverted(
   workspaceId: WorkspaceId,
@@ -1189,7 +1194,7 @@ export async function markQuoteConverted(
  * One bulk atomic update guarded by `.in("status", ["sent","viewed"])` +
  * `valid_until < now` + `valid_until is not null`. Accepted quotes don't expire (they're
  * heading to conversion). Publishes `QuoteExpired` per flipped quote + writes audit
- * (activity-feed only — no email, mirrors `InvoiceViewed`). Returns the count flipped.
+ * (activity-feed only - no email, mirrors `InvoiceViewed`). Returns the count flipped.
  * `now` is a param so tests can pass a fixed timestamp.
  */
 export async function markExpiredQuotes(now: Date = new Date()): Promise<number> {

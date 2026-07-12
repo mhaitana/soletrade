@@ -8,7 +8,7 @@ import type { BookType } from "@/server/db/enums";
 
 /**
  * Books summary header + per-category breakdown + monthly-net sparkline (Phase 6b).
- * Server component — pure SVG, no client JS. The summary is the period overview (respects
+ * Server component - pure SVG, no client JS. The summary is the period overview (respects
  * the `type` filter, not the free-text search); the list below the page is the filtered view.
  *
  * All money renders use `tabular-nums` (per `globals.css`). Income is emerald, expense is
@@ -38,7 +38,7 @@ export function BooksSummary({
   const empty = summary.count === 0;
 
   return (
-    <section className="space-y-4" aria-label={`Books summary — ${PERIOD_LABEL[period]}`}>
+    <section className="space-y-4" aria-label={`Books summary - ${PERIOD_LABEL[period]}`}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Income" value={formatCents(summary.incomeCents, currency)} tone="income" />
         <StatCard
@@ -181,7 +181,7 @@ function SparklineCard({
 // --- Sparkline ---------------------------------------------------------------
 
 /**
- * Monthly-net sparkline. Thin wrapper over the shared `<Sparkline>` (extracted in Phase 9) —
+ * Monthly-net sparkline. Thin wrapper over the shared `<Sparkline>` (extracted in Phase 9) -
  * maps `MonthlyNetPoint` to the generic `points` shape and pre-formats each tooltip label with
  * `formatCents`. The SVG math + zero baseline + insufficient-data caption live in shared.
  */

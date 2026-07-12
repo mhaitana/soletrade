@@ -22,10 +22,10 @@ import {
 
 /**
  * Books cross-module integration. Subscribes to cross-module events on the bus and
- * auto-records a Books transaction for each — modules communicate via the event bus, never
+ * auto-records a Books transaction for each - modules communicate via the event bus, never
  * direct imports (brief §9). This module imports `@/modules/books` (its own module),
  * `@/platform/*`, `@/server/*`, and `@/shared/*` only. It does **NOT** import `@/modules/invoices`
- * or `@/modules/drive` — the entire contract arrives via `event.metadata` + `event.entityId`.
+ * or `@/modules/drive` - the entire contract arrives via `event.metadata` + `event.entityId`.
  *
  * Subscribers:
  *
@@ -34,7 +34,7 @@ import {
  *    check-then-insert on `source_invoice_id`.
  * 2. **`DriveEarningsLogged` → Books income** (Phase 7). Records an income row (category `gig`)
  *    for the earned amount, linked via `sourceEarningId`. **`DriveEarningUpdated`** /
- *    **`DriveEarningDeleted`** (Wave 5) reconcile the mirrored row — "Drive wins", the Books
+ *    **`DriveEarningDeleted`** (Wave 5) reconcile the mirrored row - "Drive wins", the Books
  *    row is overwritten on edit and removed on delete.
  * 3. **`VehicleExpenseLogged` → Books expense** (Wave 2). Records an expense row (category
  *    `vehicle_expense`) for the logged amount, linked via `sourceExpenseId`.
@@ -46,11 +46,11 @@ import {
  * Wired once at startup from `src/instrumentation.ts` (fire-and-forget, like
  * `registerNotifications`). Best-effort: the event bus isolates a failing handler from the
  * publisher, and each create/update/delete is wrapped so a thrown error logs + swallows (a
- * failed auto-record must not break the source flow — invoice payment or Drive mutation).
+ * failed auto-record must not break the source flow - invoice payment or Drive mutation).
  *
  * Module gate: if Books isn't installed for the workspace, every event is a no-op (no orphan
  * rows in a module that isn't there). Entries logged while Books is disabled are backfilled
- * when Books is later enabled — `replayDriveEventsForBooks` (in `@/modules/drive`) re-publishes
+ * when Books is later enabled - `replayDriveEventsForBooks` (in `@/modules/drive`) re-publishes
  * the `*Logged` events for existing Drive rows, wired from `src/instrumentation.ts` on
  * `ModuleEnabled`.
  */
@@ -84,7 +84,7 @@ async function onInvoicePaid(event: BusEvent): Promise<void> {
   if (!event.workspaceId) return;
   const workspaceId = event.workspaceId as WorkspaceId;
 
-  // Module gate — no-op if Books isn't installed.
+  // Module gate - no-op if Books isn't installed.
   if (!(await isModuleEnabled(workspaceId, "books"))) return;
 
   const meta = readInvoicePaidMeta(event);
@@ -96,7 +96,7 @@ async function onInvoicePaid(event: BusEvent): Promise<void> {
   // Idempotency: skip if an income row already exists for this invoice.
   if (await findTransactionIdBySource(workspaceId, { sourceInvoiceId: meta.invoiceId })) return;
 
-  // Resolve the customer defensively — a customer deleted between send and payment must not
+  // Resolve the customer defensively - a customer deleted between send and payment must not
   // block recording income; fall back to an unlinked row.
   let customerId: CustomerId | null = null;
   if (meta.customerId) {
@@ -157,7 +157,7 @@ async function onDriveEarningsLogged(event: BusEvent): Promise<void> {
   if (!event.workspaceId) return;
   const workspaceId = event.workspaceId as WorkspaceId;
 
-  // Module gate — no-op if Books isn't installed.
+  // Module gate - no-op if Books isn't installed.
   if (!(await isModuleEnabled(workspaceId, "books"))) return;
 
   const meta = readDriveEarningsMeta(event);
@@ -169,7 +169,7 @@ async function onDriveEarningsLogged(event: BusEvent): Promise<void> {
   // Idempotency: skip if an income row already exists for this earning.
   if (await findTransactionIdBySource(workspaceId, { sourceEarningId: meta.earningId })) return;
 
-  // Gig earnings have no customer — record unlinked income. Use the earning's user-chosen date
+  // Gig earnings have no customer - record unlinked income. Use the earning's user-chosen date
   // (from metadata) so the income lands in the right P&L period (a back-dated earning records
   // in its own month, unlike the InvoicePaid subscriber which uses event-processing time).
   const label = platformLabel(meta.platform) ?? meta.platform;
@@ -226,7 +226,7 @@ async function onVehicleExpenseLogged(event: BusEvent): Promise<void> {
   if (!event.workspaceId) return;
   const workspaceId = event.workspaceId as WorkspaceId;
 
-  // Module gate — no-op if Books isn't installed.
+  // Module gate - no-op if Books isn't installed.
   if (!(await isModuleEnabled(workspaceId, "books"))) return;
 
   const meta = readVehicleExpenseMeta(event);
@@ -238,7 +238,7 @@ async function onVehicleExpenseLogged(event: BusEvent): Promise<void> {
   // Idempotency: skip if an expense row already exists for this drive expense.
   if (await findTransactionIdBySource(workspaceId, { sourceExpenseId: meta.expenseId })) return;
 
-  // Vehicle expenses have no customer — record unlinked expense. Use the expense's user-chosen
+  // Vehicle expenses have no customer - record unlinked expense. Use the expense's user-chosen
   // date so it lands in the right P&L period (mirrors the DriveEarningsLogged subscriber).
   try {
     await createTransaction(
@@ -280,12 +280,12 @@ async function onDriveEarningUpdated(event: BusEvent): Promise<void> {
   if (!(await isModuleEnabled(workspaceId, "books"))) return;
 
   const meta = readDriveEarningsMeta(event);
-  if (!meta) return; // best-effort — a malformed update is swallowed
+  if (!meta) return; // best-effort - a malformed update is swallowed
 
   const txId = await findTransactionIdBySource(workspaceId, { sourceEarningId: meta.earningId });
-  if (!txId) return; // nothing to sync (e.g. Books was disabled at create time — backfill covers it)
+  if (!txId) return; // nothing to sync (e.g. Books was disabled at create time - backfill covers it)
   try {
-    // "Drive wins" — overwrite amount/currency/date/description. Keep category + source link.
+    // "Drive wins" - overwrite amount/currency/date/description. Keep category + source link.
     await updateTransaction(
       workspaceId,
       txId,
@@ -482,7 +482,7 @@ async function onMileageDeleted(event: BusEvent): Promise<void> {
 
 /**
  * Subscribe the Books cross-module handlers. Returns a composed unsubscribe (for tests); in
- * production this is fire-and-forget — wired once at startup in `src/instrumentation.ts`.
+ * production this is fire-and-forget - wired once at startup in `src/instrumentation.ts`.
  */
 export function registerBooksIntegration(): () => void {
   const u1 = onEvent("InvoicePaid", onInvoicePaid);

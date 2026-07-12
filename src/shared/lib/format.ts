@@ -1,5 +1,5 @@
 /**
- * Generic display formatters. Shared utility — no app/module/platform imports.
+ * Generic display formatters. Shared utility - no app/module/platform imports.
  */
 
 /**
@@ -24,7 +24,7 @@ export function formatRelativeTime(date: Date, now: Date = new Date()): string {
 
 /**
  * Format a byte count as a compact human string (1023 B, 12.3 KB, 4.5 MB, …).
- * Binary units (KB = 1024 bytes) — the convention file managers use. The
+ * Binary units (KB = 1024 bytes) - the convention file managers use. The
  * `tabular-nums` CSS class on the surrounding element keeps the digits aligned.
  */
 export function formatBytes(bytes: number): string {

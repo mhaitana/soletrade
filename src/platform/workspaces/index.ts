@@ -16,7 +16,7 @@ export interface WorkspaceMembership {
   role: WorkspaceRole;
 }
 
-/** Full workspace row shape (camelCase — mapped from the snake_case PostgREST row at the
+/** Full workspace row shape (camelCase - mapped from the snake_case PostgREST row at the
  *  service boundary so consumers keep the same field names Drizzle exposed). Timestamps come
  *  back as ISO strings from PostgREST (Drizzle returned `Date`); no consumer reads them today. */
 export interface WorkspaceRow {
@@ -80,7 +80,7 @@ export async function createWorkspace(
   // Atomic insert (workspace + owner membership) via the `create_workspace_with_owner`
   // PL/pgSQL RPC. PostgREST has no multi-statement transactions, so the two inserts live
   // in one function. The `publishEvent`/`writeAudit` run AFTER the rpc returns (a tiny
-  // non-atomic gap between the row writes and the event/audit rows — acceptable: the event
+  // non-atomic gap between the row writes and the event/audit rows - acceptable: the event
   // bus is best-effort and consumers are idempotent).
   const supabase = getDataClient();
   const { data, error } = await rpc(supabase, "create_workspace_with_owner", {
@@ -154,7 +154,7 @@ export async function getWorkspace(workspaceId: WorkspaceId): Promise<WorkspaceR
   return row ? toWorkspaceRow(row) : null;
 }
 
-/** Editable workspace fields (Wave 4 — `/settings/general`). The slug stays immutable v1. */
+/** Editable workspace fields (Wave 4 - `/settings/general`). The slug stays immutable v1. */
 export interface WorkspaceUpdateInput {
   name: string;
   defaultCurrency: string;

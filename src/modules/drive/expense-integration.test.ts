@@ -26,7 +26,7 @@ import {
 import { registerBooksIntegration } from "@/modules/books/integration";
 
 /**
- * Integration tests for the Books `VehicleExpenseLogged` cross-module subscriber (Wave 2 —
+ * Integration tests for the Books `VehicleExpenseLogged` cross-module subscriber (Wave 2 -
  * the second Drive→Books integration, after `DriveEarningsLogged`→income). A vehicle
  * expense logged in Drive records a `vehicle_expense` Books transaction, idempotent on
  * `sourceExpenseId`. Run only when DATABASE_URL is set; skipped otherwise.
@@ -35,7 +35,7 @@ import { registerBooksIntegration } from "@/modules/books/integration";
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
-/** Shape the assertions use — mapped from the raw snake_case PostgREST row. */
+/** Shape the assertions use - mapped from the raw snake_case PostgREST row. */
 interface BookTxRow {
   type: string;
   category: string;
@@ -68,7 +68,7 @@ function mapBookTx(r: Record<string, unknown>): BookTxRow {
 describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATABASE_URL)", () => {
   const actor = branded<"UserId">("00000000-0000-9000-8000-0000000000d1");
   let ws1: WorkspaceId; // Books + Drive enabled
-  let ws2: WorkspaceId; // Drive only — Books NOT enabled (module-gate no-op)
+  let ws2: WorkspaceId; // Drive only - Books NOT enabled (module-gate no-op)
   let ws1Vehicle: VehicleId;
   let ws2Vehicle: VehicleId;
   const createdExpenseIds: DriveExpenseId[] = [];
@@ -94,7 +94,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     clearEventBus();
     const workspaceIds = [ws1!, ws2!].filter(Boolean) as WorkspaceId[];
     const tables: CleanupTable[] = [
-      // bookTransactions reference workspace (no cascade) — delete first.
+      // bookTransactions reference workspace (no cascade) - delete first.
       { table: "book_transactions" },
       { table: "drive_trips" },
       { table: "drive_earnings" },
@@ -147,7 +147,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
         amountCents: 8750,
         currency: "AUD",
         date: new Date("2026-07-03"),
-        description: "Fill up — 40L unleaded",
+        description: "Fill up - 40L unleaded",
       },
       actor,
     );
@@ -162,11 +162,11 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     expect(row!.customerId).toBeNull();
     expect(row!.sourceExpenseId).toBe(expenseId);
     expect(row!.date.toISOString()).toBe(new Date("2026-07-03").toISOString());
-    expect(row!.description).toBe("Fill up — 40L unleaded");
+    expect(row!.description).toBe("Fill up - 40L unleaded");
     expect(row!.notes).toBe("Auto-recorded from drive vehicle expense.");
   });
 
-  it("is idempotent — a replayed VehicleExpenseLogged does not duplicate the expense row", async () => {
+  it("is idempotent - a replayed VehicleExpenseLogged does not duplicate the expense row", async () => {
     const expenseId = createdExpenseIds[0]!;
     const before = await countExpenseForDriveExpense(ws1!, expenseId);
     expect(before).toBe(1);
@@ -185,7 +185,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
         amountCents: 8750,
         currency: "AUD",
         date: new Date("2026-07-03"),
-        description: "Fill up — 40L unleaded",
+        description: "Fill up - 40L unleaded",
       },
     });
 
@@ -214,7 +214,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
 
   it("ignores a VehicleExpenseLogged event with missing metadata (no throw, no row)", async () => {
     const before = await dbRowCountForWorkspace(ws1!);
-    // Garbage metadata — no amountCents/currency/date.
+    // Garbage metadata - no amountCents/currency/date.
     await publishEvent({
       type: "VehicleExpenseLogged",
       workspaceId: ws1!,
@@ -387,7 +387,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
   // ───────────────── Wave 5: backfill when Books is enabled later ─────────────────
 
   it("backfills Books rows for existing Drive entries when Books is enabled (idempotent)", async () => {
-    // ws2 has Drive enabled, Books NOT enabled — entries logged now don't mirror.
+    // ws2 has Drive enabled, Books NOT enabled - entries logged now don't mirror.
     const earningId = await createEarning(
       ws2!,
       {
@@ -423,7 +423,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
       actor,
     );
 
-    // Nothing mirrored yet — Books isn't installed on ws2.
+    // Nothing mirrored yet - Books isn't installed on ws2.
     expect(await countExpenseForDriveExpense(ws2!, expenseId)).toBe(0);
 
     // Enable Books, then replay the Drive events (the instrumentation.ts ModuleEnabled glue
@@ -448,7 +448,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     expect((await getExpenseForDriveExpense(ws2!, expenseId))!.amountCents).toBe(7700);
     expect((await getMileageForTrip(ws2!, tripId))!.amountCents).toBe(2550);
 
-    // Replaying again is idempotent — no duplicate rows.
+    // Replaying again is idempotent - no duplicate rows.
     await replayDriveEventsForBooks(ws2!, actor);
     expect(await countExpenseForDriveExpense(ws2!, expenseId)).toBe(1);
     expect(await countMileageForTrip(ws2!, tripId)).toBe(1);

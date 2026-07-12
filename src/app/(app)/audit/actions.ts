@@ -8,7 +8,7 @@ export type AuditPageData = { access: true; page: AuditPage } | { access: false 
 
 /**
  * Load a page of audit entries for the workspace. Gated by `view:audit`
- * (owner/admin/accountant) — members without the grant get `access: false` and
+ * (owner/admin/accountant) - members without the grant get `access: false` and
  * the page renders a no-access card instead of a partial list.
  */
 export async function loadAuditPage(opts: AuditListOptions = {}): Promise<AuditPageData> {

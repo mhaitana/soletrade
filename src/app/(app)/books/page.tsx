@@ -226,7 +226,7 @@ export default async function BooksPage({
                       {tx.customerName ? (
                         <span className="text-foreground">{tx.customerName}</span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3">

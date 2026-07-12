@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button } from "@/shared/ui/button";
 
 /**
- * 404 for unmatched `(app)` routes (Wave 4 robustness) — e.g. a deleted customer/invoice whose
+ * 404 for unmatched `(app)` routes (Wave 4 robustness) - e.g. a deleted customer/invoice whose
  * page resolved to null and threw a `notFound()`, or a mistyped app URL. Keeps the app shell
  * (sidebar etc.) since this renders inside the `(app)` layout.
  */

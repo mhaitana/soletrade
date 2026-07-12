@@ -19,14 +19,14 @@ import type { BusEvent } from "@/server/events";
  * service branches on `isMockProvider()` (which reads the `env` singleton parsed once at
  * module load). To force the mock path here we `vi.stubEnv("AI_PROVIDER","mock")` +
  * `vi.resetModules()` and **dynamically** import the service + event bus so `env`
- * re-parses with the stubbed value — the same pattern `platform/ai/provider.test.ts`
+ * re-parses with the stubbed value - the same pattern `platform/ai/provider.test.ts`
  * uses. Setup/cleanup helpers don't touch the AI provider, so they stay top-imported.
  *
  *   DATABASE_URL="postgresql://..." pnpm test:ci
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
-// Dynamically loaded after the env stub — see beforeAll. Typed via `typeof import()`.
+// Dynamically loaded after the env stub - see beforeAll. Typed via `typeof import()`.
 type ExtractionService = typeof import("./receipt-extraction");
 type EventBus = typeof import("@/server/events");
 let svc: ExtractionService;
@@ -57,7 +57,7 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
       capturedEvents.push(e);
     });
     // Create a file metadata row. The mock provider short-circuits before downloading
-    // bytes, so no real Storage upload is needed — only the metadata row exists.
+    // bytes, so no real Storage upload is needed - only the metadata row exists.
     const file = await createFileRecord({
       workspaceId: ws,
       uploadedByUserId: actor,
@@ -126,7 +126,7 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
     expect(row!.extractedData!.category).toBe("supplies");
     expect(row!.extractedData!.confidence).toBeCloseTo(0.95);
 
-    // ReceiptProcessed is the declared-but-never-published event — this is its first emitter.
+    // ReceiptProcessed is the declared-but-never-published event - this is its first emitter.
     const evt = capturedEvents.find((e) => e.entityId === extractionId);
     expect(evt).toBeDefined();
     expect(evt!.type).toBe("ReceiptProcessed");
@@ -164,7 +164,7 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
     expect(row!.transactionId).toBe(transactionId);
   });
 
-  it("is idempotent — re-applying an applied extraction throws", async () => {
+  it("is idempotent - re-applying an applied extraction throws", async () => {
     const extractions = await svc.listExtractions(ws!, { status: "applied" });
     expect(extractions.length).toBeGreaterThan(0);
     const extractionId = extractions[0]!.id;
@@ -180,7 +180,7 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
     const row = await svc.getExtraction(ws!, extractionId);
     expect(row!.status).toBe("rejected");
     expect(row!.transactionId).toBeNull();
-    // No new book_transaction references this extraction — only the one applied above exists.
+    // No new book_transaction references this extraction - only the one applied above exists.
     const txCountRows = await unwrap(
       getDataClient().from("book_transactions").select("id").eq("receipt_file_id", receiptFileId),
     );

@@ -552,7 +552,7 @@ CREATE UNIQUE INDEX "credit_ledger_expired_original_unique" ON "credit_ledger" U
 -- extension + index migration is cleaner than forcing the schema to declare 12 gin indexes
 -- that exist only as a search-infrastructure optimization (not part of the app's data model).
 -- The indexes are DB-level only; the Drizzle schema is unchanged, so `db:generate` still diffs
--- against the unchanged snapshot (0017_snapshot.json is a copy of 0016's — no schema drift).
+-- against the unchanged snapshot (0017_snapshot.json is a copy of 0016's - no schema drift).
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- Customers (platform)
@@ -603,7 +603,7 @@ ALTER TABLE "workspaces" ADD COLUMN "quote_prefix" text DEFAULT 'QUO-' NOT NULL;
 --
 -- Hand-authored (not drizzle-kit generated), matching the 0017 convention: DB-level only,
 -- Drizzle schema unchanged, so `db:generate` still diffs against the unchanged snapshot
--- (0019_snapshot.json is a copy of 0018's — no schema drift). `pg_trgm` was already created
+-- (0019_snapshot.json is a copy of 0018's - no schema drift). `pg_trgm` was already created
 -- in 0017 with `IF NOT EXISTS`, so the gin index below is safe regardless of apply order.
 
 -- Activity feed: main list query filters `workspace_id` + keyset-paginates on

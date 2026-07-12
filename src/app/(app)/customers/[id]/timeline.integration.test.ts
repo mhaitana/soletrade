@@ -10,7 +10,7 @@ import { writeActivity } from "@/platform/activity";
 
 /**
  * Integration tests for `loadCustomerTimeline` against a real Postgres. The session layer
- * (`requireWorkspaceContext`) is mocked to return the test workspace + a `manager` role — what
+ * (`requireWorkspaceContext`) is mocked to return the test workspace + a `manager` role - what
  * we want to exercise against real rows is the merge/sort logic + IDOR via `getCustomer`, not
  * the cookie/session resolution (already covered by `context.test.ts`). The list/get functions
  * hit the real DB.
@@ -21,7 +21,7 @@ import { writeActivity } from "@/platform/activity";
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
-// Mock ONLY the session layer — the list/get functions stay real (they hit Postgres).
+// Mock ONLY the session layer - the list/get functions stay real (they hit Postgres).
 const requireCtxMock = vi.fn();
 vi.mock("@/platform/context", () => ({
   requireWorkspaceContext: (...a: unknown[]) => requireCtxMock(...a),
@@ -95,7 +95,7 @@ describe.skipIf(!HAS_DB)("loadCustomerTimeline integration (requires DATABASE_UR
       actor,
     );
 
-    // A customer-lifecycle activity event for ws1Customer (written directly — the event bus
+    // A customer-lifecycle activity event for ws1Customer (written directly - the event bus
     // persister is async/timing-sensitive; this is the deterministic way to seed the row).
     await writeActivity({
       type: "CustomerCreated",

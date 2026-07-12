@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeLineItemTotals, lineItemAmountCents } from "./totals";
 
-describe("shared line-item totals — lineItemAmountCents", () => {
+describe("shared line-item totals - lineItemAmountCents", () => {
   it("rounds quantity × unit price to the nearest cent (half-up)", () => {
     // 2.5h × $10.01/h (1001 cents) = 2502.5 → 2503 (Math.round rounds .5 toward
     // +Infinity, so 2502.5 → 2503).
@@ -22,7 +22,7 @@ describe("shared line-item totals — lineItemAmountCents", () => {
   });
 });
 
-describe("shared line-item totals — computeLineItemTotals", () => {
+describe("shared line-item totals - computeLineItemTotals", () => {
   it("sums line items into the subtotal with no tax when rate is 0", () => {
     const totals = computeLineItemTotals(
       [
@@ -78,7 +78,7 @@ describe("shared line-item totals — computeLineItemTotals", () => {
   });
 });
 
-describe("shared line-item totals — computeLineItemTotals (pricesIncludeTax)", () => {
+describe("shared line-item totals - computeLineItemTotals (pricesIncludeTax)", () => {
   it("back-calculates tax from a gross total at 10% ($100.00 inclusive → $9.09 tax, $90.91 ex-tax)", () => {
     const totals = computeLineItemTotals([{ quantity: 1, unitPriceCents: 10000 }], 10, {
       pricesIncludeTax: true,

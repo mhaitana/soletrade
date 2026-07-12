@@ -20,7 +20,7 @@ function row(
   };
 }
 
-describe("modules/quotes/calc — summarizeQuotes", () => {
+describe("modules/quotes/calc - summarizeQuotes", () => {
   it("returns zeros + empty monthly for empty input", () => {
     const s = summarizeQuotes([], range);
     expect(s).toEqual({
@@ -33,7 +33,7 @@ describe("modules/quotes/calc — summarizeQuotes", () => {
     });
   });
 
-  it("acceptedValueCents sums totalCents for status === 'accepted' — all-time snapshot", () => {
+  it("acceptedValueCents sums totalCents for status === 'accepted' - all-time snapshot", () => {
     const s = summarizeQuotes(
       [
         row({ status: "accepted", totalCents: 5000 }),
@@ -53,9 +53,9 @@ describe("modules/quotes/calc — summarizeQuotes", () => {
         row({ status: "sent", sentAt: new Date("2026-07-05T00:00:00Z") }),
         row({ status: "viewed", sentAt: new Date("2026-07-06T00:00:00Z") }),
         row({ status: "accepted", sentAt: new Date("2026-07-07T00:00:00Z") }),
-        // Sent before range — excluded.
+        // Sent before range - excluded.
         row({ status: "sent", sentAt: new Date("2026-06-30T00:00:00Z") }),
-        // Never sent (draft) — excluded.
+        // Never sent (draft) - excluded.
         row({ status: "draft", sentAt: null }),
       ],
       range,

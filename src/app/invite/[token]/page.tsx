@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/server/auth/session";
 import { getInvitationByToken, type PublicInvitation } from "@/platform/members";
+import { Logo } from "@/shared/components/logo";
 import { InviteAcceptForm } from "./invite-accept-form";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     <div className="min-h-dvh bg-[#F8FAFC] text-foreground">
       <div className="mx-auto max-w-md px-4 py-6 sm:py-10">
         <header className="mb-6">
-          <span className="font-mono text-sm font-semibold tracking-tight">soletrade labs</span>
+          <Logo variant="full" href={null} />
         </header>
 
         <div className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">

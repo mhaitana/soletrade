@@ -10,7 +10,7 @@ import { replayDriveEventsForBooks } from "@/modules/drive";
 /**
  * Server bootstrap. Runs once on startup. Wires the event bus persister so
  * every published event is recorded in the activity feed, and subscribes
- * cross-module side effects that must NOT be direct imports (brief §9 — modules
+ * cross-module side effects that must NOT be direct imports (brief §9 - modules
  * communicate via the event bus).
  */
 export async function register(): Promise<void> {
@@ -43,11 +43,11 @@ export async function register(): Promise<void> {
   });
 
   // Phase 5c: subscribe invoice email handlers (InvoiceSent/Overdue/Paid → Resend).
-  // Fire-and-forget — `registerNotifications` just attaches handlers; no await needed.
+  // Fire-and-forget - `registerNotifications` just attaches handlers; no await needed.
   registerNotifications();
 
   // Phase 6c: subscribe the Books InvoicePaid → income recorder (cross-module, via the bus).
-  // Fire-and-forget — `registerBooksIntegration` just attaches the handler; no await needed.
+  // Fire-and-forget - `registerBooksIntegration` just attaches the handler; no await needed.
   registerBooksIntegration();
 
   // Wave 5: backfill Books when it's enabled for a workspace that already has Drive entries.

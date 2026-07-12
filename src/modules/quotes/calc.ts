@@ -1,5 +1,5 @@
 /**
- * Pure Quotes dashboard aggregator (Phase 9). No `server-only`, no DB, no time calls —
+ * Pure Quotes dashboard aggregator (Phase 9). No `server-only`, no DB, no time calls -
  * unit-testable in isolation, mirroring `@/modules/books/calc.ts` + `@/modules/drive/calc.ts` +
  * `@/modules/invoices/calc.ts` purity. The cross-module dashboard loader fetches a workspace's
  * quotes (capped at 200 by `listQuotes`) and runs `summarizeQuotes` for the current + previous
@@ -8,10 +8,10 @@
  *
  * Money is integer cents throughout.
  *
- * **Range semantics:** `acceptedValueCents` is a **current-state snapshot** — the sum of
+ * **Range semantics:** `acceptedValueCents` is a **current-state snapshot** - the sum of
  * `totalCents` for status === "accepted" (pending conversion), all-time, ignoring `range`.
  * `sentCount` / `acceptedCount` / `declinedCount` / `convertedCount` and `monthly` are
- * **period-bound** — a row counts if its relevant event date (`sentAt`/`acceptedAt`/
+ * **period-bound** - a row counts if its relevant event date (`sentAt`/`acceptedAt`/
  * `declinedAt`/`convertedAt`) falls in `[range.start, range.end]`. `range.start == null` means
  * no lower bound (the "all" period). The loader runs this twice (current + previous range) for
  * the acceptedCount delta; `acceptedValueCents` comes from the current call only.
@@ -22,7 +22,7 @@ import type { QuoteStatus } from "@/server/db/enums";
 /** A quote reduced to the fields `summarizeQuotes` needs. */
 export interface QuoteSummaryInput {
   status: QuoteStatus;
-  /** Integer cents — the quote total. */
+  /** Integer cents - the quote total. */
   totalCents: number;
   sentAt: Date | null;
   acceptedAt: Date | null;
@@ -42,7 +42,7 @@ export interface MonthlyQuotePoint {
 }
 
 export interface QuoteSummary {
-  /** Sum of `totalCents` for status === "accepted" (pending conversion) — all-time snapshot. */
+  /** Sum of `totalCents` for status === "accepted" (pending conversion) - all-time snapshot. */
   acceptedValueCents: number;
   /** Count of quotes sent in range. */
   sentCount: number;
@@ -52,7 +52,7 @@ export interface QuoteSummary {
   declinedCount: number;
   /** Count of quotes converted to invoices in range. */
   convertedCount: number;
-  /** Accepted-by-month series (in range), sorted ascending by month — for the sparkline. */
+  /** Accepted-by-month series (in range), sorted ascending by month - for the sparkline. */
   monthly: MonthlyQuotePoint[];
 }
 
@@ -67,7 +67,7 @@ function inRange(date: Date, range: { start: Date | null; end: Date }): boolean 
 }
 
 /**
- * Aggregate a set of quotes into a dashboard summary. Pure — no DB, no time calls.
+ * Aggregate a set of quotes into a dashboard summary. Pure - no DB, no time calls.
  * Empty input → zeros + empty `monthly`.
  */
 export function summarizeQuotes(
@@ -83,7 +83,7 @@ export function summarizeQuotes(
   const monthMap = new Map<string, MonthlyQuotePoint>();
 
   for (const row of rows) {
-    // Snapshot — all-time, ignore range.
+    // Snapshot - all-time, ignore range.
     if (row.status === "accepted") {
       acceptedValueCents += row.totalCents;
     }

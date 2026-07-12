@@ -9,6 +9,7 @@ import { Bot, Plus, Send, Square, Trash2, Zap } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { cn } from "@/shared/lib/utils";
+import { brand } from "@/config/brand";
 import { deleteConversationAction, setWriteEnabledAction, type AssistantPageData } from "./actions";
 
 /**
@@ -16,14 +17,14 @@ import { deleteConversationAction, setWriteEnabledAction, type AssistantPageData
  * `DefaultChatTransport` pointed at `POST /api/assistant`. The transport is customized:
  *
  * - `prepareSendMessagesRequest` sends only `{ conversationId, message }` (the route
- *   reconstructs full history from the persisted conversation — the client doesn't send
+ *   reconstructs full history from the persisted conversation - the client doesn't send
  *   the whole transcript).
  * - `fetch` intercepts the response to capture the `X-Conversation-Id` header (set by
  *   the route when it creates a new conversation on the first send) and updates the URL
  *   via `history.replaceState` (no Next.js navigation → no remount → the in-flight stream
  *   is preserved). The sidebar is refreshed on `onFinish`.
  *
- * Messages render from `message.parts` (text only this phase — tool calls are server-
+ * Messages render from `message.parts` (text only this phase - tool calls are server-
  * side and opaque to the client). Plain text + `whitespace-pre-wrap`; no markdown.
  */
 const SUGGESTED_PROMPTS = [
@@ -75,7 +76,7 @@ export function AssistantChat({
   );
 
   // The transport is created once (useState lazy init). It only sends the standard
-  // `{ messages }` body — `conversationId` is added per-send via `sendMessage`'s `body`
+  // `{ messages }` body - `conversationId` is added per-send via `sendMessage`'s `body`
   // option (so the latest id is used without recreating the transport). The `fetch`
   // wrapper captures the `X-Conversation-Id` response header the route sets when it
   // creates a new conversation, updates the URL via `history.replaceState` (no Next.js
@@ -206,7 +207,7 @@ export function AssistantChat({
         <Card className="flex min-h-[60vh] flex-1 flex-col">
           <header className="flex items-center gap-2 border-b px-4 py-3">
             <Bot className="size-5 text-primary" aria-hidden />
-            <h1 className="text-sm font-semibold">soletrade labs assistant</h1>
+            <h1 className="text-sm font-semibold">{brand.productName} assistant</h1>
             <div className="ml-auto flex items-center gap-1.5">
               <button
                 type="button"
@@ -217,7 +218,7 @@ export function AssistantChat({
                 title={
                   canToggleWrite
                     ? writeEnabled
-                      ? "Write tools on — assistant will ask before creating anything"
+                      ? "Write tools on - assistant will ask before creating anything"
                       : "Allow the assistant to create customers, invoices, quotes, transactions"
                     : "Send a message first to enable write tools"
                 }
@@ -242,7 +243,7 @@ export function AssistantChat({
                 <div>
                   <p className="text-sm font-medium">Ask about your business</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    The assistant reads real workspace data — invoices, books, customers.
+                    The assistant reads real workspace data - invoices, books, customers.
                   </p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-2">
@@ -322,7 +323,7 @@ export function AssistantChat({
           The assistant uses read-only access to your workspace data. Verify important figures in
           the relevant module.{" "}
           {writeEnabled
-            ? "Write tools are on — the assistant will ask for confirmation before creating anything. "
+            ? "Write tools are on - the assistant will ask for confirmation before creating anything. "
             : ""}
           {activeConversation ? `Started ${formatDate(activeConversation.updatedAt)}.` : ""}
         </p>

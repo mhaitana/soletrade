@@ -1,5 +1,5 @@
 /**
- * Supported currencies (Wave 4 — workspace `defaultCurrency` setting). Pure data — no
+ * Supported currencies (Wave 4 - workspace `defaultCurrency` setting). Pure data - no
  * `server-only`, no app/module/platform imports, so both the client settings form and the
  * server action/service can import it without dragging server-only into the client bundle.
  * Mirrors the `src/shared/constants/drive-platforms` pattern: data only (validation lives in
@@ -38,7 +38,7 @@ export function isSupportedCurrency(code: string): boolean {
 }
 
 /** Common IANA timezones for the settings `<select>`. The column stores any IANA zone as
- *  text, so a user can type a custom zone too — this list is just the convenience picker. */
+ *  text, so a user can type a custom zone too - this list is just the convenience picker. */
 export const COMMON_TIMEZONES: readonly string[] = [
   "Australia/Sydney",
   "Australia/Melbourne",

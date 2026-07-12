@@ -11,7 +11,7 @@ import { env } from "@/shared/lib/env";
  *
  * Public prefixes: marketing (/), /login, /signup, /pricing, the auth email-link
  * callback (/auth/), public invoice/quote share pages (/i/, /q/), the invitation
- * accept page (/invite/ — handles signed-out first-time invitees), and /api/.
+ * accept page (/invite/ - handles signed-out first-time invitees), and /api/.
  * Everything else requires a session.
  */
 

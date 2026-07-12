@@ -7,7 +7,7 @@ import {
 import { handleStripeEvent, recordProcessedEvent } from "@/server/stripe/handlers";
 
 /**
- * Stripe webhook entrypoint (brief §4 — signature verification on every webhook,
+ * Stripe webhook entrypoint (brief §4 - signature verification on every webhook,
  * then idempotent handling). Public (the proxy whitelists /api).
  *
  * Body MUST be read as raw text (not JSON-parsed) so Stripe's signature covers the
@@ -32,11 +32,11 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ received: true });
   } catch (err) {
     if (err instanceof StripeSignatureMissingError || isStripeSignatureError(err)) {
-      // Bad/missing signature — Stripe should not retry these.
+      // Bad/missing signature - Stripe should not retry these.
       return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
     }
     if (err instanceof Error && /not configured/i.test(err.message)) {
-      // Unset secret — server misconfiguration, not a client error. 500 so it
+      // Unset secret - server misconfiguration, not a client error. 500 so it
       // surfaces in logs and Stripe retries once the secret is set.
       console.error("[stripe] webhook misconfiguration:", err.message);
       return NextResponse.json({ error: "Webhook not configured." }, { status: 500 });

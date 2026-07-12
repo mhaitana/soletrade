@@ -7,6 +7,8 @@ import {
   type PublicInvoiceView,
 } from "@/modules/invoices";
 import { env } from "@/shared/lib/env";
+import { brand } from "@/config/brand";
+import { Logo } from "@/shared/components/logo";
 import { InvoicePaymentForm } from "./invoice-payment-form";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +34,7 @@ const STATUS_BADGE: Record<
 };
 
 function formatDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -63,10 +65,20 @@ export default async function PublicInvoicePage({
   return (
     <div className="min-h-dvh bg-[#F8FAFC] text-foreground">
       <div className="mx-auto max-w-md px-4 py-6 sm:py-10">
-        {/* Top bar: brand wordmark left, status badge right */}
-        <header className="mb-6 flex items-center justify-between">
-          <span className="font-mono text-sm font-semibold tracking-tight">soletrade labs</span>
-          <Badge variant={badge.variant}>{badge.label}</Badge>
+        {/* Top bar: issuing business dominant (left), status badge right. Soletrade stays subtle
+            (the `h` mark only) so it doesn't compete with the merchant's brand. */}
+        <header className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Logo variant="mark" href={null} className="shrink-0" />
+            {inv.merchantName ? (
+              <span className="truncate text-base font-semibold tracking-tight">
+                {inv.merchantName}
+              </span>
+            ) : null}
+          </div>
+          <Badge variant={badge.variant} className="shrink-0">
+            {badge.label}
+          </Badge>
         </header>
 
         <div className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">
@@ -166,6 +178,7 @@ export default async function PublicInvoicePage({
             {inv.dueDate ? ` · Due ${formatDate(inv.dueDate)}` : ""}
           </p>
           <p>This is a secure payment link. Do not share it with anyone else.</p>
+          <p className="pt-2 text-muted-foreground/80">Powered by {brand.productName}</p>
         </footer>
       </div>
     </div>

@@ -7,7 +7,7 @@ import { MODULES, type ModuleKey } from "@/shared/constants/modules";
 /**
  * Empty-state card shown when a user navigates to a module route that isn't
  * installed in their workspace. Pure (no `server-only`, no app imports) so it
- * respects the `@/shared/*` boundary — it only reads the static module catalog.
+ * respects the `@/shared/*` boundary - it only reads the static module catalog.
  * Reused by the books / drive / quotes modules.
  */
 export function ModuleNotInstalledCard({ moduleKey }: { moduleKey: ModuleKey }) {

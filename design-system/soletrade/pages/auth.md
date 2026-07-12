@@ -1,12 +1,12 @@
-# Page Override — Auth & Onboarding
+# Page Override - Auth & Onboarding
 
 **Overrides:** This file overrides `design-system/soletrade/MASTER.md` for `/login`, `/signup`, `/auth/callback`, `/onboarding`, and `/invite/[token]`.
 
 ## Core principles
 - Centered, single narrow column (`max-w-sm` auth cards, `max-w-md` onboarding) on `min-h-dvh`.
-- Card container: `rounded-lg border border-border bg-card p-8` — **no shadow** (flat hairline, paper-like).
+- Card container: `rounded-lg border border-border bg-card p-8` - **no shadow** (flat hairline, paper-like).
 - Trust through restraint: whitespace, clear hierarchy, one primary CTA. No decorative color.
-- Onboarding has **no card** — full-width centered form (it's a flow, not a wall).
+- Onboarding has **no card** - full-width centered form (it's a flow, not a wall).
 
 ## Layout
 - Centered Logo (link to landing) → h1 → optional subtitle → form → secondary link (e.g. "Already have an account? Sign in").

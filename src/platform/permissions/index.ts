@@ -16,7 +16,7 @@ import type { WorkspaceRole } from "@/server/db/enums";
  * below owner is granted them (and `update:workspace` does not imply them).
  *
  * NOTE: this module is pure data so it may be imported from client components
- * for UI gating (show/hide controls). That is a convenience only — every
+ * for UI gating (show/hide controls). That is a convenience only - every
  * mutation must re-check permissions server-side. Never trust client gating.
  */
 
@@ -144,7 +144,7 @@ function implies(grant: Permission, requested: Permission): boolean {
   return false;
 }
 
-/** Does `role` grant `permission`? Pure — safe to unit-test without a DB. */
+/** Does `role` grant `permission`? Pure - safe to unit-test without a DB. */
 export function can(role: Role, permission: Permission): boolean {
   const grants = ROLE_PERMISSIONS[role] ?? [];
   return grants.some((g) => implies(g, permission));

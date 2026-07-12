@@ -10,7 +10,7 @@ import type { ModuleKey } from "@/shared/constants/modules";
 import type { WorkspaceId } from "@/shared/types/ids";
 
 /**
- * Stripe lifecycle service (brief §10 — one customer + one unified subscription per
+ * Stripe lifecycle service (brief §10 - one customer + one unified subscription per
  * workspace; modules are subscription items; the highest-standalone active module is
  * the anchor, billed at its standalone price; the rest are add-ons).
  *
@@ -307,7 +307,7 @@ export interface CancelSubscriptionResult {
  * Best-effort: a missing charge surfaces as null rather than throwing so the caller can
  * still proceed with the cancellation. Brief §10.6 "immediate refund" path.
  *
- * Uses `stripe.charges.list` (newest-first) rather than the invoice's `charge` field —
+ * Uses `stripe.charges.list` (newest-first) rather than the invoice's `charge` field -
  * this Stripe API version no longer exposes `charge` on the Invoice resource, and the
  * latest charge is the reliable refund target anyway.
  */
@@ -383,14 +383,14 @@ export async function cancelSubscription(
 /**
  * Switch the workspace's billing interval (monthly↔annual). Reprices every active
  * subscription item to the new interval's price id with `proration_behavior: "none"`
- * (effective next cycle — no immediate Stripe charge/credit; the 4c ledger does not
+ * (effective next cycle - no immediate Stripe charge/credit; the 4c ledger does not
  * true-up the switch), then updates the subscription metadata so future webhooks read
  * the new interval. The anchor stays the same (the active set is unchanged); each item
  * keeps its role (anchor → standalone[newInterval], others → addon[newInterval]).
  *
  * Throws `BillingNotStartedError` if there is no active subscription. The local
  * `billingInterval` column is flipped by the orchestrator (via `setBillingInterval`),
- * not here — this function only does the Stripe-side reprice + metadata update.
+ * not here - this function only does the Stripe-side reprice + metadata update.
  */
 export async function switchSubscriptionInterval(
   workspaceId: WorkspaceId,
@@ -407,7 +407,7 @@ export async function switchSubscriptionInterval(
 
   for (const key of active) {
     const itemId = await getStoredItemId(workspaceId, key);
-    if (!itemId) continue; // legacy row with no stored item — skip
+    if (!itemId) continue; // legacy row with no stored item - skip
     const role = key === anchor ? "standalone" : "addon";
     const priceId = getModulePriceId(key, role, interval);
     await stripe.subscriptionItems.update(itemId, {

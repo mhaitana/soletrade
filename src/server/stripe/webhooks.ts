@@ -4,10 +4,10 @@ import { env } from "@/shared/lib/env";
 import { getStripe } from "./client";
 
 /**
- * Stripe webhook verification (brief §4 — signature verification on every
+ * Stripe webhook verification (brief §4 - signature verification on every
  * webhook). Throws a clear boundary error if `STRIPE_WEBHOOK_SECRET` is unset,
  * and re-throws Stripe's `StripeSignatureVerificationError` when the signature
- * is missing/invalid — the route handler maps those to a 400.
+ * is missing/invalid - the route handler maps those to a 400.
  */
 
 export function verifyStripeWebhook(rawBody: string, signature: string | null): Stripe.Event {
@@ -21,7 +21,7 @@ export function verifyStripeWebhook(rawBody: string, signature: string | null): 
     throw new StripeSignatureMissingError("Missing stripe-signature header.");
   }
   // constructEvent throws Stripe.errors.StripeSignatureVerificationError on a
-  // bad signature — the route handler catches that and returns 400.
+  // bad signature - the route handler catches that and returns 400.
   return getStripe().webhooks.constructEvent(rawBody, signature, secret);
 }
 

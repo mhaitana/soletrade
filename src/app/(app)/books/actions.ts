@@ -222,7 +222,7 @@ export async function loadBooksPage(params?: {
       dateTo: range.end,
       limit: 100,
     }),
-    // Summary: type + date range (NO search — the header is the period overview), full
+    // Summary: type + date range (NO search - the header is the period overview), full
     // period fetch capped at 2000. Aggregated in JS by the pure `summarizeTransactions`.
     listTransactions(ctx.workspaceId, {
       type: params?.type,

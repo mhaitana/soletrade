@@ -65,7 +65,7 @@ const switchWorkspaceSchema = z.object({ workspaceId: z.string().uuid() });
 export type SwitchWorkspaceResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Switch the active workspace. Verifies membership server-side — the
+ * Switch the active workspace. Verifies membership server-side - the
  * client-supplied workspace id is only ever used as a candidate, never trusted.
  */
 export async function switchWorkspaceAction(input: unknown): Promise<SwitchWorkspaceResult> {

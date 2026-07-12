@@ -3,11 +3,11 @@ import * as React from "react";
 import { cn } from "@/shared/lib/utils";
 
 /**
- * <ListRows> — shared wrapper for the divided `<ul>` row lists that were
+ * <ListRows> - shared wrapper for the divided `<ul>` row lists that were
  * duplicated across customers, files, audit log, and activity feed. Encapsulates
  * the Neutral Pro list chrome: hairline rounded container, divided rows.
  *
- * Presentational only — callers own row content via `renderItem`. Stays an RSC.
+ * Presentational only - callers own row content via `renderItem`. Stays an RSC.
  */
 export type ListRowsProps<T> = {
   items: T[];

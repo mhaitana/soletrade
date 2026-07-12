@@ -9,7 +9,7 @@ import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 
 /**
- * Credit ledger service (brief §4 — "credit ledger, never a mutable balance").
+ * Credit ledger service (brief §4 - "credit ledger, never a mutable balance").
  * Append-only: the only mutator is `appendCreditEntry`, called by the semantic
  * functions below. No update or delete is ever exposed. The balance is ALWAYS the
  * derived `SUM(amount_cents)` over these rows, never a stored column.
@@ -46,7 +46,7 @@ export interface CreditEntryInput {
   actorUserId?: UserId;
   stripeInvoiceId?: string;
   stripeRefundId?: string;
-  /** Optional expiry — only meaningful for grant/promotion rows. */
+  /** Optional expiry - only meaningful for grant/promotion rows. */
   expiresAt?: Date;
   metadata?: Record<string, unknown>;
 }
@@ -111,10 +111,10 @@ function toLedgerRow(r: {
 }
 
 /**
- * The derived credit balance for a workspace (in cents). Always computed — never
+ * The derived credit balance for a workspace (in cents). Always computed - never
  * stored. Returns 0 when no ledger rows exist. PostgREST exposes no `SUM` aggregate
  * (only `count` via `head`), so the balance is reduced client-side over the
- * `amount_cents` column — the ledger is append-only with integer cents, so this is
+ * `amount_cents` column - the ledger is append-only with integer cents, so this is
  * an exact sum (and the authoritative atomic balance check lives in the
  * `consume_credit` RPC, not here).
  */
@@ -196,7 +196,7 @@ export async function grantCredit(
 }
 
 /**
- * Issue promotional credit to a workspace (brief §10.7 — `PromotionApplied` is a
+ * Issue promotional credit to a workspace (brief §10.7 - `PromotionApplied` is a
  * distinct ledger type from a plain grant). Same balance semantics as
  * {@link grantCredit}; optional `expiresAt` lets the credit-expired cron reverse
  * it when it lapses. Publishes `CreditIssued` (a promotion is still a credit
@@ -321,7 +321,7 @@ export async function refundCredit(
 
 /**
  * Manual admin adjustment (signed). Positive adjustments also emit
- * `CreditIssued`; negative adjustments audit only (no activity event — a
+ * `CreditIssued`; negative adjustments audit only (no activity event - a
  * deduction is internal bookkeeping, not a user-facing credit grant).
  */
 export async function adjustCredit(
@@ -359,7 +359,7 @@ export async function adjustCredit(
 
 /**
  * List a workspace's ledger entries, newest-first. Workspace-isolated (IDOR-safe)
- * — only rows for `workspaceId` are ever returned.
+ * - only rows for `workspaceId` are ever returned.
  */
 export async function listCreditLedger(
   workspaceId: WorkspaceId,
@@ -380,13 +380,13 @@ export async function listCreditLedger(
 }
 
 /**
- * Reverse grant/promotion rows whose `expiresAt` has passed (brief §10.7 —
+ * Reverse grant/promotion rows whose `expiresAt` has passed (brief §10.7 -
  * `CreditExpired`). For each due entry, append a negative `expired` row that
  * references the original via `metadata.originalEntryId`; the balance (derived
  * `SUM`) drops automatically. Idempotent: a pre-check plus the
  * `credit_ledger_expired_original_unique` partial unique index guarantee one
  * expired row per original even under concurrent cron runs. Returns the count
- * of newly-expired entries. Best-effort per entry — a failure on one row logs
+ * of newly-expired entries. Best-effort per entry - a failure on one row logs
  * and continues to the next.
  */
 export async function markExpiredCredits(now: Date = new Date()): Promise<number> {
@@ -441,7 +441,7 @@ export async function markExpiredCredits(now: Date = new Date()): Promise<number
       });
       expired += 1;
     } catch (err) {
-      // The partial unique index is the race-safe backstop — a concurrent expire
+      // The partial unique index is the race-safe backstop - a concurrent expire
       // hitting the same grant throws here; log and continue.
       console.error("[credits] failed to expire entry", { originalEntryId, err });
     }

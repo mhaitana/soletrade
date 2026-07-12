@@ -106,7 +106,7 @@ describe("formatKm", () => {
   });
 });
 
-describe("summarizeDrive — Wave 2 (weekly + deduction + profit)", () => {
+describe("summarizeDrive - Wave 2 (weekly + deduction + profit)", () => {
   it("defaults deduction/expenses/profit to 0 when no opts supplied (backward compatible)", () => {
     const s = summarizeDrive([earning({ amountCents: 1000, platform: "uber" })], []);
     expect(s.mileageDeductionCents).toBe(0);

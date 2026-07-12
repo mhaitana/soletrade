@@ -53,7 +53,7 @@ export function SignupForm({ initialCheckEmail = false }: { initialCheckEmail?: 
     <div className="space-y-4">
       {showCheckEmail ? (
         <p className="text-sm text-muted-foreground" role="status">
-          We&apos;ve sent you a sign-up link — check your email
+          We&apos;ve sent you a sign-up link - check your email
           {process.env.NODE_ENV === "development" ? (
             <>
               {" "}

@@ -14,10 +14,10 @@ import {
 } from "./index";
 
 /**
- * Wave 4 Part A integration: the full invitation lifecycle — invite → get-by-token →
+ * Wave 4 Part A integration: the full invitation lifecycle - invite → get-by-token →
  * resend → revoke, plus the accept path (new user joins). DB-gated (skips without DATABASE_URL).
  * UUID suffixes `...0000e5`/`...0000e6` are unique to this file (e1/e2 are used by the
- * files integration test — sharing them caused a cross-file FK collision under parallel
+ * files integration test - sharing them caused a cross-file FK collision under parallel
  * execution, so this file moved off them).
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);

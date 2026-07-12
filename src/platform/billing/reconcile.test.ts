@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { mapStripeStatusToLocal, mapCheckoutSessionToUpdate } from "./reconcile";
 
 /**
- * Unit tests for the pure reconcile mappers. No DB, no Stripe I/O — synthetic
+ * Unit tests for the pure reconcile mappers. No DB, no Stripe I/O - synthetic
  * Stripe objects with only the picked fields.
  */
 
@@ -56,7 +56,7 @@ describe("mapCheckoutSessionToUpdate", () => {
 
   it("coerces non-string customer to a string", () => {
     // Stripe types customer as string | Customer | null. The mapper uses String() so a
-    // null is coerced to "null" (the route guards against this in practice —
+    // null is coerced to "null" (the route guards against this in practice -
     // checkout.session.completed always carries a customer id).
     const session = {
       customer: null,

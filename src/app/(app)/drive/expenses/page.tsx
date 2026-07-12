@@ -133,7 +133,7 @@ export default async function ExpensesPage({
                           </span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {vehicle ? vehicle.name : "—"}
+                          {vehicle ? vehicle.name : "-"}
                         </td>
                         <td className="px-4 py-3">
                           <Link

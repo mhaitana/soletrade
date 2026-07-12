@@ -9,7 +9,8 @@ export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 export type ModuleMeta = {
   key: ModuleKey;
-  name: string; // "soletrade Invoices"
+  /** Concise in-app module label ("Invoices"). The full `soletrade Workspace - Invoices` form is used only for Stripe product display names. */
+  name: string;
   shortName: string; // "Invoices"
   description: string;
   href: string; // app route
@@ -19,7 +20,7 @@ export type ModuleMeta = {
 export const MODULES: Record<ModuleKey, ModuleMeta> = {
   invoices: {
     key: "invoices",
-    name: "soletrade Invoices",
+    name: "Invoices",
     shortName: "Invoices",
     description: "Bill clients and accept card payments.",
     href: "/invoices",
@@ -27,7 +28,7 @@ export const MODULES: Record<ModuleKey, ModuleMeta> = {
   },
   books: {
     key: "books",
-    name: "soletrade Books",
+    name: "Books",
     shortName: "Books",
     description: "Track income, expenses, and receipts.",
     href: "/books",
@@ -35,7 +36,7 @@ export const MODULES: Record<ModuleKey, ModuleMeta> = {
   },
   drive: {
     key: "drive",
-    name: "soletrade Drive",
+    name: "Drive",
     shortName: "Drive",
     description: "Log gig earnings and mileage.",
     href: "/drive",
@@ -43,7 +44,7 @@ export const MODULES: Record<ModuleKey, ModuleMeta> = {
   },
   quotes: {
     key: "quotes",
-    name: "soletrade Quotes",
+    name: "Quotes",
     shortName: "Quotes",
     description: "Send proposals and convert to invoices.",
     href: "/quotes",

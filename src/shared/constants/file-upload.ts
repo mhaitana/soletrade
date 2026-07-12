@@ -1,5 +1,5 @@
 /**
- * File-upload MIME allowlist (brief §13 — "file upload type validation").
+ * File-upload MIME allowlist (brief §13 - "file upload type validation").
  *
  * The server boundary (`/api/files/upload-url`) enforces this via a Zod refine;
  * the UI `accept` attribute mirrors it so the OS picker only offers valid types.

@@ -104,7 +104,7 @@ describe("buildPriceIdToModuleMap", () => {
     expect(map.size).toBe(MODULE_KEYS.length * 2 * 2); // 4 modules × 2 roles × 2 intervals
   });
 
-  it("omits prices whose env var is unset (defensive — partial config)", async () => {
+  it("omits prices whose env var is unset (defensive - partial config)", async () => {
     delete process.env.STRIPE_PRICE_BOOKS_ADDON_MONTHLY;
     const { buildPriceIdToModuleMap } = await freshImport();
     const map = buildPriceIdToModuleMap();

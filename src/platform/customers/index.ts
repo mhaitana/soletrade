@@ -116,7 +116,7 @@ export async function listCustomers(
     .is("deleted_at", null);
   const search = opts?.search?.trim();
   if (search) {
-    // ILIKE across name/email/company — the original ORd three parameterized ilike
+    // ILIKE across name/email/company - the original ORd three parameterized ilike
     // calls. PostgREST expresses this as an `or` filter; the term is pgQuote'd so
     // commas/parens/quotes in the search don't break the expression structure.
     const term = pgQuote(`%${search}%`);
@@ -128,7 +128,7 @@ export async function listCustomers(
 
 /**
  * Fetch a single customer, scoped to the workspace. This is the IDOR-safe getter
- * — it never returns a customer belonging to another workspace.
+ * - it never returns a customer belonging to another workspace.
  */
 export async function getCustomer(
   workspaceId: WorkspaceId,
@@ -184,7 +184,7 @@ export async function updateCustomer(
 ): Promise<void> {
   const supabase = getDataClient();
   // Explicit column-keyed shape (not a loose Record<string, unknown>) so the typed
-  // `.update()` payload accepts it — the generated Update type rejects an `unknown`
+  // `.update()` payload accepts it - the generated Update type rejects an `unknown`
   // index signature. `updated_at` is always set; the rest are conditional on the patch.
   const set: {
     updated_at: string;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cn } from "@/shared/lib/utils";
 
 /**
- * SegmentedControl — a single bordered group of mutually-exclusive filter pills
+ * SegmentedControl - a single bordered group of mutually-exclusive filter pills
  * (period / status / view). Replaces the ad-hoc `<Link>` pill groups on the
  * dashboard, invoices, quotes, books and drive list pages.
  *
@@ -24,7 +24,7 @@ export type SegmentedItem = {
 
 export type SegmentedControlProps = {
   items: SegmentedItem[];
-  /** Accessible name for the group (required — exposes purpose to AT). */
+  /** Accessible name for the group (required - exposes purpose to AT). */
   label: string;
   className?: string;
 };

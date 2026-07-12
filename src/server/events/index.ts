@@ -55,7 +55,7 @@ export const EVENT_TYPES = [
 export type EventType = (typeof EVENT_TYPES)[number];
 
 export interface BusEvent {
-  /** Event type string — one of EVENT_TYPES or a module-defined type. */
+  /** Event type string - one of EVENT_TYPES or a module-defined type. */
   type: string;
   workspaceId: WorkspaceId;
   actorUserId?: UserId;
@@ -96,7 +96,7 @@ export function clearEventBus(): void {
 
 /**
  * Publish an event. Persists to the activity feed (best effort) then notifies
- * subscribers in parallel (best effort — a failing handler doesn't stop others).
+ * subscribers in parallel (best effort - a failing handler doesn't stop others).
  */
 export async function publishEvent(event: BusEvent): Promise<void> {
   if (persister) {

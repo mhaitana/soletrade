@@ -2,22 +2,22 @@ import { moduleRefundCents, type Interval } from "@/platform/billing/pricing";
 import type { ModuleKey } from "@/shared/constants/modules";
 
 /**
- * Cancellation engine (brief §10.6). Pure: no `server-only`, no DB, no Stripe —
+ * Cancellation engine (brief §10.6). Pure: no `server-only`, no DB, no Stripe -
  * safe to unit-test and import from server actions. Decides *which* cancellation
  * options a workspace is offered and what each option costs, given the workspace's
  * active module set and billing state. The execution path (`modules.ts`) consumes
  * the chosen option and performs the side effects (Stripe / ledger / row update).
  *
  * Two branches (brief §10.6):
- *   - **Branch A — continuous**: removing a module while ≥1 other module stays
+ *   - **Branch A - continuous**: removing a module while ≥1 other module stays
  *     active. Three options: keep-until-end-of-cycle (no charge, access runs to
  *     period end), immediate platform credit (pro-rated refund to the credit
  *     ledger), immediate card refund (pro-rated refund to the original payment
  *     method). The credit option is the recommended default.
- *   - **Branch B — offboarding**: the removal leaves zero active modules — either
+ *   - **Branch B - offboarding**: the removal leaves zero active modules - either
  *     because the last active module is being removed, or the whole subscription
  *     is being cancelled (`moduleKey` undefined = cancel-all). Two options:
- *     keep-until-end-of-cycle, immediate card refund. **No platform credit** — the
+ *     keep-until-end-of-cycle, immediate card refund. **No platform credit** - the
  *     workspace is leaving, so credit is useless to them.
  *
  * When there is no active billing (null interval / null anchor), only the
@@ -76,7 +76,7 @@ function resolvePeriodEnd(
 /**
  * Compute the cancellation options for a workspace per spec §10.6. See the module
  * docstring for the branch logic. `amountCents` for the credit/refund options is
- * the pro-rated refund (`moduleRefundCents`) — for cancel-all it's the sum over all
+ * the pro-rated refund (`moduleRefundCents`) - for cancel-all it's the sum over all
  * active modules; for a single module it's that module's refund.
  */
 export function getCancellationOptions(input: CancellationInput): CancellationPreview {
@@ -121,7 +121,7 @@ export function getCancellationOptions(input: CancellationInput): CancellationPr
     };
   }
 
-  // Branch B: keep, refund. NO credit (offboarding — credit is useless).
+  // Branch B: keep, refund. NO credit (offboarding - credit is useless).
   return {
     branch: "offboarding",
     periodEnd,

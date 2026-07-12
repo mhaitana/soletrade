@@ -24,7 +24,7 @@ import {
  *   DATABASE_URL="postgresql://..." pnpm test:ci
  *
  * UUID suffixes `...0000f3`/`...0000f7`/`...0000f8` are unique to this file (f1 is used by
- * the workspace-settings test and f2 by the books/tax test — sharing them caused cross-file
+ * the workspace-settings test and f2 by the books/tax test - sharing them caused cross-file
  * FK collisions under parallel execution, so this file moved off them).
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
@@ -68,7 +68,7 @@ describe.skipIf(!HAS_DB)("notifications integration (requires DATABASE_URL)", ()
   });
 
   it("memberIdsWithPermission resolves only members whose role grants it", async () => {
-    // view:audit is granted to owner/admin/accountant — not employee.
+    // view:audit is granted to owner/admin/accountant - not employee.
     const withAudit = await memberIdsWithPermission(ws1!, "view:audit");
     expect(withAudit).toContain(owner);
     expect(withAudit).not.toContain(employee);

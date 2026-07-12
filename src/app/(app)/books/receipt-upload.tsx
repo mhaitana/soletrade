@@ -9,7 +9,7 @@ import { UPLOAD_ACCEPT, isAllowedUploadMime } from "@/shared/constants/file-uplo
 import type { FileId } from "@/shared/types/ids";
 
 /**
- * Receipt upload control (Phase 11b) — used in the Books transaction form. Bytes
+ * Receipt upload control (Phase 11b) - used in the Books transaction form. Bytes
  * go straight to Supabase Storage via a signed upload URL minted by
  * `/api/files/upload-url`; this component only persists the resulting `fileId` and
  * hands it to the parent form through `onChange` (sent to `createTransactionAction`
@@ -18,7 +18,7 @@ import type { FileId } from "@/shared/types/ids";
  * The upload is optional. On edit, an existing `receiptFileId` renders as a
  * "View receipt" link (a read URL is minted on click) plus a Remove button.
  */
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches the upload-url route cap.
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB - matches the upload-url route cap.
 
 interface PendingUpload {
   fileId: FileId;
@@ -50,7 +50,7 @@ export function ReceiptUpload({
       setError("Receipt is too large (10 MB max).");
       return;
     }
-    // Client-side type gate mirrors the server allowlist — fail fast with a
+    // Client-side type gate mirrors the server allowlist - fail fast with a
     // clear message instead of letting the server return "Unsupported file type".
     if (!isAllowedUploadMime(file.type)) {
       setError("Receipts must be an image or PDF.");

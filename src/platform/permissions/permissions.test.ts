@@ -98,7 +98,7 @@ describe("implication rules", () => {
   });
 
   it("view does NOT imply any other verb", () => {
-    // readonly has view:invoice only — must not get create/update/delete/manage
+    // readonly has view:invoice only - must not get create/update/delete/manage
     expect(can("readonly", "manage:invoice")).toBe(false);
     expect(can("readonly", "create:invoice")).toBe(false);
   });

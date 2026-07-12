@@ -4,11 +4,11 @@ import type { Database, Json } from "@/server/db/types";
 
 /**
  * Query helpers for the Supabase data client (migration off Drizzle). Server infra
- * only — no business logic (the `shared` boundary ban doesn't apply; this is `server/`).
+ * only - no business logic (the `shared` boundary ban doesn't apply; this is `server/`).
  *
  * PostgREST returns every call as `{ data, error }`. The unwrap helpers below take the
  * un-awaited query builder (a thenable), `await` it themselves, and throw on `error` so
- * callers get the typed `data` back directly — the closest thing to Drizzle's throw-on-error
+ * callers get the typed `data` back directly - the closest thing to Drizzle's throw-on-error
  * `db.select(...)` ergonomics. Awaiting inside the helper (rather than `unwrap(await ...)`)
  * is required: passing `await <query>` inline makes TypeScript infer the row type as `never`
  * (a quirk with supabase-js' conditional select-string types); the thenable generic
@@ -25,7 +25,7 @@ type RpcName = keyof PublicFunctions;
  * to `string | null` so callers can pass `null` for nullable columns (e.g. `due_date`,
  * `customer_id`, `notes`). It preserves the `?` optionality modifier, so required keys
  * must still be present and typos are still caught (fresh object literals are contextually
- * typed against this shape). Dates are passed as ISO strings — the generated type already
+ * typed against this shape). Dates are passed as ISO strings - the generated type already
  * says `string` for `timestamptz` params, and the SQL function casts the string to
  * `timestamptz` / via `jsonb_populate_record`.
  *
@@ -47,7 +47,7 @@ type LooseArgs<F extends RpcName> = {
 
 /**
  * Call a PL/pgSQL RPC function and return its `{ data, error }` envelope (unlike
- * `unwrap`, this does NOT throw on error — callers of the atomic writers need to
+ * `unwrap`, this does NOT throw on error - callers of the atomic writers need to
  * inspect `error.code`, e.g. `23505` for a unique-number race to drive the retry loop,
  * or `45003` for the credit-overdraft guard). The `error` shape is narrowed to the two
  * fields callers read (`code`, `message`).
@@ -88,7 +88,7 @@ export async function unwrap<R extends Envelope>(
 
 /**
  * Unwrap a single-row PostgREST response: throw on error, return the row or `null`
- * (preserving the `| null` of `R["data"]`). Use with `.maybeSingle()` (zero-or-one) —
+ * (preserving the `| null` of `R["data"]`). Use with `.maybeSingle()` (zero-or-one) -
  * for exactly-one `.single()`, prefer `unwrapOne`.
  */
 export async function unwrapMaybe<R extends Envelope>(query: PromiseLike<R>): Promise<R["data"]> {
@@ -121,7 +121,7 @@ export async function unwrapOne<R extends Envelope>(
 /**
  * Throw on error for a mutation that doesn't return rows (no `.select()` chained).
  * Use for `.insert()` / `.update()` / `.delete()` / `.upsert()` writes whose only
- * signal is success-vs-error — `data` is discarded.
+ * signal is success-vs-error - `data` is discarded.
  */
 export async function unwrapVoid<R extends Envelope>(query: PromiseLike<R>): Promise<void> {
   const r = await query;
@@ -132,12 +132,12 @@ export async function unwrapVoid<R extends Envelope>(query: PromiseLike<R>): Pro
 
 /**
  * Parse a PostgREST `timestamp without time zone` string into a Date interpreted as
- * **UTC** — matching what node-postgres (Drizzle) returned for the same column. EVERY
+ * **UTC** - matching what node-postgres (Drizzle) returned for the same column. EVERY
  * timestamp column in our schema is `timestamp without time zone` (none use
  * `withTimezone: true`), and PostgREST serializes that type as a bare ISO string with
  * NO trailing offset (e.g. `"2026-03-01T00:00:00"`). `new Date(bareIso)` interprets a
  * no-offset string as LOCAL time, so on a non-UTC host it shifts the instant by the tz
- * offset — e.g. on Australia (+11) `2026-03-01T00:00:00` becomes `2026-02-28T13:00:00Z`,
+ * offset - e.g. on Australia (+11) `2026-03-01T00:00:00` becomes `2026-02-28T13:00:00Z`,
  * which flips a 1-March date into February and breaks `getUTCMonth()`-based period
  * bucketing in `calc.ts`/`periods.ts`. node-postgres parses oid 1114 as UTC
  * (`new Date(Date.UTC(...))`), so appending `Z` reproduces Drizzle's Date exactly.
@@ -155,7 +155,7 @@ export function parsePgTimestamp(value: string): Date {
  * commas, parentheses, and quotes inside the value don't break the expression structure.
  * PostgREST uses `,` to separate `or`/`and` items and `()` for nesting, so an unquoted
  * value containing either would mis-parse. Use for values inside strings passed to
- * `.or("col.op.<quote(v)>,...")` — e.g. search terms in a multi-column `ilike` OR.
+ * `.or("col.op.<quote(v)>,...")` - e.g. search terms in a multi-column `ilike` OR.
  */
 export function pgQuote(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;

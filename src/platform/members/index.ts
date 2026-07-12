@@ -109,7 +109,7 @@ export async function acceptInvitation(
 ): Promise<WorkspaceId> {
   // The `accept_invitation` RPC does the validation + upsert + mark-accepted atomically
   // (locking the invitation row FOR UPDATE so two concurrent accepts can't both succeed).
-  // It raises on not-found/expired/wrong-email — PostgREST surfaces those as `error` with
+  // It raises on not-found/expired/wrong-email - PostgREST surfaces those as `error` with
   // a message. Returns (workspace_id, role, email) so the post-rpc event/audit have the
   // metadata without a second read.
   const supabase = getDataClient();
@@ -195,7 +195,7 @@ const CHANGEABLE_ROLES: WorkspaceRole[] = [
 
 /**
  * Change an active member's role. Guards:
- * - `newRole` must be one of the changeable roles (not `owner` — ownership
+ * - `newRole` must be one of the changeable roles (not `owner` - ownership
  *   transfer is a separate flow).
  * - The workspace owner's role can't be changed here.
  * - An actor can't change their own role (self-demotion/promotion is a
@@ -317,7 +317,7 @@ export async function listPendingInvitations(workspaceId: WorkspaceId) {
 /** A public invitation lookup by token (for the `/invite?token=...` accept page). Returns
  *  the invitation + workspace name + inviter name, or `null` if the token doesn't match a
  *  pending, unexpired invitation. Does not leak whether the token exists vs is revoked vs
- *  expired — the page renders the same "not available" state for all. */
+ *  expired - the page renders the same "not available" state for all. */
 export interface PublicInvitation {
   id: WorkspaceInvitationId;
   workspaceId: WorkspaceId;
@@ -334,7 +334,7 @@ export interface PublicInvitation {
 
 export async function getInvitationByToken(token: string): Promise<PublicInvitation | null> {
   const supabase = getDataClient();
-  // Embed the parent workspace (name) and the inviter's user mirror (full_name) — both
+  // Embed the parent workspace (name) and the inviter's user mirror (full_name) - both
   // many-to-one → single nested objects, matching the old innerJoin(workspaces) +
   // leftJoin(users).
   const row = await unwrapMaybe(

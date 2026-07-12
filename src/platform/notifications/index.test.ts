@@ -70,7 +70,7 @@ describe("notifications (event-driven email)", () => {
     await publish("InvoiceSent", meta());
     expect(sends).toHaveLength(1);
     expect(sends[0]?.to).toBe("customer@globex.com");
-    expect(sends[0]?.subject).toBe("Invoice INV-2026-0009 from soletrade labs");
+    expect(sends[0]?.subject).toBe("Invoice INV-2026-0009");
     expect(sends[0]?.text).toContain(`/i/tok-xyz`);
     expect(sends[0]?.html).toContain(`href="`);
   });
@@ -126,7 +126,7 @@ describe("notifications (quote-sent email)", () => {
     await publish("QuoteSent", quoteMeta());
     expect(sends).toHaveLength(1);
     expect(sends[0]?.to).toBe("buyer@globex.com");
-    expect(sends[0]?.subject).toBe("Quote QUO-2026-0042 from soletrade labs");
+    expect(sends[0]?.subject).toBe("Quote QUO-2026-0042");
     expect(sends[0]?.text).toContain(`/q/quo-tok-abc`);
     expect(sends[0]?.html).toContain(`href="`);
   });

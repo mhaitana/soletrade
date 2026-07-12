@@ -13,20 +13,20 @@ export interface UserMirrorRow {
 export interface EnsureUserMirrorInput {
   id: UserId;
   email: string;
-  /** Optional — when omitted, an existing full_name is preserved (not nulled). */
+  /** Optional - when omitted, an existing full_name is preserved (not nulled). */
   fullName?: string | null;
 }
 
 /**
  * Upsert the public.users mirror of the Supabase Auth user. The Supabase auth
- * user id is the primary key, so this is idempotent — safe to call at every
+ * user id is the primary key, so this is idempotent - safe to call at every
  * session-establishment point (signup, magic-link callback, defensively before
  * workspace creation). When `fullName` is omitted on an update, the existing
  * value is preserved rather than overwritten with NULL.
  *
  * PostgREST `.upsert()` with `onConflict: 'id'` updates only the columns present
  * in the payload on conflict, so omitting `full_name` when it isn't supplied
- * preserves the existing value — matching the old Drizzle conditional spread.
+ * preserves the existing value - matching the old Drizzle conditional spread.
  */
 export async function ensureUserMirror(input: EnsureUserMirrorInput): Promise<void> {
   const supabase = getDataClient();
@@ -58,10 +58,10 @@ export async function getUser(id: UserId): Promise<UserMirrorRow | null> {
 }
 
 /**
- * Update the signed-in user's full name on the `public.users` mirror (Wave 4 — `/settings/account`).
+ * Update the signed-in user's full name on the `public.users` mirror (Wave 4 - `/settings/account`).
  * The mirror is the display source of truth (the AppShell + account menu read it), so updating it
  * here is sufficient for the UI to reflect the new name. Supabase Auth `user_metadata` is not
- * updated — it isn't read for display. An empty/whitespace name is rejected by the caller's Zod
+ * updated - it isn't read for display. An empty/whitespace name is rejected by the caller's Zod
  * schema; this trims + stores `null` if somehow empty.
  */
 export async function updateUserFullName(id: UserId, fullName: string): Promise<void> {

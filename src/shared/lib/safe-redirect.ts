@@ -6,7 +6,7 @@
  * not a scheme like `https://evil.com`. Returns `null` otherwise so callers can
  * fall back to a default destination.
  *
- * Pure + synchronous — safe to unit-test and to call from server actions, route
+ * Pure + synchronous - safe to unit-test and to call from server actions, route
  * handlers, and the proxy.
  */
 export function safeNext(next: string | null | undefined): string | null {

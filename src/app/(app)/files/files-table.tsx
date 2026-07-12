@@ -17,7 +17,7 @@ import type { FileRecord } from "@/platform/files";
 
 /**
  * Files list (Phase 11b). Each row shows the name, size, uploader, and relative
- * time. "View" mints a short-TTL read URL on click and opens it in a new tab —
+ * time. "View" mints a short-TTL read URL on click and opens it in a new tab -
  * bytes are served by Storage, never proxied through our server. "Delete" calls
  * the `deleteFileAction` Server Action (manage:file-gated) then refreshes.
  */

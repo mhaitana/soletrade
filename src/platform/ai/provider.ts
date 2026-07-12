@@ -12,7 +12,7 @@ import { env } from "@/shared/lib/env";
  * Claude / GPT release can be opted into without a code change.
  */
 
-/** True when no real provider is configured — the route uses the canned mock stream. */
+/** True when no real provider is configured - the route uses the canned mock stream. */
 export function isMockProvider(): boolean {
   return env.AI_PROVIDER === "mock";
 }
@@ -20,7 +20,7 @@ export function isMockProvider(): boolean {
 /**
  * Resolve the language model for the configured real provider. Throws if called
  * for the mock provider (the caller must branch to the mock stream instead) or
- * if the provider's API key is unset — the boundary, not the env schema, surfaces
+ * if the provider's API key is unset - the boundary, not the env schema, surfaces
  * the missing-secret error (keeps the app bootable without keys per Phase 0).
  */
 export function getAIModel(): LanguageModel {
@@ -39,7 +39,7 @@ export function getAIModel(): LanguageModel {
     }
     case "mock":
       throw new Error(
-        "getAIModel() called for the mock provider — use streamMockAssistant() instead.",
+        "getAIModel() called for the mock provider - use streamMockAssistant() instead.",
       );
   }
 }

@@ -26,7 +26,7 @@ import {
  * (passed from the layout so first paint shows the badge); refreshes the list +
  * count from the server action on open. Clicking an item marks it read and
  * navigates to the entity (invoice/quote detail). "Mark all read" clears the
- * badge. No polling — adequate for this scale; `router.refresh()` updates the
+ * badge. No polling - adequate for this scale; `router.refresh()` updates the
  * count after a mark.
  */
 type RecentItem = NotificationBellData["recent"][number];
@@ -64,7 +64,7 @@ export function NotificationBell({ initialUnreadCount }: { initialUnreadCount: n
       try {
         await markReadAction(item.id);
       } catch {
-        // non-fatal — still navigate
+        // non-fatal - still navigate
       }
       router.refresh();
     }

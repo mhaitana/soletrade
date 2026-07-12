@@ -40,7 +40,7 @@ describe("invoiceSentEmail", () => {
   it("includes the invoice number in the subject + a working pay link in both bodies", () => {
     const m = meta();
     const { subject, html, text } = invoiceSentEmail(m, APP_URL);
-    expect(subject).toBe("Invoice INV-2026-0007 from soletrade labs");
+    expect(subject).toBe("Invoice INV-2026-0007");
     expect(text).toContain(`${APP_URL}/i/abc-123-token`);
     expect(html).toContain(`href="${APP_URL}/i/abc-123-token"`);
     expect(html).toContain("View & pay invoice");
@@ -71,7 +71,7 @@ describe("invoiceOverdueEmail", () => {
 
   it("mentions the due date when set", () => {
     const { text } = invoiceOverdueEmail(meta({ dueDate: new Date("2026-08-01") }), APP_URL);
-    // `.*` (not `.+`) so this matches both en-AU "1 Aug 2026" and en-US "Aug 1, 2026" —
+    // `.*` (not `.+`) so this matches both en-AU "1 Aug 2026" and en-US "Aug 1, 2026" -
     // formatDate uses the host locale, so the test must be day/month-order agnostic.
     expect(text).toMatch(/was due .*Aug.*2026/);
   });
@@ -97,7 +97,7 @@ describe("invoicePaidEmail", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Phase 8 — quote email templates
+// Phase 8 - quote email templates
 // ─────────────────────────────────────────────────────────────────────────────
 
 function quoteMeta(overrides: Partial<QuoteEmailMeta> = {}): QuoteEmailMeta {
@@ -136,7 +136,7 @@ describe("quoteSentEmail", () => {
   it("includes the quote number in the subject + a working view link in both bodies", () => {
     const m = quoteMeta();
     const { subject, html, text } = quoteSentEmail(m, APP_URL);
-    expect(subject).toBe("Quote QUO-2026-0003 from soletrade labs");
+    expect(subject).toBe("Quote QUO-2026-0003");
     expect(text).toContain(`${APP_URL}/q/quo-token-xyz`);
     expect(html).toContain(`href="${APP_URL}/q/quo-token-xyz"`);
     expect(html).toContain("View quote");
@@ -151,7 +151,7 @@ describe("quoteSentEmail", () => {
 
   it("mentions the valid-until date when set", () => {
     const { text } = quoteSentEmail(quoteMeta({ validUntil: new Date("2026-08-15") }), APP_URL);
-    // `.*` (not `.+`) — formatDate uses the host locale, so accept either day/month order.
+    // `.*` (not `.+`) - formatDate uses the host locale, so accept either day/month order.
     expect(text).toMatch(/valid until .*Aug.*2026/);
   });
 });

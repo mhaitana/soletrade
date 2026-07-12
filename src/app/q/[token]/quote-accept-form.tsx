@@ -36,7 +36,7 @@ export function QuoteAcceptForm({
   const [nameError, setNameError] = useState<string>("");
   const [termsError, setTermsError] = useState<string>("");
 
-  // Signature pad — minimal dependency-free canvas. Declared directly in the component (not via
+  // Signature pad - minimal dependency-free canvas. Declared directly in the component (not via
   // a hook return) so the React Compiler doesn't flag ref access during render.
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
@@ -49,7 +49,7 @@ export function QuoteAcceptForm({
     const rect = c.getBoundingClientRect();
     // Scale pointer coords to the canvas's internal resolution (accounts for CSS size ≠
     // canvas attribute size). In practice width/height attrs match the rendered size, so the
-    // scale is 1:1 — this just keeps it robust.
+    // scale is 1:1 - this just keeps it robust.
     const sx = c.width / rect.width;
     const sy = c.height / rect.height;
     return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
@@ -90,7 +90,7 @@ export function QuoteAcceptForm({
       try {
         c.releasePointerCapture(e.pointerId);
       } catch {
-        // pointer may already be released — ignore
+        // pointer may already be released - ignore
       }
     }
   }
@@ -114,7 +114,7 @@ export function QuoteAcceptForm({
   function run(kind: "accept" | "decline") {
     setError("");
     if (kind === "accept") {
-      // Client-side guards (server doesn't enforce agreement — just captures the row).
+      // Client-side guards (server doesn't enforce agreement - just captures the row).
       if (accepterName.trim() === "") {
         setNameError("Please enter your name.");
         return;
@@ -154,7 +154,7 @@ export function QuoteAcceptForm({
         <div className="text-sm">
           <p className="font-medium text-emerald-800">Quote accepted</p>
           <p className="text-emerald-700">
-            Thank you — the business will be in touch with an invoice.
+            Thank you - the business will be in touch with an invoice.
           </p>
         </div>
       </div>
@@ -243,7 +243,7 @@ export function QuoteAcceptForm({
                 <div className="space-y-1.5">
                   <Label>Signature</Label>
                   <p className="text-xs text-muted-foreground">
-                    Draw your signature below, or leave it blank — your typed name is acceptable
+                    Draw your signature below, or leave it blank - your typed name is acceptable
                     evidence.
                   </p>
                   <canvas

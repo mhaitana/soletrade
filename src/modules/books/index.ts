@@ -22,7 +22,7 @@ import {
 
 /**
  * Books module service (Phase 6). Workspace-scoped CRUD for flat income/expense
- * transactions. All queries filter `.eq("workspace_id", workspaceId)` — never trust a
+ * transactions. All queries filter `.eq("workspace_id", workspaceId)` - never trust a
  * client workspace id; the caller resolves it from the session (`requireWorkspaceContext`).
  *
  * Unlike invoices, transactions have no lifecycle / status: a row is a dated ledger
@@ -75,7 +75,7 @@ export interface TransactionInput {
   sourceTripId?: DriveTripId | null;
   /**
    * Optional link to a receipt file (Phase 11b). Stored on
-   * `book_transactions.receipt_file_id` (no FK constraint — keeps Books decoupled from
+   * `book_transactions.receipt_file_id` (no FK constraint - keeps Books decoupled from
    * the files table at the DB level). Null for transactions without a receipt.
    */
   receiptFileId?: FileId | null;
@@ -115,7 +115,7 @@ export interface TransactionRow {
 /**
  * Columns selected from `book_transactions`, with the `customers` parent embedded via a
  * LEFT join (`!left`) so transactions with no customer still return with `customers: null`
- * — matching the original Drizzle `leftJoin`. `customerName` is read from the embedded
+ * - matching the original Drizzle `leftJoin`. `customerName` is read from the embedded
  * `customers.name`. The `date` column is `timestamp without time zone`; `parsePgTimestamp`
  * re-interprets the no-offset PostgREST string as UTC (matching node-postgres/Drizzle).
  */
@@ -189,7 +189,7 @@ async function assertCustomerInWorkspace(
 
 /**
  * Create a transaction. Validates the category matches `type` and the customer (if any) is in
- * the workspace. `actorId` is optional — `undefined` marks a system-generated transaction (e.g.
+ * the workspace. `actorId` is optional - `undefined` marks a system-generated transaction (e.g.
  * the `InvoicePaid` subscriber records income on behalf of the user who marked the invoice
  * paid, or the system for the Stripe webhook path); the audit log + event carry
  * `actorUserId: undefined` in that case.
@@ -207,7 +207,7 @@ export async function createTransaction(
   // Default currency from the workspace row (migration 0018); fall back to AUD if missing.
   const workspace = await getWorkspace(workspaceId);
   const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
-  // `date` is `timestamp without time zone`; `toISOString()` (UTC) round-trips exactly —
+  // `date` is `timestamp without time zone`; `toISOString()` (UTC) round-trips exactly -
   // PostgREST casts the Z-string to the no-tz type by keeping the UTC wall-time literal,
   // which is what node-postgres/Drizzle stored for the same Date.
   const rows = await unwrap(
@@ -297,11 +297,11 @@ export async function updateTransaction(
   if (patch.type !== undefined && patch.category !== undefined) {
     assertCategoryForType(patch.type, patch.category);
   } else if (patch.type !== undefined) {
-    // Type is changing but category isn't being supplied — the existing category may no
+    // Type is changing but category isn't being supplied - the existing category may no
     // longer be valid. Require the caller to supply a category when changing type.
     throw new Error("Category is required when changing transaction type.");
   } else if (patch.category !== undefined) {
-    // Category is changing without a type — validate against the EXISTING type.
+    // Category is changing without a type - validate against the EXISTING type.
     const supabase = getDataClient();
     const existing = await unwrapMaybe(
       supabase
@@ -322,7 +322,7 @@ export async function updateTransaction(
 
   const supabase = getDataClient();
   // Explicit column-keyed shape (not a loose Record<string, unknown>) so the typed
-  // `.update()` payload accepts it — the generated Update type rejects an `unknown`
+  // `.update()` payload accepts it - the generated Update type rejects an `unknown`
   // index signature. `updated_at` is always set; the rest are conditional on the patch.
   // Source-link columns (source_invoice_id etc.) are deliberately NOT mutable here,
   // matching the original Drizzle update set.
@@ -432,7 +432,7 @@ export async function listTransactions(
 ): Promise<TransactionRow[]> {
   const supabase = getDataClient();
   // Default 100 (the page list view); clamped to 2000 so the summary loader can fetch a full
-  // period. A workspace with >2000 transactions in a period gets an approximate summary —
+  // period. A workspace with >2000 transactions in a period gets an approximate summary -
   // DB-side aggregation is a later optimization.
   const limit = Math.min(opts?.limit ?? 100, 2000);
   let query = supabase
@@ -441,17 +441,17 @@ export async function listTransactions(
     .eq("workspace_id", workspaceId);
   if (opts?.type) query = query.eq("type", opts.type);
   if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
-  // `date` is `timestamp without time zone`; pass ISO-with-Z (UTC) for the bounds —
+  // `date` is `timestamp without time zone`; pass ISO-with-Z (UTC) for the bounds -
   // PostgREST casts to the no-tz type keeping the UTC wall-time literal, matching Drizzle.
   if (opts?.dateFrom) query = query.gte("date", opts.dateFrom.toISOString());
   if (opts?.dateTo) query = query.lte("date", opts.dateTo.toISOString());
   const search = opts?.search?.trim();
   if (search) {
-    // ILIKE across description + the joined customer's name/company — the original ORd
+    // ILIKE across description + the joined customer's name/company - the original ORd
     // three parameterized ilike calls over a `leftJoin customers`. PostgREST's `or`
     // filter can't reference embedded/foreign columns, so replicate the leftJoin OR in
     // two local-column-only steps (both ORs are on columns PostgREST's `or` supports):
-    //   (1) find customer ids in the workspace whose name OR company ILIKE the term — no
+    //   (1) find customer ids in the workspace whose name OR company ILIKE the term - no
     //       `deleted_at` filter, matching the original leftJoin (it didn't exclude
     //       soft-deleted customers);
     //   (2) match transactions whose description ILIKE the term OR whose `customer_id` is
@@ -482,7 +482,7 @@ export async function listTransactions(
 }
 
 /**
- * Fetch a single transaction, scoped to the workspace. IDOR-safe — returns null when the
+ * Fetch a single transaction, scoped to the workspace. IDOR-safe - returns null when the
  * transaction belongs to another workspace.
  */
 export async function getTransaction(

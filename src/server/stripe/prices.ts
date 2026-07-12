@@ -1,5 +1,6 @@
 import "server-only";
 import { env } from "@/shared/lib/env";
+import { brand } from "@/config/brand";
 import { getStripe } from "./client";
 import {
   MODULE_PRICES,
@@ -7,10 +8,10 @@ import {
   type Interval,
   type Role,
 } from "@/platform/billing/pricing";
-import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
+import { MODULES, MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 
 /**
- * Stripe Price resolution (brief §10 — anchor app + add-on stack discount).
+ * Stripe Price resolution (brief §10 - anchor app + add-on stack discount).
  *
  * Each module has FOUR recurring Stripe Prices: standalone × add-on, each in monthly
  * and annual variants. The anchor app (highest-standalone active module) is billed at
@@ -51,7 +52,7 @@ export function getModulePriceId(moduleKey: ModuleKey, role: Role, interval: Int
 }
 
 /**
- * The cents a (module × role × interval) Price bills at — derived from `MODULE_PRICES`,
+ * The cents a (module × role × interval) Price bills at - derived from `MODULE_PRICES`,
  * the single source of truth. Used by `stripe:setup` to create Price objects and by tests
  * to assert env ↔ catalog linkage.
  */
@@ -85,7 +86,7 @@ export function buildPriceIdToModuleMap(): Map<string, PriceIdMapping> {
 }
 
 /** The full Price-id map `Record<ModuleKey, Record<Role, Record<Interval, string>>>`,
- * resolved from env. Throws on the first unset key (fail-fast — callers run this only
+ * resolved from env. Throws on the first unset key (fail-fast - callers run this only
  * when all prices must be present, e.g. `stripe:setup`). */
 export type PriceIdMap = Record<ModuleKey, Record<Role, Record<Interval, string>>>;
 
@@ -119,12 +120,14 @@ export async function ensureStripePrices(): Promise<PriceIdMap> {
   const map = {} as PriceIdMap;
   for (const moduleKey of MODULE_KEYS) {
     // One Stripe Product per module keeps invoices clean (4 products, 4 prices each).
-    // The product id stays `soletrade-*` (a stable lookup key) even though the
-    // product display name is `soletrade OS — *`; changing the id would orphan existing
-    // Stripe products and subscriptions.
+    // The product id stays `soletrade-*` (a stable lookup key) even though the product
+    // display name is `soletrade Workspace - *`; changing the id would orphan existing Stripe
+    // products and subscriptions. NB: `findOrCreateProduct` reuses existing products by metadata,
+    // so already-created products keep their PRE-REBRAND display name until updated manually in
+    // the Stripe Dashboard - see docs/DEPLOYMENT.md / the branding follow-up list.
     const product = await findOrCreateProduct(
       `soletrade-${moduleKey}`,
-      `soletrade OS — ${moduleKey}`,
+      `${brand.productName} - ${MODULES[moduleKey].name}`,
     );
     map[moduleKey] = {
       standalone: {
@@ -169,6 +172,7 @@ async function findOrCreateProduct(slug: string, name: string): Promise<{ id: st
   if (found.data[0]) return found.data[0];
   const product = await stripe.products.create({
     name,
+    statement_descriptor: brand.stripeStatementDescriptor,
     metadata: { soletrade_product: slug },
   });
   return product;

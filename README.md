@@ -1,12 +1,14 @@
-# soletrade labs Suite
+# soletrade Workspace
 
-The `app.soletrade.example` SaaS monolith — a workspace-first, multi-module business
-operating system for solo traders, freelancers, and gig operators. Four launch modules
-(Invoices, Books, Drive, Quotes) share one foundation: auth, workspaces, billing,
-customers, files, activity, AI, permissions, and settings.
+soletrade Workspace is a unified business workspace for invoicing, quotes, bookkeeping,
+receipts, expenses, mileage, and earnings. One workspace to run your business - a
+workspace-first, multi-module product for solo traders, freelancers, and gig operators.
+Four launch modules (Invoices, Books, Drive, Quotes) share one foundation: auth,
+workspaces, billing, customers, files, activity, AI, permissions, and settings.
 
-> Built on strict [bulletproof-react](https://github.com/alan2207/bulletproof-react)
-> principles. The design system is locked in `design-system/soletrade/`.
+> Repository: `soletrade`. Product: **soletrade Workspace** (© Matt Haitana). Built
+> on strict [bulletproof-react](https://github.com/alan2207/bulletproof-react) principles.
+> The design system is locked in `design-system/soletrade/`.
 
 ## Stack
 
@@ -24,14 +26,14 @@ customers, files, activity, AI, permissions, and settings.
 
 ```bash
 pnpm install
-pnpm db:start          # start local Supabase (Docker) — first run pulls images
+pnpm db:start          # start local Supabase (Docker) - first run pulls images
 pnpm db:reset          # apply all Supabase migrations to the local Postgres
 pnpm dev               # http://localhost:3000
 ```
 
 This drops a `.env.local` with the local Supabase connection values (see
 `supabase status` to refresh them after a `db:stop`/`db:start`). The app boots
-with defaults even without secrets — modules assert their own required secrets
+with defaults even without secrets - modules assert their own required secrets
 at their boundaries.
 
 ### Local database & integration tests
@@ -40,7 +42,7 @@ The project ships a local Supabase stack for development and for the
 `DATABASE_URL`-gated integration tests (customers, activity). Workflow:
 
 ```bash
-pnpm db:start          # supabase start — Postgres + Auth + Studio on 54321–54323
+pnpm db:start          # supabase start - Postgres + Auth + Studio on 54321–54323
 pnpm db:reset          # wipe + recreate local DB, then re-apply supabase/migrations
 pnpm db:types          # regenerate src/server/db/types.ts from the local schema
 pnpm test:ci           # runs unit + integration tests against the local DB
@@ -56,7 +58,7 @@ stack running, they execute for real.
 `pnpm db:reset` also loads `supabase/seed.sql` (wired via `[db.seed]` in
 `supabase/config.toml`), so a freshly-reset local DB is populated and browseable
 in the app. It creates 6 login-able users (password `password123` for all) plus
-full demo data across both workspaces — every module, every lifecycle status
+full demo data across both workspaces - every module, every lifecycle status
 (invoices ×6 statuses, quotes ×7), all enum values, cross-module source links
 (InvoicePaid / Drive→Books income / mileage / vehicle-expense), the credit
 ledger (all 6 entry types), tax periods, activity/audit/notifications, an AI
@@ -71,9 +73,9 @@ Dev login credentials:
 | `accountant@soletrade.test` | accountant | Soletrade Demo Co      |
 | `employee@soletrade.test` | employee   | Soletrade Demo Co        |
 | `readonly@soletrade.test` | readonly   | Soletrade Demo Co        |
-| `pending@soletrade.test`  | — (pending invitation) | Soletrade Demo Co |
+| `pending@soletrade.test`  | - (pending invitation) | Soletrade Demo Co |
 
-Seed is **local-dev only** — `supabase db push` does not run `seed.sql` on the
+Seed is **local-dev only** - `supabase db push` does not run `seed.sql` on the
 linked remote, so these test users never reach production.
 
 ## Scripts
@@ -118,9 +120,9 @@ the event bus in `server/events`, never direct module imports.
 
 Generated and persisted by the UI/UX Pro Max skill:
 
-- `design-system/soletrade/MASTER.md` — global source of truth
-- `design-system/soletrade/pages/dashboard.md` — app shell + dashboard overrides
-- `design-system/soletrade/pages/public-invoice-quote.md` — public page overrides
+- `design-system/soletrade/MASTER.md` - global source of truth
+- `design-system/soletrade/pages/dashboard.md` - app shell + dashboard overrides
+- `design-system/soletrade/pages/public-invoice-quote.md` - public page overrides
 
 When building a page, check `pages/<page>.md` first; if it exists it overrides the
 Master. Design tokens are wired into `src/app/globals.css` as Tailwind v4 `@theme`
@@ -131,15 +133,15 @@ variables.
 Multi-phase build. Do not build product modules until workspace, module-installation,
 and billing foundations are stable.
 
-- [x] Phase 0 — Repo foundation
-- [x] Phase 1 — Core platform (auth, workspaces, permissions, app shell, module model)
-- [x] Phase 2 — Shared customers (schema, service, UI, integration tests)
-- [x] Phase 3 — Activity feed (event-sourced read side, dashboard + /activity UI)
-- [x] Phase 4 — Billing foundation (pricing engine, credit ledger, Stripe)
-- [x] Phases 5–8 — Invoices, Books, Drive, Quotes
-- [x] Phase 9 — Unified dashboard & cross-module workflows
-- [x] Phase 10 — AI assistant (read-only, workspace-scoped, persisted conversations)
-- [x] Phase 11 — Hardening + Files/Receipts + in-app notifications + AI write-tools
+- [x] Phase 0 - Repo foundation
+- [x] Phase 1 - Core platform (auth, workspaces, permissions, app shell, module model)
+- [x] Phase 2 - Shared customers (schema, service, UI, integration tests)
+- [x] Phase 3 - Activity feed (event-sourced read side, dashboard + /activity UI)
+- [x] Phase 4 - Billing foundation (pricing engine, credit ledger, Stripe)
+- [x] Phases 5–8 - Invoices, Books, Drive, Quotes
+- [x] Phase 9 - Unified dashboard & cross-module workflows
+- [x] Phase 10 - AI assistant (read-only, workspace-scoped, persisted conversations)
+- [x] Phase 11 - Hardening + Files/Receipts + in-app notifications + AI write-tools
 
 Local Supabase + the integration test harness are wired (see "Local database &
 integration tests" above).

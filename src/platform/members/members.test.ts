@@ -7,7 +7,7 @@ import { updateMemberRole } from "./index";
  * access (invalid role, self-change). The owner / last-admin guards hit the DB
  * and are covered by `members.integration.test.ts` (DB-gated).
  */
-describe("updateMemberRole — pure guards", () => {
+describe("updateMemberRole - pure guards", () => {
   const ws = branded<"WorkspaceId">("00000000-0000-4000-8000-00000000d000");
   const actor = branded<"UserId">("00000000-0000-4000-8000-0000000000d1");
   const target = branded<"UserId">("00000000-0000-4000-8000-0000000000d2");

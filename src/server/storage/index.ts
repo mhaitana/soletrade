@@ -9,7 +9,7 @@ import { env } from "@/shared/lib/env";
  * Uses the **service-role** key, which bypasses Storage RLS. Workspace scoping is
  * therefore enforced in **code** (the `files` platform service checks `workspaceId`
  * on every read/write, and object keys are namespaced `workspaces/{workspaceId}/…`)
- * — RLS policies on the bucket are defense-in-depth, not the primary boundary.
+ * - RLS policies on the bucket are defense-in-depth, not the primary boundary.
  *
  * Throws clearly when not configured (mirrors `getStripe`) because the upload/read
  * URL routes are request-critical: a missing config should fail the request loudly,
@@ -28,7 +28,7 @@ export function getStorageAdminClient(): SupabaseClient {
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) {
     throw new Error(
-      "Supabase Storage is not configured — set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      "Supabase Storage is not configured - set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
     );
   }
   cachedClient = createClient(url, serviceRoleKey, {

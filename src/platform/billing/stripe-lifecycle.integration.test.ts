@@ -11,7 +11,7 @@ import { getStripe } from "@/server/stripe/client";
 
 /**
  * Optional real-Stripe test-mode integration suite. Only runs when BOTH
- * DATABASE_URL and STRIPE_SECRET_KEY (and the per-module price ids) are set —
+ * DATABASE_URL and STRIPE_SECRET_KEY (and the per-module price ids) are set -
  * manual / CI opt-in. Creates real Stripe customers/subscriptions and tears them down
  * in afterEach. Skipped by default (no keys in the normal CI run).
  *

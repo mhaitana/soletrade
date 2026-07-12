@@ -1,5 +1,5 @@
 /**
- * Books category catalog (Phase 6). Pure data + lookup helpers — no `server-only`, no
+ * Books category catalog (Phase 6). Pure data + lookup helpers - no `server-only`, no
  * app/module/platform imports, so both the client form and the server action/service can
  * import it without dragging server-only into the client bundle. Mirrors the
  * `src/shared/constants/modules` pattern: data only (the validation logic lives in the

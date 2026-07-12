@@ -7,7 +7,7 @@ import type { FileId } from "@/shared/types/ids";
 
 /**
  * "View receipt" link for the Books transaction detail page (Phase 11b). Mints
- * a short-TTL read URL on click and opens the receipt in a new tab — bytes are
+ * a short-TTL read URL on click and opens the receipt in a new tab - bytes are
  * served by Storage, never proxied through our server.
  */
 export function ReceiptLink({ fileId }: { fileId: FileId }) {
