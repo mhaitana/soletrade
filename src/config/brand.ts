@@ -16,9 +16,9 @@
  * issuer on merchant documents). Product-facing surfaces use `productName`; merchant document
  * fallbacks use `productName`, never `companyName`.
  *
- * Per the spec, the public product name is title-case (`soletrade Workspace`). The `Logo` component
- * applies a lowercase visual treatment to match the existing wordmark theme - the strings here stay
- * the canonical title-case values.
+ * Per the spec, the public product name is title-case (`soletrade Workspace`). The `Logo`
+ * component renders the wordmark at this source-string casing - the strings here are the
+ * canonical title-case values.
  */
 export const brand = {
   companyName: "Matt Haitana",

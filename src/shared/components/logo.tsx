@@ -12,8 +12,9 @@ import { brand } from "@/config/brand";
  *  - `mark`    - `h` mark only        (public invoice/quote pages, where the issuing merchant is the
  *               dominant brand and Soletrade must stay subtle/secondary)
  *
- * The wordmark is rendered with Tailwind `lowercase` to match the existing lowercase wordmark
- * theme; the source strings in `brand` stay title-case (the canonical values used by metadata).
+ * The wordmark renders at the source-string casing (`soletrade Workspace` full, `Workspace`
+ * compact) — the canonical values used by metadata, README, and package.json. The source strings
+ * in `brand` stay title-case.
  */
 export type LogoVariant = "full" | "compact" | "mark";
 
@@ -42,7 +43,7 @@ export function Logo({
       >
         h
       </span>
-      {wordmark ? <span className="lowercase">{wordmark}</span> : null}
+      {wordmark ? <span>{wordmark}</span> : null}
     </span>
   );
   return href ? <Link href={href}>{content}</Link> : content;

@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/shared/components/theme-provider";
 import { Toaster } from "@/shared/ui/sonner";
+import { Analytics } from "@vercel/analytics/next";
 import { brand } from "@/config/brand";
 import { urls } from "@/config/urls";
 
@@ -70,6 +71,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>

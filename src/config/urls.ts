@@ -17,9 +17,12 @@ const marketingUrl = process.env.NEXT_PUBLIC_MARKETING_URL ?? "https://www.solet
 export const urls = {
   app: appUrl,
   marketing: marketingUrl,
-  support: process.env.NEXT_PUBLIC_SUPPORT_URL ?? `${marketingUrl}/support`,
-  privacy: process.env.NEXT_PUBLIC_PRIVACY_URL ?? `${marketingUrl}/privacy`,
-  terms: process.env.NEXT_PUBLIC_TERMS_URL ?? `${marketingUrl}/terms`,
+  // Legal/support pages are hosted on the app domain (NEXT_PUBLIC_APP_URL). The footer links
+  // here point at these; override per-link with the explicit *_URL env vars if you host them
+  // elsewhere.
+  support: process.env.NEXT_PUBLIC_SUPPORT_URL ?? `${appUrl}/support`,
+  privacy: process.env.NEXT_PUBLIC_PRIVACY_URL ?? `${appUrl}/privacy`,
+  terms: process.env.NEXT_PUBLIC_TERMS_URL ?? `${appUrl}/terms`,
 } as const;
 
 export type Urls = typeof urls;

@@ -2,8 +2,9 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 /**
  * URL config is env-driven: the production application domain is never hard-coded.
- * `urls.app` follows `NEXT_PUBLIC_APP_URL` (falling back to localhost); marketing/support/
- * privacy/terms derive from `NEXT_PUBLIC_MARKETING_URL` unless individually overridden.
+ * `urls.app` follows `NEXT_PUBLIC_APP_URL` (falling back to localhost); marketing follows
+ * `NEXT_PUBLIC_MARKETING_URL`; support/privacy/terms derive from `NEXT_PUBLIC_APP_URL` unless
+ * individually overridden.
  *
  * Because `urls` reads `process.env` at module load, each test stubs the env it cares about,
  * resets the module registry, and dynamically re-imports so the new values take effect.
@@ -52,14 +53,16 @@ describe("urls config", () => {
     expect(urls.app).toBe("https://app.soletrade.example");
   });
 
-  it("derives marketing/support/privacy/terms from the marketing URL by default", async () => {
+  it("derives marketing from the marketing URL and support/privacy/terms from the app URL by default", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://workspace.soletrade.example";
     process.env.NEXT_PUBLIC_MARKETING_URL = "https://www.soletrade.example";
     vi.resetModules();
     const { urls } = await import("@/config/urls");
     expect(urls.marketing).toBe("https://www.soletrade.example");
-    expect(urls.support).toBe("https://www.soletrade.example/support");
-    expect(urls.privacy).toBe("https://www.soletrade.example/privacy");
-    expect(urls.terms).toBe("https://www.soletrade.example/terms");
+    // Legal/support pages are hosted on the app domain (footer links point here).
+    expect(urls.support).toBe("https://workspace.soletrade.example/support");
+    expect(urls.privacy).toBe("https://workspace.soletrade.example/privacy");
+    expect(urls.terms).toBe("https://workspace.soletrade.example/terms");
   });
 
   it("lets support/privacy/terms be overridden individually", async () => {
