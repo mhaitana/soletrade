@@ -8,6 +8,7 @@ import { branded } from "@/shared/types/ids";
 import { ensureUserMirror } from "@/platform/users";
 import { rateLimit } from "@/server/rate-limit";
 import { getClientIp } from "@/server/security";
+import { tryAdminContext } from "@/platform/admin/services/admin-auth";
 
 /** Throttle message used by every auth action when a rate limit is hit. */
 const THROTTLED = "Too many attempts. Please try again shortly.";
@@ -84,7 +85,15 @@ export async function signInWithPasswordAction(input: unknown): Promise<AuthActi
   if (error) {
     return { ok: false, error: "Invalid email or password." };
   }
-  return { ok: true, redirectTo: safeNext(next) ?? "/dashboard" };
+  const safeTarget = safeNext(next);
+  if (safeTarget) {
+    return { ok: true, redirectTo: safeTarget };
+  }
+  const adminCtx = await tryAdminContext();
+  if (adminCtx && adminCtx.roles.includes("super_admin")) {
+    return { ok: true, redirectTo: "/admin" };
+  }
+  return { ok: true, redirectTo: "/dashboard" };
 }
 
 /**

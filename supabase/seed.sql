@@ -72,7 +72,14 @@ VALUES
    extensions.crypt('password123', extensions.gen_salt('bf')), now(),
    '', '', '', '', false,
    '{"provider":"email","providers":["email"]}'::jsonb,
-   '{"full_name":"Pat Pending"}'::jsonb, now(), now(), now());
+   '{"full_name":"Pat Pending"}'::jsonb, now(), now(), now()),
+  ('11111111-1111-4111-8111-111111110099', '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'admin@soletrade.example',
+   extensions.crypt('password123', extensions.gen_salt('bf')), now(),
+   '', '', '', '', false,
+   '{"provider":"email","providers":["email"]}'::jsonb,
+   '{"full_name":"Soletrade Super Admin"}'::jsonb, now(), now(), now())
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (id, email, full_name, created_at, updated_at) VALUES
   ('11111111-1111-4111-8111-111111110001', 'owner@soletrade.test',      'Alex Owner',       now(), now()),
@@ -80,7 +87,9 @@ INSERT INTO users (id, email, full_name, created_at, updated_at) VALUES
   ('11111111-1111-4111-8111-111111110003', 'accountant@soletrade.test', 'Quinn Accountant', now(), now()),
   ('11111111-1111-4111-8111-111111110004', 'employee@soletrade.test',   'Ellie Employee',   now(), now()),
   ('11111111-1111-4111-8111-111111110005', 'readonly@soletrade.test',   'Robin Readonly',   now(), now()),
-  ('11111111-1111-4111-8111-111111110006', 'pending@soletrade.test',    'Pat Pending',      now(), now());
+  ('11111111-1111-4111-8111-111111110006', 'pending@soletrade.test',    'Pat Pending',      now(), now()),
+  ('11111111-1111-4111-8111-111111110099', 'admin@soletrade.example',  'Soletrade Super Admin', now(), now())
+ON CONFLICT (id) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- 2. Workspaces (WS1 full demo, WS2 smaller NZD studio - owner owns both)
@@ -677,3 +686,14 @@ VALUES
 INSERT INTO processed_webhook_events (stripe_event_id, stripe_event_type, processed_at) VALUES
   ('evt_seed_0001', 'invoice.paid', '2026-05-20 00:00:00'),
   ('evt_seed_0002', 'customer.subscription.updated', '2026-06-01 00:00:00');
+
+-- ----------------------------------------------------------------------------
+-- 21. Admin users and role assignments
+-- ----------------------------------------------------------------------------
+INSERT INTO admin_users (id, email, full_name, is_active, created_at, updated_at) VALUES
+  ('11111111-1111-4111-8111-111111110099', 'admin@soletrade.example', 'Soletrade Super Admin', true, now(), now())
+ON CONFLICT (email) DO UPDATE SET is_active = true;
+
+INSERT INTO admin_role_assignments (admin_user_id, role, created_at) VALUES
+  ('11111111-1111-4111-8111-111111110099', 'super_admin', now())
+ON CONFLICT (admin_user_id, role) DO NOTHING;

@@ -9,6 +9,7 @@ import {
   type WorkspaceMembership,
 } from "@/platform/workspaces";
 import type { WorkspaceId } from "@/shared/types/ids";
+import { tryAdminContext } from "@/platform/admin/services/admin-auth";
 
 /**
  * Resolved request context for any (app)-group mutation: the signed-in user,
@@ -68,6 +69,10 @@ export async function tryWorkspaceContext(): Promise<WorkspaceContext | null> {
 export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
   const ctx = await tryWorkspaceContext();
   if (!ctx) {
+    const adminCtx = await tryAdminContext();
+    if (adminCtx && adminCtx.roles.includes("super_admin")) {
+      redirect("/admin");
+    }
     redirect("/onboarding");
   }
   return ctx;

@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/shared/lib/supabase/server";
 import { safeNext } from "@/shared/lib/safe-redirect";
 import { branded } from "@/shared/types/ids";
 import { ensureUserMirror } from "@/platform/users";
+import { tryAdminContext } from "@/platform/admin/services/admin-auth";
 
 // Auth callback exchanges the PKCE code for a session - never statically prerendered.
 export const dynamic = "force-dynamic";
@@ -40,5 +41,15 @@ export async function GET(request: Request): Promise<Response> {
     fullName: (data.user.user_metadata?.full_name as string | undefined) ?? null,
   });
 
-  redirect(safeNext(next) ?? "/onboarding");
+  const safeTarget = safeNext(next);
+  if (safeTarget) {
+    redirect(safeTarget);
+  }
+
+  const adminCtx = await tryAdminContext();
+  if (adminCtx && adminCtx.roles.includes("super_admin")) {
+    redirect("/admin");
+  }
+
+  redirect("/onboarding");
 }

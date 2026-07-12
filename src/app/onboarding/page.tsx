@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/server/auth/session";
 
 // Auth-scoped page - never statically prerendered.
 export const dynamic = "force-dynamic";
 import { listUserWorkspaces } from "@/platform/workspaces";
+import { tryAdminContext } from "@/platform/admin/services/admin-auth";
 import { Logo } from "@/shared/components/logo";
 import { CreateWorkspaceForm } from "./create-workspace-form";
 import { brand } from "@/config/brand";
@@ -12,6 +14,10 @@ export const metadata = { title: "Create your workspace" };
 
 export default async function OnboardingPage() {
   const user = await requireUser();
+  const adminCtx = await tryAdminContext();
+  if (adminCtx && adminCtx.roles.includes("super_admin")) {
+    redirect("/admin");
+  }
   // Brand-new users land here with zero workspaces (via /auth/callback +
   // requireWorkspaceContext); existing users arrive via the WorkspaceSwitcher's
   // "Create workspace" link to add another. We no longer redirect the latter -
