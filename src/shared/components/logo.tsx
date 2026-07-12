@@ -13,7 +13,7 @@ import { brand } from "@/config/brand";
  *
  * The full lockup uses `brand.wordmark` (`soletrade`); the compact label uses
  * `brand.shortProductName` (`Workspace`). The prose product name (`Soletrade Workspace`) is NOT
- * rendered here — it lives in titles, metadata, and body copy.
+ * rendered here - it lives in titles, metadata, and body copy.
  */
 export type LogoVariant = "full" | "compact" | "mark";
 

@@ -12,8 +12,8 @@ export default function PrivacyPage() {
         <p>
           When you create an account we collect your name and email address, and the workspace
           information you enter (business name, contact details, currency, and timezone). As you use
-          {" "}{brand.productName}, we store the documents and records you create — invoices,
-          quotes, bookkeeping transactions, receipts, drive earnings, and mileage — together with
+          {" "}{brand.productName}, we store the documents and records you create - invoices,
+          quotes, bookkeeping transactions, receipts, drive earnings, and mileage - together with
           the activity and audit history associated with your workspace.
         </p>
         <p>
@@ -36,10 +36,10 @@ export default function PrivacyPage() {
           require them to protect it. Our current subprocessors include:
         </p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>Supabase — authentication and database hosting</li>
-          <li>Stripe — payment processing and billing</li>
-          <li>Resend — transactional email delivery</li>
-          <li>Cloud AI providers — receipt extraction and the assistant, when enabled</li>
+          <li>Supabase - authentication and database hosting</li>
+          <li>Stripe - payment processing and billing</li>
+          <li>Resend - transactional email delivery</li>
+          <li>Cloud AI providers - receipt extraction and the assistant, when enabled</li>
         </ul>
         <p>
           We may also disclose information when required by law or to protect our rights or the

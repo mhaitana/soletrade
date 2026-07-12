@@ -10,15 +10,15 @@
  * `workspace` tenant domain model (`workspaceId`, `workspaceMember`, …) is a separate concept from
  * the product name and is intentionally not renamed here.
  *
- * `companyName` ("Matt Haitana") is the **copyright / legal entity only** — it appears in the
+ * `companyName` ("Matt Haitana") is the **copyright / legal entity only** - it appears in the
  * site metadata (`creator`/`publisher`), the Stripe statement descriptor, and a © line. Do NOT
  * render it as a product byline (e.g. "a Matt Haitana product", "by Matt Haitana", or as the
  * issuer on merchant documents). Product-facing surfaces use `productName`; merchant document
  * fallbacks use `productName`, never `companyName`.
  *
- * `productName` ("Soletrade Workspace") is the prose product name — metadata titles, email body,
+ * `productName` ("Soletrade Workspace") is the prose product name - metadata titles, email body,
  * Stripe product names, the hero/legal eyebrow, "Powered by" footers. `wordmark` ("soletrade")
- * is the **visual logo lockup** — the `Logo` full variant and the email/PDF brand headers render
+ * is the **visual logo lockup** - the `Logo` full variant and the email/PDF brand headers render
  * this, not the product name. `shortProductName` ("Workspace") is the in-app compact label and
  * the manifest short_name.
  */

@@ -5,7 +5,7 @@ import TermsPage from "./terms/page";
 
 /**
  * Smoke test for the public legal/support pages. Each page is a static Server Component
- * built on the shared `LegalPage` shell — this guards the H1 and a representative section.
+ * built on the shared `LegalPage` shell - this guards the H1 and a representative section.
  *
  * The support page reads `env.SUPPORT_EMAIL` at module load, so its two contact branches
  * are exercised with explicit env stubs + `vi.resetModules()` + a dynamic re-import (the

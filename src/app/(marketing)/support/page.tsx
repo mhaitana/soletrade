@@ -11,8 +11,8 @@ export default function SupportPage() {
     <LegalPage title="Support">
       <LegalSection title="Getting help">
         <p>
-          Most day-to-day tasks — creating invoices, sending quotes, recording transactions,
-          logging mileage — are covered in-product. For anything in your workspace, look for the
+          Most day-to-day tasks - creating invoices, sending quotes, recording transactions,
+          logging mileage - are covered in-product. For anything in your workspace, look for the
           assistant in the app, which can answer questions and act on your {brand.productName}{" "}
           data.
         </p>
@@ -40,8 +40,8 @@ export default function SupportPage() {
 
       <LegalSection title="Billing and accounts">
         <p>
-          For billing questions — subscriptions, the credit balance, cancellations, or switching
-          between monthly and annual billing — visit the billing page in your workspace. Account
+          For billing questions - subscriptions, the credit balance, cancellations, or switching
+          between monthly and annual billing - visit the billing page in your workspace. Account
           and workspace settings live under settings.
         </p>
       </LegalSection>

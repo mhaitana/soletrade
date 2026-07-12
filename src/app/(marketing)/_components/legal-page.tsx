@@ -51,7 +51,7 @@ export function LegalSection({
 
 /**
  * Callout flagging that the page content is a template pending legal review before
- * launch — so templated copy is never mistaken for final, binding text.
+ * launch - so templated copy is never mistaken for final, binding text.
  */
 export function LegalReviewNote() {
   return (
