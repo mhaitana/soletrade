@@ -37,14 +37,14 @@ export default function TermsPage() {
       <LegalSection title="Billing, subscriptions, and credits">
         <p>
           {brand.productName} is billed per active product. Your highest-priced active product is
-          your anchor app, billed at its standalone price; every other active product is billed at
-          a discounted add-on price. Annual billing gives you three months free.
+          your anchor app, billed at its standalone price; every other active product is billed at a
+          discounted add-on price. Annual billing gives you three months free.
         </p>
         <p>
           Payments are held as a credit balance and applied to charges as they occur. Cancelling a
-          product refunds the unused portion of the current period to your credit balance,
-          pro-rated per product. Credits may expire if unused for an extended period, as described
-          on the billing page.
+          product refunds the unused portion of the current period to your credit balance, pro-rated
+          per product. Credits may expire if unused for an extended period, as described on the
+          billing page.
         </p>
       </LegalSection>
 

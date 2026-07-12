@@ -1,8 +1,4 @@
-import type {
-  AdminRole,
-  SupportAccessScope,
-  SupportAccessSession,
-} from "@/platform/admin/types";
+import type { AdminRole, SupportAccessScope, SupportAccessSession } from "@/platform/admin/types";
 
 export type AdminResource =
   | "staff"

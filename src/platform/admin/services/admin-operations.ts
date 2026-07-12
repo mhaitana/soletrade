@@ -54,10 +54,7 @@ export async function retryWebhookEvent(id: string, reason: string): Promise<voi
   const ctx = await requireAdminContext("manage:operations");
   const db = getAdminDb();
 
-  await db
-    .from("webhook_events")
-    .update({ status: "pending_retry" })
-    .eq("id", id);
+  await db.from("webhook_events").update({ status: "pending_retry" }).eq("id", id);
 
   await writeAdminAuditEvent({
     actorAdminId: ctx.adminUser.id,

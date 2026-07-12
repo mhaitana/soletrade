@@ -76,11 +76,7 @@ export type SupportTicketCategory =
 export type SupportTicketPriority = "low" | "normal" | "high" | "urgent";
 
 export type SupportTicketStatus =
-  | "open"
-  | "waiting_for_support"
-  | "waiting_for_customer"
-  | "resolved"
-  | "closed";
+  "open" | "waiting_for_support" | "waiting_for_customer" | "resolved" | "closed";
 
 export interface SupportTicket {
   id: string;
@@ -165,6 +161,10 @@ export interface Promotion {
   appliesToIntervals?: Array<"month" | "year">;
   newCustomersOnly: boolean;
   active: boolean;
+  timesRedeemed: number;
+  stripeCouponActive: boolean;
+  stripePromotionCodeActive?: boolean | null;
+  lastSyncedAt?: Date;
 }
 
 export type CreditLedgerEntryType =

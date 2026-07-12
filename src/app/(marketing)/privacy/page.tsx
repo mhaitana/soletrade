@@ -11,10 +11,10 @@ export default function PrivacyPage() {
       <LegalSection title="Information we collect">
         <p>
           When you create an account we collect your name and email address, and the workspace
-          information you enter (business name, contact details, currency, and timezone). As you use
-          {" "}{brand.productName}, we store the documents and records you create - invoices,
-          quotes, bookkeeping transactions, receipts, drive earnings, and mileage - together with
-          the activity and audit history associated with your workspace.
+          information you enter (business name, contact details, currency, and timezone). As you use{" "}
+          {brand.productName}, we store the documents and records you create - invoices, quotes,
+          bookkeeping transactions, receipts, drive earnings, and mileage - together with the
+          activity and audit history associated with your workspace.
         </p>
         <p>
           We also collect basic technical data from your requests, such as IP address, browser type,

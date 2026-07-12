@@ -3,23 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ShieldAlert,
-  Users,
-  Building2,
-  CreditCard,
-  Tag,
-  Coins,
-  LifeBuoy,
-  KeyRound,
-  FileText,
-  Flag,
-  Webhook,
-  ActivitySquare,
-  ServerCrash,
-  Clock,
-} from "lucide-react";
+import { ShieldAlert, Clock } from "lucide-react";
 import type { AdminRole, SupportAccessSession } from "@/platform/admin/types";
+import { NAV_GROUPS, isAdminItemActive } from "./admin-nav";
+import { AdminMobileNav } from "./admin-mobile-nav";
+import { ExitSessionButton } from "./exit-session-button";
+import { AdminSignOutButton } from "./admin-sign-out-button";
 
 interface AdminShellProps {
   adminName: string;
@@ -29,21 +18,9 @@ interface AdminShellProps {
   children: React.ReactNode;
 }
 
-const NAV_ITEMS = [
-  { href: "/admin", label: "Dashboard", icon: ActivitySquare },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/workspaces", label: "Workspaces", icon: Building2 },
-  { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
-  { href: "/admin/promotions", label: "Promotions", icon: Tag },
-  { href: "/admin/credits", label: "Credit Ledger", icon: Coins },
-  { href: "/admin/support", label: "Support Tickets", icon: LifeBuoy },
-  { href: "/admin/access-requests", label: "Support Access", icon: KeyRound },
-  { href: "/admin/audit", label: "Audit Log", icon: FileText },
-  { href: "/admin/feature-flags", label: "Feature Flags", icon: Flag },
-  { href: "/admin/webhooks", label: "Webhooks", icon: Webhook },
-  { href: "/admin/jobs", label: "Background Jobs", icon: ActivitySquare },
-  { href: "/admin/system", label: "System Health", icon: ServerCrash },
-];
+function roleLabel(role: AdminRole): string {
+  return role.replace(/_/g, " ");
+}
 
 export function AdminShell({
   adminName,
@@ -55,104 +32,117 @@ export function AdminShell({
   const pathname = usePathname();
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 selection:bg-rose-500 selection:text-white">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-900/90 flex flex-col justify-between shrink-0">
-        <div>
-          <div className="p-5 border-b border-slate-800 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400">
-              <ShieldAlert className="w-5 h-5" />
+    <div className="flex min-h-dvh bg-background text-foreground selection:bg-brand-blue selection:text-white">
+      {/* Desktop sidebar */}
+      <aside className="hidden w-64 shrink-0 flex-col justify-between border-r border-border bg-sidebar lg:flex">
+        <div className="overflow-y-auto">
+          <div className="flex items-center gap-3 border-b border-border p-5">
+            <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/10 p-2 text-brand-blue">
+              <ShieldAlert className="size-5" />
             </div>
             <div>
-              <div className="font-semibold text-sm text-slate-100 tracking-tight">
+              <div className="text-sm font-semibold tracking-tight text-sidebar-foreground">
                 Soletrade Operations
               </div>
-              <div className="text-[11px] text-rose-400 font-medium uppercase tracking-wider">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-brand-blue">
                 Internal Admin
               </div>
             </div>
           </div>
 
-          <nav className="p-3 space-y-1">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === "/admin"
-                  ? pathname === "/admin"
-                  : pathname.startsWith(item.href);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                    isActive
-                      ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+          <nav className="p-3" aria-label="Admin navigation">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.title} className="mb-4">
+                <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.title}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isAdminItemActive(pathname, item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`flex min-h-9 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                          isActive
+                            ? "border border-brand-blue/30 bg-brand-blue/10 text-brand-blue"
+                            : "border border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+                        }`}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
 
         {/* Staff footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/50">
-          <div className="text-xs font-semibold text-slate-200 truncate">{adminName}</div>
-          <div className="text-[11px] text-slate-400 truncate mb-2">{adminEmail}</div>
+        <div className="border-t border-border p-4">
+          <div className="truncate text-xs font-semibold text-foreground">{adminName}</div>
+          <div className="mb-2 truncate text-[11px] text-muted-foreground">{adminEmail}</div>
           <div className="flex flex-wrap gap-1">
             {roles.map((role) => (
               <span
                 key={role}
-                className="px-1.5 py-0.5 text-[10px] rounded bg-slate-800 text-rose-300 border border-slate-700 font-mono uppercase"
+                className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] uppercase text-brand-blue"
               >
-                {role.replace("_", " ")}
+                {roleLabel(role)}
               </span>
             ))}
           </div>
+          <AdminSignOutButton className="mt-3 w-full justify-center gap-2" />
         </div>
       </aside>
 
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Support Access Session Persistent Banner (Principle #15) */}
-        {activeSupportSession && (
-          <div className="bg-amber-500/15 border-b border-amber-500/40 px-6 py-3 flex items-center justify-between text-amber-200 text-xs">
-            <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-              <div>
-                <span className="font-semibold text-amber-300">
-                  Temporary Customer-Approved Support Access
+      {/* Main container */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile top bar */}
+        <div className="flex items-center gap-3 border-b border-border bg-sidebar px-4 py-3 lg:hidden">
+          <AdminMobileNav />
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg border border-brand-blue/30 bg-brand-blue/10 p-1 text-brand-blue">
+              <ShieldAlert className="size-4" />
+            </span>
+            <span className="text-sm font-semibold tracking-tight">Soletrade Operations</span>
+          </div>
+        </div>
+
+        {/* Support Access Session persistent banner (Principle #15) */}
+        {activeSupportSession ? (
+          <div className="flex flex-col gap-2 border-b border-warning/40 bg-warning/10 px-4 py-3 text-xs text-warning sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex items-start gap-3 sm:items-center">
+              <Clock className="size-4 shrink-0 text-warning" />
+              <div className="space-y-0.5 sm:flex sm:items-center sm:gap-2 sm:space-y-0">
+                <span className="font-semibold text-warning">Customer-approved support access</span>
+                <span className="text-warning/70 sm:mx-1">·</span>
+                <span>
+                  Workspace: <span className="font-mono">{activeSupportSession.workspaceId}</span>
                 </span>
-                <span className="mx-2 text-amber-400/60">|</span>
-                <span>Workspace: {activeSupportSession.workspaceId}</span>
-                <span className="mx-2 text-amber-400/60">|</span>
+                <span className="text-warning/70 sm:mx-1">·</span>
                 <span>Scopes: {activeSupportSession.scopes.join(", ")}</span>
-                <span className="mx-2 text-amber-400/60">|</span>
-                <span className="font-mono text-amber-300">
-                  Expires at {new Date(activeSupportSession.expiresAt).toLocaleTimeString()}
+                <span className="text-warning/70 sm:mx-1">·</span>
+                <span className="font-mono text-warning">
+                  Expires {new Date(activeSupportSession.expiresAt).toLocaleTimeString()}
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-                {activeSupportSession.accessLevel}
+              <span className="rounded border border-warning/40 bg-warning/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warning">
+                {activeSupportSession.accessLevel.replace(/_/g, " ")}
               </span>
-              <button
-                type="button"
-                className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-medium transition-colors"
-              >
-                Exit Session
-              </button>
+              <ExitSessionButton sessionId={activeSupportSession.id} />
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Page content */}
-        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

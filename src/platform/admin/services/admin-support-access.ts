@@ -131,7 +131,10 @@ export async function approveSupportAccess(
   };
 
   const finalScopes = reducedScopes ?? request.scopes;
-  const finalDuration = Math.min(reducedDurationMinutes ?? request.requested_duration_minutes, 1440);
+  const finalDuration = Math.min(
+    reducedDurationMinutes ?? request.requested_duration_minutes,
+    1440,
+  );
 
   const startsAt = new Date();
   const expiresAt = new Date(startsAt.getTime() + finalDuration * 60 * 1000);
@@ -207,7 +210,10 @@ export async function rejectSupportAccess(requestId: string): Promise<void> {
 /**
  * Revoke an active support access session immediately.
  */
-export async function revokeSupportAccess(sessionId: string, revokingUserId: string): Promise<void> {
+export async function revokeSupportAccess(
+  sessionId: string,
+  revokingUserId: string,
+): Promise<void> {
   const db = getAdminDb();
   await db
     .from("support_access_sessions")
@@ -217,6 +223,60 @@ export async function revokeSupportAccess(sessionId: string, revokingUserId: str
       revoked_by_user_id: revokingUserId,
     })
     .eq("id", sessionId);
+}
+
+/**
+ * Resolve the admin's currently active (unexpired, non-revoked) support access session,
+ * regardless of workspace. Used by the admin layout to render the persistent
+ * "customer-approved support access" banner (Principle #15). Returns the
+ * most-recently-expiring active session, or null if the admin has none.
+ */
+export async function getActiveSupportAccessSession(
+  adminUserId: string,
+): Promise<SupportAccessSession | null> {
+  const db = getAdminDb();
+  const nowIso = new Date().toISOString();
+
+  const { data: rows } = await db
+    .from("support_access_sessions")
+    .select("*")
+    .eq("admin_user_id", adminUserId)
+    .eq("status", "active")
+    .gt("expires_at", nowIso)
+    .order("expires_at", { ascending: false })
+    .limit(1);
+
+  if (!rows || rows.length === 0) return null;
+
+  const s = rows[0] as {
+    id: string;
+    request_id: string;
+    workspace_id: string;
+    ticket_id?: string;
+    approved_by_user_id: string;
+    admin_user_id: string;
+    scopes: SupportAccessScope[];
+    access_level: SupportAccessLevel;
+    reason: string;
+    starts_at: string;
+    expires_at: string;
+    status: string;
+  };
+
+  return {
+    id: s.id,
+    requestId: s.request_id,
+    workspaceId: s.workspace_id,
+    ticketId: s.ticket_id,
+    approvedByUserId: s.approved_by_user_id,
+    adminUserId: s.admin_user_id,
+    scopes: s.scopes,
+    accessLevel: s.access_level,
+    reason: s.reason,
+    startsAt: new Date(s.starts_at),
+    expiresAt: new Date(s.expires_at),
+    status: "active",
+  };
 }
 
 /**

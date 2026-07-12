@@ -76,6 +76,295 @@ export type Database = {
           },
         ];
       };
+      admin_announcements: {
+        Row: {
+          content: string;
+          created_at: string;
+          created_by_admin_id: string | null;
+          id: string;
+          target_workspaces: string[] | null;
+          title: string;
+        };
+        Insert: {
+          content: string;
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          id?: string;
+          target_workspaces?: string[] | null;
+          title: string;
+        };
+        Update: {
+          content?: string;
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          id?: string;
+          target_workspaces?: string[] | null;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_announcements_created_by_admin_id_fkey";
+            columns: ["created_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_audit_events: {
+        Row: {
+          action: string;
+          actor_admin_id: string;
+          actor_role: Database["public"]["Enums"]["admin_role"];
+          after_state: Json | null;
+          before_state: Json | null;
+          created_at: string;
+          id: string;
+          ip_address: string | null;
+          metadata: Json | null;
+          reason: string | null;
+          target_id: string;
+          target_type: string;
+          ticket_id: string | null;
+          user_agent: string | null;
+          user_id: string | null;
+          workspace_id: string | null;
+        };
+        Insert: {
+          action: string;
+          actor_admin_id: string;
+          actor_role: Database["public"]["Enums"]["admin_role"];
+          after_state?: Json | null;
+          before_state?: Json | null;
+          created_at?: string;
+          id?: string;
+          ip_address?: string | null;
+          metadata?: Json | null;
+          reason?: string | null;
+          target_id: string;
+          target_type: string;
+          ticket_id?: string | null;
+          user_agent?: string | null;
+          user_id?: string | null;
+          workspace_id?: string | null;
+        };
+        Update: {
+          action?: string;
+          actor_admin_id?: string;
+          actor_role?: Database["public"]["Enums"]["admin_role"];
+          after_state?: Json | null;
+          before_state?: Json | null;
+          created_at?: string;
+          id?: string;
+          ip_address?: string | null;
+          metadata?: Json | null;
+          reason?: string | null;
+          target_id?: string;
+          target_type?: string;
+          ticket_id?: string | null;
+          user_agent?: string | null;
+          user_id?: string | null;
+          workspace_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_events_actor_admin_id_fkey";
+            columns: ["actor_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_internal_notes: {
+        Row: {
+          author_admin_id: string;
+          content: string;
+          created_at: string;
+          id: string;
+          target_id: string;
+          target_type: string;
+          updated_at: string;
+        };
+        Insert: {
+          author_admin_id: string;
+          content: string;
+          created_at?: string;
+          id?: string;
+          target_id: string;
+          target_type: string;
+          updated_at?: string;
+        };
+        Update: {
+          author_admin_id?: string;
+          content?: string;
+          created_at?: string;
+          id?: string;
+          target_id?: string;
+          target_type?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_internal_notes_author_admin_id_fkey";
+            columns: ["author_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_role_assignments: {
+        Row: {
+          admin_user_id: string;
+          assigned_by: string | null;
+          created_at: string;
+          id: string;
+          role: Database["public"]["Enums"]["admin_role"];
+        };
+        Insert: {
+          admin_user_id: string;
+          assigned_by?: string | null;
+          created_at?: string;
+          id?: string;
+          role: Database["public"]["Enums"]["admin_role"];
+        };
+        Update: {
+          admin_user_id?: string;
+          assigned_by?: string | null;
+          created_at?: string;
+          id?: string;
+          role?: Database["public"]["Enums"]["admin_role"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_role_assignments_admin_user_id_fkey";
+            columns: ["admin_user_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "admin_role_assignments_assigned_by_fkey";
+            columns: ["assigned_by"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_security_events: {
+        Row: {
+          admin_user_id: string | null;
+          created_at: string;
+          event_type: string;
+          id: string;
+          ip_address: string | null;
+          metadata: Json | null;
+          user_agent: string | null;
+        };
+        Insert: {
+          admin_user_id?: string | null;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          ip_address?: string | null;
+          metadata?: Json | null;
+          user_agent?: string | null;
+        };
+        Update: {
+          admin_user_id?: string | null;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          ip_address?: string | null;
+          metadata?: Json | null;
+          user_agent?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_security_events_admin_user_id_fkey";
+            columns: ["admin_user_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_sessions: {
+        Row: {
+          admin_user_id: string;
+          created_at: string;
+          expires_at: string;
+          id: string;
+          ip_address: string | null;
+          last_active_at: string;
+          revoked_at: string | null;
+          session_token: string;
+          user_agent: string | null;
+        };
+        Insert: {
+          admin_user_id: string;
+          created_at?: string;
+          expires_at: string;
+          id?: string;
+          ip_address?: string | null;
+          last_active_at?: string;
+          revoked_at?: string | null;
+          session_token: string;
+          user_agent?: string | null;
+        };
+        Update: {
+          admin_user_id?: string;
+          created_at?: string;
+          expires_at?: string;
+          id?: string;
+          ip_address?: string | null;
+          last_active_at?: string;
+          revoked_at?: string | null;
+          session_token?: string;
+          user_agent?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_sessions_admin_user_id_fkey";
+            columns: ["admin_user_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_users: {
+        Row: {
+          created_at: string;
+          email: string;
+          full_name: string;
+          id: string;
+          is_active: boolean;
+          mfa_enabled: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          email: string;
+          full_name: string;
+          id?: string;
+          is_active?: boolean;
+          mfa_enabled?: boolean;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string;
+          full_name?: string;
+          id?: string;
+          is_active?: boolean;
+          mfa_enabled?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       ai_conversations: {
         Row: {
           created_at: string;
@@ -193,6 +482,199 @@ export type Database = {
             columns: ["actor_user_id"];
             isOneToOne: false;
             referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      background_jobs: {
+        Row: {
+          attempts: number;
+          completed_at: string | null;
+          created_at: string;
+          error: string | null;
+          id: string;
+          name: string;
+          queue: string;
+          related_entity: string | null;
+          run_time_ms: number | null;
+          status: string;
+          workspace_id: string | null;
+        };
+        Insert: {
+          attempts?: number;
+          completed_at?: string | null;
+          created_at?: string;
+          error?: string | null;
+          id?: string;
+          name: string;
+          queue?: string;
+          related_entity?: string | null;
+          run_time_ms?: number | null;
+          status?: string;
+          workspace_id?: string | null;
+        };
+        Update: {
+          attempts?: number;
+          completed_at?: string | null;
+          created_at?: string;
+          error?: string | null;
+          id?: string;
+          name?: string;
+          queue?: string;
+          related_entity?: string | null;
+          run_time_ms?: number | null;
+          status?: string;
+          workspace_id?: string | null;
+        };
+        Relationships: [];
+      };
+      billing_adjustment_approvals: {
+        Row: {
+          approved_by_admin_id: string | null;
+          created_at: string;
+          currency: string;
+          id: string;
+          ledger_entry_id: string | null;
+          reason: string;
+          requested_amount_cents: number;
+          requested_by_admin_id: string;
+          resolved_at: string | null;
+          status: string;
+          workspace_id: string;
+        };
+        Insert: {
+          approved_by_admin_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          ledger_entry_id?: string | null;
+          reason: string;
+          requested_amount_cents: number;
+          requested_by_admin_id: string;
+          resolved_at?: string | null;
+          status?: string;
+          workspace_id: string;
+        };
+        Update: {
+          approved_by_admin_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          ledger_entry_id?: string | null;
+          reason?: string;
+          requested_amount_cents?: number;
+          requested_by_admin_id?: string;
+          resolved_at?: string | null;
+          status?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "billing_adjustment_approvals_approved_by_admin_id_fkey";
+            columns: ["approved_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_adjustment_approvals_ledger_entry_id_fkey";
+            columns: ["ledger_entry_id"];
+            isOneToOne: false;
+            referencedRelation: "billing_credit_ledger";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_adjustment_approvals_requested_by_admin_id_fkey";
+            columns: ["requested_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_adjustment_approvals_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      billing_credit_ledger: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          created_by_admin_id: string | null;
+          currency: string;
+          expires_at: string | null;
+          id: string;
+          internal_note: string | null;
+          reason: string;
+          related_invoice_id: string | null;
+          related_ticket_id: string | null;
+          reversed_entry_id: string | null;
+          stripe_reference: string | null;
+          type: Database["public"]["Enums"]["billing_credit_entry_type"];
+          workspace_id: string;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          currency?: string;
+          expires_at?: string | null;
+          id?: string;
+          internal_note?: string | null;
+          reason: string;
+          related_invoice_id?: string | null;
+          related_ticket_id?: string | null;
+          reversed_entry_id?: string | null;
+          stripe_reference?: string | null;
+          type: Database["public"]["Enums"]["billing_credit_entry_type"];
+          workspace_id: string;
+        };
+        Update: {
+          amount_cents?: number;
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          currency?: string;
+          expires_at?: string | null;
+          id?: string;
+          internal_note?: string | null;
+          reason?: string;
+          related_invoice_id?: string | null;
+          related_ticket_id?: string | null;
+          reversed_entry_id?: string | null;
+          stripe_reference?: string | null;
+          type?: Database["public"]["Enums"]["billing_credit_entry_type"];
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "billing_credit_ledger_created_by_admin_id_fkey";
+            columns: ["created_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_credit_ledger_related_ticket_id_fkey";
+            columns: ["related_ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "support_tickets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_credit_ledger_reversed_entry_id_fkey";
+            columns: ["reversed_entry_id"];
+            isOneToOne: false;
+            referencedRelation: "billing_credit_ledger";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_credit_ledger_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
             referencedColumns: ["id"];
           },
         ];
@@ -574,6 +1056,133 @@ export type Database = {
           },
         ];
       };
+      feature_flag_audit_events: {
+        Row: {
+          action: string;
+          actor_admin_id: string;
+          changes: Json;
+          created_at: string;
+          feature_flag_id: string;
+          id: string;
+        };
+        Insert: {
+          action: string;
+          actor_admin_id: string;
+          changes: Json;
+          created_at?: string;
+          feature_flag_id: string;
+          id?: string;
+        };
+        Update: {
+          action?: string;
+          actor_admin_id?: string;
+          changes?: Json;
+          created_at?: string;
+          feature_flag_id?: string;
+          id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "feature_flag_audit_events_actor_admin_id_fkey";
+            columns: ["actor_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "feature_flag_audit_events_feature_flag_id_fkey";
+            columns: ["feature_flag_id"];
+            isOneToOne: false;
+            referencedRelation: "feature_flags";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      feature_flag_rules: {
+        Row: {
+          created_at: string;
+          feature_flag_id: string;
+          id: string;
+          rule_type: string;
+          rule_value: string;
+        };
+        Insert: {
+          created_at?: string;
+          feature_flag_id: string;
+          id?: string;
+          rule_type: string;
+          rule_value: string;
+        };
+        Update: {
+          created_at?: string;
+          feature_flag_id?: string;
+          id?: string;
+          rule_type?: string;
+          rule_value?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "feature_flag_rules_feature_flag_id_fkey";
+            columns: ["feature_flag_id"];
+            isOneToOne: false;
+            referencedRelation: "feature_flags";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      feature_flags: {
+        Row: {
+          created_at: string;
+          created_by_admin_id: string | null;
+          description: string | null;
+          enabled: boolean;
+          id: string;
+          key: string;
+          name: string;
+          rollout_percentage: number;
+          updated_at: string;
+          user_allowlist: string[] | null;
+          workspace_allowlist: string[] | null;
+          workspace_blocklist: string[] | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          description?: string | null;
+          enabled?: boolean;
+          id?: string;
+          key: string;
+          name: string;
+          rollout_percentage?: number;
+          updated_at?: string;
+          user_allowlist?: string[] | null;
+          workspace_allowlist?: string[] | null;
+          workspace_blocklist?: string[] | null;
+        };
+        Update: {
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          description?: string | null;
+          enabled?: boolean;
+          id?: string;
+          key?: string;
+          name?: string;
+          rollout_percentage?: number;
+          updated_at?: string;
+          user_allowlist?: string[] | null;
+          workspace_allowlist?: string[] | null;
+          workspace_blocklist?: string[] | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "feature_flags_created_by_admin_id_fkey";
+            columns: ["created_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       files: {
         Row: {
           created_at: string;
@@ -870,6 +1479,44 @@ export type Database = {
           },
         ];
       };
+      platform_incidents: {
+        Row: {
+          created_at: string;
+          created_by_admin_id: string | null;
+          description: string;
+          id: string;
+          resolved_at: string | null;
+          status: string;
+          title: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          description: string;
+          id?: string;
+          resolved_at?: string | null;
+          status?: string;
+          title: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          description?: string;
+          id?: string;
+          resolved_at?: string | null;
+          status?: string;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "platform_incidents_created_by_admin_id_fkey";
+            columns: ["created_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       processed_webhook_events: {
         Row: {
           id: string;
@@ -890,6 +1537,183 @@ export type Database = {
           stripe_event_type?: string;
         };
         Relationships: [];
+      };
+      promotion_assignments: {
+        Row: {
+          assigned_by_admin_id: string | null;
+          created_at: string;
+          id: string;
+          promotion_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          assigned_by_admin_id?: string | null;
+          created_at?: string;
+          id?: string;
+          promotion_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          assigned_by_admin_id?: string | null;
+          created_at?: string;
+          id?: string;
+          promotion_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "promotion_assignments_assigned_by_admin_id_fkey";
+            columns: ["assigned_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "promotion_assignments_promotion_id_fkey";
+            columns: ["promotion_id"];
+            isOneToOne: false;
+            referencedRelation: "promotions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "promotion_assignments_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      promotion_redemptions: {
+        Row: {
+          id: string;
+          promotion_id: string;
+          redeemed_at: string;
+          stripe_subscription_id: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          id?: string;
+          promotion_id: string;
+          redeemed_at?: string;
+          stripe_subscription_id?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          id?: string;
+          promotion_id?: string;
+          redeemed_at?: string;
+          stripe_subscription_id?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "promotion_redemptions_promotion_id_fkey";
+            columns: ["promotion_id"];
+            isOneToOne: false;
+            referencedRelation: "promotions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "promotion_redemptions_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      promotions: {
+        Row: {
+          active: boolean;
+          amount_off_cents: number | null;
+          applies_to_intervals: string[] | null;
+          applies_to_modules: string[] | null;
+          created_at: string;
+          created_by_admin_id: string | null;
+          currency: string | null;
+          discount_type: Database["public"]["Enums"]["promotion_discount_type"];
+          duration: Database["public"]["Enums"]["promotion_duration"];
+          duration_in_months: number | null;
+          id: string;
+          internal_description: string | null;
+          last_synced_at: string | null;
+          max_redemptions: number | null;
+          name: string;
+          new_customers_only: boolean;
+          percent_off: number | null;
+          public_code: string | null;
+          redeem_by: string | null;
+          stripe_coupon_active: boolean | null;
+          stripe_coupon_id: string;
+          stripe_promotion_code_active: boolean | null;
+          stripe_promotion_code_id: string | null;
+          times_redeemed: number;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          amount_off_cents?: number | null;
+          applies_to_intervals?: string[] | null;
+          applies_to_modules?: string[] | null;
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          currency?: string | null;
+          discount_type: Database["public"]["Enums"]["promotion_discount_type"];
+          duration: Database["public"]["Enums"]["promotion_duration"];
+          duration_in_months?: number | null;
+          id?: string;
+          internal_description?: string | null;
+          last_synced_at?: string | null;
+          max_redemptions?: number | null;
+          name: string;
+          new_customers_only?: boolean;
+          percent_off?: number | null;
+          public_code?: string | null;
+          redeem_by?: string | null;
+          stripe_coupon_active?: boolean | null;
+          stripe_coupon_id: string;
+          stripe_promotion_code_active?: boolean | null;
+          stripe_promotion_code_id?: string | null;
+          times_redeemed?: number;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          amount_off_cents?: number | null;
+          applies_to_intervals?: string[] | null;
+          applies_to_modules?: string[] | null;
+          created_at?: string;
+          created_by_admin_id?: string | null;
+          currency?: string | null;
+          discount_type?: Database["public"]["Enums"]["promotion_discount_type"];
+          duration?: Database["public"]["Enums"]["promotion_duration"];
+          duration_in_months?: number | null;
+          id?: string;
+          internal_description?: string | null;
+          last_synced_at?: string | null;
+          max_redemptions?: number | null;
+          name?: string;
+          new_customers_only?: boolean;
+          percent_off?: number | null;
+          public_code?: string | null;
+          redeem_by?: string | null;
+          stripe_coupon_active?: boolean | null;
+          stripe_coupon_id?: string;
+          stripe_promotion_code_active?: boolean | null;
+          stripe_promotion_code_id?: string | null;
+          times_redeemed?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "promotions_created_by_admin_id_fkey";
+            columns: ["created_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       quote_acceptances: {
         Row: {
@@ -1202,9 +2026,13 @@ export type Database = {
       };
       subscriptions: {
         Row: {
+          addon_module_keys: string[];
           anchor_billing_date: string | null;
+          anchor_module_key: string | null;
           billing_interval: Database["public"]["Enums"]["billing_interval"] | null;
+          cancel_at_period_end: boolean;
           created_at: string;
+          current_period_end: string | null;
           id: string;
           status: Database["public"]["Enums"]["subscription_status"];
           stripe_customer_id: string | null;
@@ -1213,9 +2041,13 @@ export type Database = {
           workspace_id: string;
         };
         Insert: {
+          addon_module_keys?: string[];
           anchor_billing_date?: string | null;
+          anchor_module_key?: string | null;
           billing_interval?: Database["public"]["Enums"]["billing_interval"] | null;
+          cancel_at_period_end?: boolean;
           created_at?: string;
+          current_period_end?: string | null;
           id?: string;
           status?: Database["public"]["Enums"]["subscription_status"];
           stripe_customer_id?: string | null;
@@ -1224,9 +2056,13 @@ export type Database = {
           workspace_id: string;
         };
         Update: {
+          addon_module_keys?: string[];
           anchor_billing_date?: string | null;
+          anchor_module_key?: string | null;
           billing_interval?: Database["public"]["Enums"]["billing_interval"] | null;
+          cancel_at_period_end?: boolean;
           created_at?: string;
+          current_period_end?: string | null;
           id?: string;
           status?: Database["public"]["Enums"]["subscription_status"];
           stripe_customer_id?: string | null;
@@ -1240,6 +2076,331 @@ export type Database = {
             columns: ["workspace_id"];
             isOneToOne: true;
             referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      support_access_events: {
+        Row: {
+          action: string;
+          created_at: string;
+          id: string;
+          metadata: Json | null;
+          session_id: string;
+          target_entity: string | null;
+          target_id: string | null;
+        };
+        Insert: {
+          action: string;
+          created_at?: string;
+          id?: string;
+          metadata?: Json | null;
+          session_id: string;
+          target_entity?: string | null;
+          target_id?: string | null;
+        };
+        Update: {
+          action?: string;
+          created_at?: string;
+          id?: string;
+          metadata?: Json | null;
+          session_id?: string;
+          target_entity?: string | null;
+          target_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_access_events_session_id_fkey";
+            columns: ["session_id"];
+            isOneToOne: false;
+            referencedRelation: "support_access_sessions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      support_access_requests: {
+        Row: {
+          access_level: Database["public"]["Enums"]["support_access_level"];
+          created_at: string;
+          customer_explanation: string | null;
+          id: string;
+          reason: string;
+          requested_by_admin_id: string;
+          requested_duration_minutes: number;
+          scopes: string[];
+          status: string;
+          ticket_id: string | null;
+          updated_at: string;
+          workspace_id: string;
+        };
+        Insert: {
+          access_level?: Database["public"]["Enums"]["support_access_level"];
+          created_at?: string;
+          customer_explanation?: string | null;
+          id?: string;
+          reason: string;
+          requested_by_admin_id: string;
+          requested_duration_minutes?: number;
+          scopes: string[];
+          status?: string;
+          ticket_id?: string | null;
+          updated_at?: string;
+          workspace_id: string;
+        };
+        Update: {
+          access_level?: Database["public"]["Enums"]["support_access_level"];
+          created_at?: string;
+          customer_explanation?: string | null;
+          id?: string;
+          reason?: string;
+          requested_by_admin_id?: string;
+          requested_duration_minutes?: number;
+          scopes?: string[];
+          status?: string;
+          ticket_id?: string | null;
+          updated_at?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_access_requests_requested_by_admin_id_fkey";
+            columns: ["requested_by_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_access_requests_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "support_tickets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_access_requests_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      support_access_sessions: {
+        Row: {
+          access_level: Database["public"]["Enums"]["support_access_level"];
+          admin_user_id: string;
+          approved_by_user_id: string;
+          created_at: string;
+          expires_at: string;
+          id: string;
+          reason: string;
+          request_id: string;
+          revoked_at: string | null;
+          revoked_by_user_id: string | null;
+          scopes: string[];
+          starts_at: string;
+          status: string;
+          ticket_id: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          access_level?: Database["public"]["Enums"]["support_access_level"];
+          admin_user_id: string;
+          approved_by_user_id: string;
+          created_at?: string;
+          expires_at: string;
+          id?: string;
+          reason: string;
+          request_id: string;
+          revoked_at?: string | null;
+          revoked_by_user_id?: string | null;
+          scopes: string[];
+          starts_at?: string;
+          status?: string;
+          ticket_id?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          access_level?: Database["public"]["Enums"]["support_access_level"];
+          admin_user_id?: string;
+          approved_by_user_id?: string;
+          created_at?: string;
+          expires_at?: string;
+          id?: string;
+          reason?: string;
+          request_id?: string;
+          revoked_at?: string | null;
+          revoked_by_user_id?: string | null;
+          scopes?: string[];
+          starts_at?: string;
+          status?: string;
+          ticket_id?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_access_sessions_admin_user_id_fkey";
+            columns: ["admin_user_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_access_sessions_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "support_access_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_access_sessions_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "support_tickets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_access_sessions_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      support_ticket_assignments: {
+        Row: {
+          assigned_admin_id: string;
+          assigned_by: string | null;
+          created_at: string;
+          id: string;
+          ticket_id: string;
+        };
+        Insert: {
+          assigned_admin_id: string;
+          assigned_by?: string | null;
+          created_at?: string;
+          id?: string;
+          ticket_id: string;
+        };
+        Update: {
+          assigned_admin_id?: string;
+          assigned_by?: string | null;
+          created_at?: string;
+          id?: string;
+          ticket_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_assignments_assigned_admin_id_fkey";
+            columns: ["assigned_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_ticket_assignments_assigned_by_fkey";
+            columns: ["assigned_by"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_ticket_assignments_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "support_tickets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      support_ticket_messages: {
+        Row: {
+          author_id: string;
+          author_type: string;
+          content: string;
+          created_at: string;
+          id: string;
+          is_internal: boolean;
+          ticket_id: string;
+        };
+        Insert: {
+          author_id: string;
+          author_type: string;
+          content: string;
+          created_at?: string;
+          id?: string;
+          is_internal?: boolean;
+          ticket_id: string;
+        };
+        Update: {
+          author_id?: string;
+          author_type?: string;
+          content?: string;
+          created_at?: string;
+          id?: string;
+          is_internal?: boolean;
+          ticket_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_messages_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "support_tickets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      support_tickets: {
+        Row: {
+          assigned_admin_id: string | null;
+          category: string;
+          created_at: string;
+          description: string;
+          id: string;
+          priority: Database["public"]["Enums"]["support_ticket_priority"];
+          requester_user_id: string;
+          resolved_at: string | null;
+          status: Database["public"]["Enums"]["support_ticket_status"];
+          subject: string;
+          updated_at: string;
+          workspace_id: string | null;
+        };
+        Insert: {
+          assigned_admin_id?: string | null;
+          category: string;
+          created_at?: string;
+          description: string;
+          id?: string;
+          priority?: Database["public"]["Enums"]["support_ticket_priority"];
+          requester_user_id: string;
+          resolved_at?: string | null;
+          status?: Database["public"]["Enums"]["support_ticket_status"];
+          subject: string;
+          updated_at?: string;
+          workspace_id?: string | null;
+        };
+        Update: {
+          assigned_admin_id?: string | null;
+          category?: string;
+          created_at?: string;
+          description?: string;
+          id?: string;
+          priority?: Database["public"]["Enums"]["support_ticket_priority"];
+          requester_user_id?: string;
+          resolved_at?: string | null;
+          status?: Database["public"]["Enums"]["support_ticket_status"];
+          subject?: string;
+          updated_at?: string;
+          workspace_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_assigned_admin_id_fkey";
+            columns: ["assigned_admin_id"];
+            isOneToOne: false;
+            referencedRelation: "admin_users";
             referencedColumns: ["id"];
           },
         ];
@@ -1380,6 +2541,42 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      webhook_events: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          event_id: string;
+          event_type: string;
+          id: string;
+          last_error: string | null;
+          payload: Json;
+          provider: string;
+          status: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          event_id: string;
+          event_type: string;
+          id?: string;
+          last_error?: string | null;
+          payload: Json;
+          provider?: string;
+          status?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          event_id?: string;
+          event_type?: string;
+          id?: string;
+          last_error?: string | null;
+          payload?: Json;
+          provider?: string;
+          status?: string;
+        };
+        Relationships: [];
       };
       workspace_invitations: {
         Row: {
@@ -1603,6 +2800,14 @@ export type Database = {
         Args: { p_name: string; p_owner_user_id: string; p_slug: string };
         Returns: string;
       };
+      is_conversation_owner: {
+        Args: { p_conversation_id: string; p_user_id: string };
+        Returns: boolean;
+      };
+      is_workspace_member: {
+        Args: { p_user_id: string; p_workspace_id: string };
+        Returns: boolean;
+      };
       show_limit: { Args: never; Returns: number };
       show_trgm: { Args: { "": string }; Returns: string[] };
       update_invoice_with_lines: {
@@ -1626,7 +2831,26 @@ export type Database = {
       };
     };
     Enums: {
+      admin_role:
+        | "super_admin"
+        | "operations_admin"
+        | "billing_admin"
+        | "support_manager"
+        | "support_agent"
+        | "security_auditor"
+        | "read_only_admin";
       ai_message_role: "user" | "assistant";
+      billing_credit_entry_type:
+        | "support_adjustment"
+        | "service_interruption"
+        | "billing_correction"
+        | "retention_credit"
+        | "promotional_credit"
+        | "refund_conversion"
+        | "manual_adjustment"
+        | "credit_applied"
+        | "credit_reversed"
+        | "credit_expired";
       billing_interval: "monthly" | "annual";
       book_type: "income" | "expense";
       credit_entry_type:
@@ -1635,9 +2859,26 @@ export type Database = {
       invoice_status: "draft" | "sent" | "viewed" | "paid" | "void" | "overdue";
       module_installation_status: "active" | "cancelled";
       module_key: "invoices" | "books" | "drive" | "quotes";
+      promotion_discount_type: "percentage" | "fixed_amount";
+      promotion_duration: "once" | "repeating" | "forever";
       quote_status: "draft" | "sent" | "viewed" | "accepted" | "declined" | "expired" | "converted";
       receipt_extraction_status: "pending" | "reviewed" | "applied" | "rejected";
       subscription_status: "active" | "past_due" | "canceled" | "incomplete";
+      support_access_level: "metadata_only" | "read_only" | "guided_write";
+      support_access_scope:
+        | "workspace_settings"
+        | "customers"
+        | "invoices"
+        | "quotes"
+        | "books"
+        | "drive"
+        | "files"
+        | "activity"
+        | "integrations"
+        | "technical_logs";
+      support_ticket_priority: "low" | "normal" | "high" | "urgent";
+      support_ticket_status:
+        "open" | "waiting_for_support" | "waiting_for_customer" | "resolved" | "closed";
       vehicle_expense_type: "fuel" | "maintenance" | "insurance" | "registration" | "other";
       workspace_role: "owner" | "admin" | "manager" | "accountant" | "employee" | "readonly";
     };
@@ -1764,7 +3005,28 @@ export const Constants = {
   },
   public: {
     Enums: {
+      admin_role: [
+        "super_admin",
+        "operations_admin",
+        "billing_admin",
+        "support_manager",
+        "support_agent",
+        "security_auditor",
+        "read_only_admin",
+      ],
       ai_message_role: ["user", "assistant"],
+      billing_credit_entry_type: [
+        "support_adjustment",
+        "service_interruption",
+        "billing_correction",
+        "retention_credit",
+        "promotional_credit",
+        "refund_conversion",
+        "manual_adjustment",
+        "credit_applied",
+        "credit_reversed",
+        "credit_expired",
+      ],
       billing_interval: ["monthly", "annual"],
       book_type: ["income", "expense"],
       credit_entry_type: ["grant", "consumption", "refund", "adjustment", "promotion", "expired"],
@@ -1772,9 +3034,32 @@ export const Constants = {
       invoice_status: ["draft", "sent", "viewed", "paid", "void", "overdue"],
       module_installation_status: ["active", "cancelled"],
       module_key: ["invoices", "books", "drive", "quotes"],
+      promotion_discount_type: ["percentage", "fixed_amount"],
+      promotion_duration: ["once", "repeating", "forever"],
       quote_status: ["draft", "sent", "viewed", "accepted", "declined", "expired", "converted"],
       receipt_extraction_status: ["pending", "reviewed", "applied", "rejected"],
       subscription_status: ["active", "past_due", "canceled", "incomplete"],
+      support_access_level: ["metadata_only", "read_only", "guided_write"],
+      support_access_scope: [
+        "workspace_settings",
+        "customers",
+        "invoices",
+        "quotes",
+        "books",
+        "drive",
+        "files",
+        "activity",
+        "integrations",
+        "technical_logs",
+      ],
+      support_ticket_priority: ["low", "normal", "high", "urgent"],
+      support_ticket_status: [
+        "open",
+        "waiting_for_support",
+        "waiting_for_customer",
+        "resolved",
+        "closed",
+      ],
       vehicle_expense_type: ["fuel", "maintenance", "insurance", "registration", "other"],
       workspace_role: ["owner", "admin", "manager", "accountant", "employee", "readonly"],
     },

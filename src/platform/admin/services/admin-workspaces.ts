@@ -17,7 +17,9 @@ export interface AdminWorkspaceSummary {
  * Search workspaces by name or slug (operational metadata only).
  * Principle #3: Does not return customer business content.
  */
-export async function searchPlatformWorkspaces(queryText?: string): Promise<AdminWorkspaceSummary[]> {
+export async function searchPlatformWorkspaces(
+  queryText?: string,
+): Promise<AdminWorkspaceSummary[]> {
   await requireAdminContext("view:workspaces");
   const db = getAdminDb();
 
@@ -66,7 +68,10 @@ export async function suspendWorkspace(workspaceId: string, reason: string): Pro
 
   const db = getAdminDb();
   const nowIso = new Date().toISOString();
-  const { error } = await db.from("workspaces").update({ deleted_at: nowIso }).eq("id", workspaceId);
+  const { error } = await db
+    .from("workspaces")
+    .update({ deleted_at: nowIso })
+    .eq("id", workspaceId);
   if (error) {
     throw new Error(`Failed to suspend workspace: ${error.message}`);
   }
@@ -111,7 +116,10 @@ export async function restoreWorkspace(workspaceId: string, reason: string): Pro
 /**
  * Add an auditable internal note to a workspace.
  */
-export async function addWorkspaceInternalNote(workspaceId: string, content: string): Promise<void> {
+export async function addWorkspaceInternalNote(
+  workspaceId: string,
+  content: string,
+): Promise<void> {
   const ctx = await requireAdminContext("manage:workspaces");
   const db = getAdminDb();
 

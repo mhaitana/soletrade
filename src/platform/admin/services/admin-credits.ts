@@ -1,10 +1,6 @@
 import "server-only";
 import { getAdminDb } from "./db";
-import type {
-  AdminRole,
-  CreditLedgerEntry,
-  CreditLedgerEntryType,
-} from "@/platform/admin/types";
+import type { AdminRole, CreditLedgerEntry, CreditLedgerEntryType } from "@/platform/admin/types";
 import { requireAdminContext } from "./admin-auth";
 import { writeAdminAuditEvent } from "./admin-audit";
 
@@ -52,7 +48,9 @@ export async function calculateWorkspaceCreditBalance(workspaceId: string): Prom
   );
 }
 
-export async function listWorkspaceCreditEntries(workspaceId: string): Promise<CreditLedgerEntry[]> {
+export async function listWorkspaceCreditEntries(
+  workspaceId: string,
+): Promise<CreditLedgerEntry[]> {
   await requireAdminContext("view:credits");
   const db = getAdminDb();
 

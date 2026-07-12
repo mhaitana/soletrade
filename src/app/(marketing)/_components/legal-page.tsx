@@ -34,13 +34,7 @@ export function LegalPage({
 }
 
 /** A titled section within a legal page. */
-export function LegalSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+export function LegalSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
@@ -56,8 +50,8 @@ export function LegalSection({
 export function LegalReviewNote() {
   return (
     <p className="rounded-md border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
-      This page is a template. Have it reviewed by a qualified professional before relying on it
-      in production.
+      This page is a template. Have it reviewed by a qualified professional before relying on it in
+      production.
     </p>
   );
 }

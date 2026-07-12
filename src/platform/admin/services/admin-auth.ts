@@ -88,6 +88,31 @@ export async function requireAdminContext(
 }
 
 /**
+ * List active internal staff for assignment pickers (e.g. support ticket assignment).
+ * Returns operational metadata only (id + name + email). Requires the caller to
+ * already hold an admin context (view:support_tickets).
+ */
+export async function listAssignableAdminStaff(): Promise<
+  Array<{ id: string; fullName: string; email: string }>
+> {
+  // No permission gate here — the caller (page) already checked its own permission;
+  // this is a read of staff metadata to populate a select.
+  const db = getAdminDb();
+  const { data: rows } = await db
+    .from("admin_users")
+    .select("id, full_name, email")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (!rows) return [];
+  return (rows as Array<{ id: string; full_name: string; email: string }>).map((r) => ({
+    id: r.id,
+    fullName: r.full_name,
+    email: r.email,
+  }));
+}
+
+/**
  * Log a security event related to admin access or authentication.
  */
 export async function logAdminSecurityEvent(params: {
