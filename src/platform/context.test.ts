@@ -21,6 +21,13 @@ vi.mock("@/platform/workspaces", () => ({
   ACTIVE_WORKSPACE_COOKIE: "soletrade:wid",
 }));
 
+// requireWorkspaceContext falls back to tryAdminContext() before redirecting to
+// /onboarding. Mock it to resolve null so the redirect branch is exercised
+// without a real Supabase admin client (which throws when env is unset).
+vi.mock("@/platform/admin/services/admin-auth", () => ({
+  tryAdminContext: vi.fn().mockResolvedValue(null),
+}));
+
 import { requireWorkspaceContext } from "./context";
 import { getCurrentUser } from "@/server/auth/session";
 import {
