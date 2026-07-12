@@ -9,10 +9,11 @@ import { env } from "@/shared/lib/env";
  * matched request and redirects unauthenticated users away from protected
  * (app)-group routes.
  *
- * Public prefixes: marketing (/), /login, /signup, /pricing, the auth email-link
- * callback (/auth/), public invoice/quote share pages (/i/, /q/), the invitation
- * accept page (/invite/ - handles signed-out first-time invitees), and /api/.
- * Everything else requires a session.
+ * Public prefixes: marketing (/), /login, /signup, /pricing, the legal/support pages
+ * (/privacy, /terms, /support), the auth email-link callback (/auth/), public
+ * invoice/quote share pages (/i/, /q/), the invitation accept page (/invite/ -
+ * handles signed-out first-time invitees), and /api/. Everything else requires a
+ * session.
  */
 
 const PUBLIC_PREFIXES = [
@@ -21,6 +22,9 @@ const PUBLIC_PREFIXES = [
   "/signup",
   "/auth",
   "/pricing",
+  "/privacy",
+  "/terms",
+  "/support",
   "/i/",
   "/q/",
   "/invite/",

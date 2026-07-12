@@ -4,15 +4,16 @@ import { Logo } from "@/shared/components/logo";
 import { brand } from "@/config/brand";
 
 /**
- * The Logo lockup is context-aware: `full` shows the product name on external surfaces,
- * `compact` shows the short label in-app, and `mark` shows only the `h` on public invoice/quote
- * pages where the issuing merchant is the dominant brand. The wordmark renders at the
- * source-string casing - the strings stay title-case.
+ * The Logo lockup is context-aware: `full` shows the `soletrade` wordmark on external
+ * surfaces, `compact` shows the short `Workspace` label in-app, and `mark` shows only the `h`
+ * on public invoice/quote pages where the issuing merchant is the dominant brand. The prose
+ * product name (`Soletrade Workspace`) is never rendered by the Logo.
  */
 describe("Logo", () => {
-  it("renders the full product name in the `full` variant", () => {
+  it("renders the wordmark in the `full` variant", () => {
     const { getByText } = render(<Logo variant="full" href={null} />);
-    expect(getByText(brand.productName)).toBeTruthy();
+    expect(getByText(brand.wordmark)).toBeTruthy();
+    expect(getByText("soletrade")).toBeTruthy();
   });
 
   it("renders the short product label in the `compact` variant", () => {
@@ -22,7 +23,7 @@ describe("Logo", () => {
 
   it("renders only the `h` mark in the `mark` variant (no wordmark)", () => {
     const { queryByText, container } = render(<Logo variant="mark" href={null} />);
-    expect(queryByText(brand.productName)).toBeNull();
+    expect(queryByText(brand.wordmark)).toBeNull();
     expect(queryByText(brand.shortProductName)).toBeNull();
     // No wordmark - just the mark.
     expect(container.textContent).toContain("h");
@@ -30,7 +31,7 @@ describe("Logo", () => {
 
   it("defaults to the `full` variant", () => {
     const { getByText } = render(<Logo href={null} />);
-    expect(getByText(brand.productName)).toBeTruthy();
+    expect(getByText(brand.wordmark)).toBeTruthy();
   });
 
   it("wraps the lockup in a link when href is provided", () => {

@@ -70,6 +70,9 @@ const envSchema = z.object({
   // Email (Resend)
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().email().optional(),
+  // Support contact address shown on the public /support page. Optional - when unset,
+  // the page degrades to a neutral contact line instead of a broken mailto.
+  SUPPORT_EMAIL: z.string().email().optional(),
 
   // SMS (Twilio) - optional
   TWILIO_ACCOUNT_SID: z.string().optional(),

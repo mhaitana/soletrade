@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** soletrade Workspace
+**Project:** Soletrade Workspace
 **Category:** Business workspace (B2B SaaS - solo traders, freelancers, gig operators)
 **Direction:** Neutral Pro - ink-on-warm-white, flat, hairline, data-dense
 

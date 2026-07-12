@@ -12,7 +12,7 @@ describe("web app manifest", () => {
 
   it("uses the full product name", () => {
     expect(m.name).toBe(brand.productName);
-    expect(m.name).toBe("soletrade Workspace");
+    expect(m.name).toBe("Soletrade Workspace");
   });
 
   it("uses the short in-app label as the home-screen short name", () => {

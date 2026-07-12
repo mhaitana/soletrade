@@ -8,7 +8,11 @@ import { brand } from "@/config/brand";
  */
 describe("brand config", () => {
   it("exposes the public product name", () => {
-    expect(brand.productName).toBe("soletrade Workspace");
+    expect(brand.productName).toBe("Soletrade Workspace");
+  });
+
+  it("exposes the visual wordmark for the logo/email/PDF lockup", () => {
+    expect(brand.wordmark).toBe("soletrade");
   });
 
   it("exposes the short in-app product label", () => {

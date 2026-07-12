@@ -2,7 +2,7 @@
   "name": "soletrade",
   "version": "0.1.0",
   "private": true,
-  "description": "soletrade Workspace - one workspace to run your business.",
+  "description": "Soletrade Workspace - one workspace to run your business.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -95,7 +95,7 @@ export function InvoiceDocument({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>{brand.productName.toLowerCase()}</Text>
+        <Text style={styles.brand}>{brand.wordmark}</Text>
         <View style={styles.row}>
           <Text style={styles.label}>From</Text>
           <Text style={styles.label}>Invoice</Text>

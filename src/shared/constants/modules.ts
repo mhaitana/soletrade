@@ -9,7 +9,7 @@ export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 export type ModuleMeta = {
   key: ModuleKey;
-  /** Concise in-app module label ("Invoices"). The full `soletrade Workspace - Invoices` form is used only for Stripe product display names. */
+  /** Concise in-app module label ("Invoices"). The full `Soletrade Workspace - Invoices` form is used only for Stripe product display names. */
   name: string;
   shortName: string; // "Invoices"
   description: string;

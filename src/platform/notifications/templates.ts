@@ -96,7 +96,7 @@ function emailHtml(opts: {
     <tr><td align="center">
       <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
         <tr><td style="padding:20px 24px;border-bottom:1px solid #e2e8f0;">
-          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:-0.01em;">${brand.productName.toLowerCase()}</span>
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:-0.01em;">${brand.wordmark}</span>
         </td></tr>
         <tr><td style="padding:28px 24px;">
           ${opts.preheading ? `<p style="margin:0 0 4px;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;">${opts.preheading}</p>` : ""}

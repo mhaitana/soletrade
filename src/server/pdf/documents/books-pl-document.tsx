@@ -50,7 +50,7 @@ export function BooksPlDocument({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>{brand.productName.toLowerCase()}</Text>
+        <Text style={styles.brand}>{brand.wordmark}</Text>
         <Text style={styles.heading}>Profit &amp; Loss</Text>
         <Text style={styles.subheading}>
           {workspace?.name ?? brand.productName} · {periodLabel}

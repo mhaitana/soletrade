@@ -1,12 +1,12 @@
-# soletrade Workspace
+# Soletrade Workspace
 
-soletrade Workspace is a unified business workspace for invoicing, quotes, bookkeeping,
+Soletrade Workspace is a unified business workspace for invoicing, quotes, bookkeeping,
 receipts, expenses, mileage, and earnings. One workspace to run your business - a
 workspace-first, multi-module product for solo traders, freelancers, and gig operators.
 Four launch modules (Invoices, Books, Drive, Quotes) share one foundation: auth,
 workspaces, billing, customers, files, activity, AI, permissions, and settings.
 
-> Repository: `soletrade`. Product: **soletrade Workspace** (© Matt Haitana). Built
+> Repository: `soletrade`. Product: **Soletrade Workspace** (© Matt Haitana). Built
 > on strict [bulletproof-react](https://github.com/alan2207/bulletproof-react) principles.
 > The design system is locked in `design-system/soletrade/`.
 

@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 import { listUserWorkspaces } from "@/platform/workspaces";
 import { Logo } from "@/shared/components/logo";
 import { CreateWorkspaceForm } from "./create-workspace-form";
+import { brand } from "@/config/brand";
 
 export const metadata = { title: "Create your workspace" };
 
@@ -25,7 +26,7 @@ export default async function OnboardingPage() {
           <Logo />
         </div>
         <h1 className="text-center text-2xl font-semibold tracking-tight">
-          {hasWorkspace ? "Create a new workspace" : "Welcome to soletrade Workspace"}
+          {hasWorkspace ? "Create a new workspace" : `Welcome to ${brand.productName}`}
         </h1>
         <p className="mt-2 text-center text-sm text-muted-foreground">
           {hasWorkspace

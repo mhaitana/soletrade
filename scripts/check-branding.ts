@@ -2,7 +2,7 @@
 //
 // Flags occurrences of the old product names in src TS/TSX files so a future edit doesn't
 // silently reintroduce pre-rebrand branding. Customer-facing brand strings must come from
-// src/config/brand.ts (product: "soletrade Workspace", company: "Matt Haitana").
+// src/config/brand.ts (product: "Soletrade Workspace", company: "Matt Haitana").
 //
 // Flagged phrases (case-insensitive): the old "soletrade OS" product name and the legacy
 // "soletrade suite" product form. The valid repository/package slug `soletrade` is NEVER
@@ -64,7 +64,7 @@ if (hits.length > 0) {
     console.error(`  ${h.file}:${h.line}: ${h.text}`);
   }
   console.error(
-    `\n${hits.length} hit(s). Replace with "soletrade Workspace" (product) or "Matt Haitana" (company).`,
+    `\n${hits.length} hit(s). Replace with "Soletrade Workspace" (product) or "Matt Haitana" (company).`,
   );
   process.exit(1);
 }

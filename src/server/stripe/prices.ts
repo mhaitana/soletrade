@@ -121,7 +121,7 @@ export async function ensureStripePrices(): Promise<PriceIdMap> {
   for (const moduleKey of MODULE_KEYS) {
     // One Stripe Product per module keeps invoices clean (4 products, 4 prices each).
     // The product id stays `soletrade-*` (a stable lookup key) even though the product
-    // display name is `soletrade Workspace - *`; changing the id would orphan existing Stripe
+    // display name is `Soletrade Workspace - *`; changing the id would orphan existing Stripe
     // products and subscriptions. NB: `findOrCreateProduct` reuses existing products by metadata,
     // so already-created products keep their PRE-REBRAND display name until updated manually in
     // the Stripe Dashboard - see docs/DEPLOYMENT.md / the branding follow-up list.

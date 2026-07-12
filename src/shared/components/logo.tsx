@@ -5,16 +5,15 @@ import { brand } from "@/config/brand";
 /**
  * Product brand lockup: the `h` mark + wordmark.
  *
- * `variant` controls how much of the product name renders alongside the mark, matching the spec's
- * "full product name on external surfaces, short label in-app" rule:
- *  - `full`    - `soletrade Workspace` (external: marketing, auth, onboarding, error/not-found, invite)
- *  - `compact` - `workspace`         (in-app sidebar/mobile sheet, where the mark is already visible)
+ * `variant` controls what renders alongside the `h` mark:
+ *  - `full`    - `soletrade` wordmark (external: marketing, auth, onboarding, error/not-found, invite)
+ *  - `compact` - `Workspace` short label (in-app sidebar/mobile sheet, where the mark is already visible)
  *  - `mark`    - `h` mark only        (public invoice/quote pages, where the issuing merchant is the
  *               dominant brand and Soletrade must stay subtle/secondary)
  *
- * The wordmark renders at the source-string casing (`soletrade Workspace` full, `Workspace`
- * compact) — the canonical values used by metadata, README, and package.json. The source strings
- * in `brand` stay title-case.
+ * The full lockup uses `brand.wordmark` (`soletrade`); the compact label uses
+ * `brand.shortProductName` (`Workspace`). The prose product name (`Soletrade Workspace`) is NOT
+ * rendered here — it lives in titles, metadata, and body copy.
  */
 export type LogoVariant = "full" | "compact" | "mark";
 
@@ -28,7 +27,7 @@ export function Logo({
   variant?: LogoVariant;
 }) {
   const wordmark =
-    variant === "full" ? brand.productName : variant === "compact" ? brand.shortProductName : null;
+    variant === "full" ? brand.wordmark : variant === "compact" ? brand.shortProductName : null;
   const content = (
     <span
       className={cn(
