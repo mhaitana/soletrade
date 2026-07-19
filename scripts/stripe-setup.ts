@@ -6,8 +6,11 @@
  * IDs to paste into `.env.local`.
  *
  *   pnpm stripe:setup
+ *   pnpm stripe:setup --env-file .env.prod
+ *   pnpm stripe:setup --prod
  *
- * Requires STRIPE_SECRET_KEY in .env.local (sk_test_… for test mode). Re-runnable:
+ * Requires STRIPE_SECRET_KEY in .env.local (sk_test_… for test mode) or the file
+ * passed via --env-file. Re-runnable:
  * existing active prices tagged with the slot are reused, not duplicated. Amounts
  * come from `MODULE_PRICES` (the single source of truth), so the Stripe dashboard
  * can never drift from the public `/pricing` page.
@@ -44,9 +47,33 @@ loader._resolveFilename = function (
   return origResolveFilename(request, parent, options, isMain);
 };
 
+// Parse optional env-file override so stripe:setup can target production
+// variables in .env.prod without manual copy/paste. Supports:
+//   pnpm stripe:setup --env-file .env.prod
+//   pnpm stripe:setup --env-file=.env.prod
+//   pnpm stripe:setup --prod
+const envFileFlag = (() => {
+  for (let i = 2; i < process.argv.length; i++) {
+    const arg = process.argv[i];
+    if (!arg) continue;
+    if (arg === "--prod") return ".env.prod";
+    if (arg === "--env-file") {
+      const next = process.argv[i + 1];
+      if (next) return next;
+    }
+    if (arg.startsWith("--env-file=")) return arg.slice("--env-file=".length);
+  }
+  return null;
+})();
+
 // Load .env.local / .env into process.env before importing the server modules
 // (env.ts reads process.env once at import).
 loadEnvConfig(process.cwd());
+
+// Allow overriding with a custom env file (e.g. --env-file .env.prod).
+if (envFileFlag) {
+  process.loadEnvFile(path.resolve(process.cwd(), envFileFlag));
+}
 
 async function main() {
   const { ensureStripePrices } = await import("../src/server/stripe/prices");
