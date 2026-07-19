@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -15,10 +15,16 @@ import {
   type GeneralSettingsPageData,
   type UpdateWorkspaceResult,
 } from "@/app/(app)/actions/workspace";
+import { type PaymentMethods } from "@/shared/types/payment-methods";
+import { PaymentMethodsEditor } from "@/shared/components/payment-methods-editor";
 
 const initialState: UpdateWorkspaceResult = { ok: false, error: "" };
 
 export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageData }) {
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethods>(
+    initial.workspace.paymentMethods ?? [],
+  );
+
   const [state, formAction, pending] = useActionState(
     async (_prev: UpdateWorkspaceResult, formData: FormData): Promise<UpdateWorkspaceResult> =>
       updateWorkspaceAction({
@@ -28,6 +34,9 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
         quotePrefix: String(formData.get("quotePrefix") ?? ""),
         timezone: String(formData.get("timezone") ?? ""),
         fyStartMonth: Number(formData.get("fyStartMonth") ?? 7),
+        paymentMethods: JSON.parse(
+          String(formData.get("paymentMethods") ?? "[]"),
+        ) as PaymentMethods,
       }),
     initialState,
   );
@@ -169,6 +178,22 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
                 quarter&quot; dashboard windows. e.g. 1 July (AU), 1 April (NZ), 1 January (calendar
                 year).
               </p>
+            </div>
+
+            <div className="border-t border-border pt-6">
+              <div className="mb-4 space-y-1">
+                <h2 className="text-sm font-medium">Payment details</h2>
+                <p className="text-xs text-muted-foreground">
+                  Customers see these instructions when paying an invoice by bank transfer, PayPal,
+                  or PayID.
+                </p>
+              </div>
+              <input type="hidden" name="paymentMethods" value={JSON.stringify(paymentMethods)} />
+              <PaymentMethodsEditor
+                value={paymentMethods}
+                onChange={setPaymentMethods}
+                disabled={!initial.canManage}
+              />
             </div>
 
             {initial.canManage ? (

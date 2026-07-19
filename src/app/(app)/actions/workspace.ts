@@ -9,6 +9,7 @@ import {
   SUPPORTED_CURRENCY_CODES,
   FINANCIAL_YEAR_START_MONTH_VALUES,
 } from "@/shared/constants/currencies";
+import { parsePaymentMethods, paymentMethodsSchema } from "@/shared/types/payment-methods";
 
 const PREFIX_RE = /^[A-Za-z0-9_-]{0,10}$/;
 
@@ -34,6 +35,7 @@ const workspaceSchema = z.object({
     .refine((m) => (FINANCIAL_YEAR_START_MONTH_VALUES as readonly number[]).includes(m), {
       message: "Use a month between 1 and 12.",
     }),
+  paymentMethods: paymentMethodsSchema,
 });
 
 export type UpdateWorkspaceResult = { ok: true } | { ok: false; error: string };
@@ -77,6 +79,7 @@ export interface GeneralSettingsPageData {
     | "quotePrefix"
     | "timezone"
     | "fyStartMonth"
+    | "paymentMethods"
   >;
   canManage: boolean;
 }
@@ -86,6 +89,7 @@ export async function loadGeneralSettingsPage(): Promise<GeneralSettingsPageData
   const ctx = await requireWorkspaceContext();
   const workspace = await getWorkspace(ctx.workspaceId);
   if (!workspace) return null;
+  const paymentMethods = parsePaymentMethods(workspace.paymentMethods);
   return {
     workspace: {
       id: workspace.id,
@@ -96,6 +100,7 @@ export async function loadGeneralSettingsPage(): Promise<GeneralSettingsPageData
       quotePrefix: workspace.quotePrefix,
       timezone: workspace.timezone,
       fyStartMonth: workspace.fyStartMonth,
+      paymentMethods: paymentMethods.ok ? paymentMethods.methods : [],
     },
     canManage: ctx.role === "owner" || ctx.role === "admin",
   };

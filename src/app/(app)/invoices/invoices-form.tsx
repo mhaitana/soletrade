@@ -5,6 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import {
+  getPaymentMethodDetails,
+  getPaymentMethodLabel,
+  parsePaymentMethods,
+  type PaymentMethods,
+} from "@/shared/types/payment-methods";
+import { PaymentMethodsEditor } from "@/shared/components/payment-methods-editor";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { computeInvoiceTotals } from "@/modules/invoices/totals";
@@ -51,10 +58,12 @@ export function InvoiceForm({
   mode,
   invoice,
   customers,
+  workspacePaymentMethods,
 }: {
   mode: "create" | "edit";
   invoice?: InvoiceWithItems;
   customers: PickerCustomer[];
+  workspacePaymentMethods: PaymentMethods;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -75,6 +84,14 @@ export function InvoiceForm({
     invoice?.pricesIncludeTax ?? false,
   );
   const [notes, setNotes] = useState<string>(invoice?.notes ?? "");
+
+  const [useWorkspaceDefaultPaymentMethods, setUseWorkspaceDefaultPaymentMethods] = useState(
+    invoice ? invoice.paymentMethods === null : true,
+  );
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethods>(() => {
+    const parsed = parsePaymentMethods(invoice?.paymentMethods ?? workspacePaymentMethods);
+    return parsed.ok ? parsed.methods : [];
+  });
 
   const [items, setItems] = useState<LineItemState[]>(
     invoice
@@ -141,6 +158,7 @@ export function InvoiceForm({
       taxRate: Number(taxRate) || 0,
       pricesIncludeTax,
       notes: notes || null,
+      paymentMethods: useWorkspaceDefaultPaymentMethods ? null : paymentMethods,
       lineItems: lineItemInputs,
     };
 
@@ -319,9 +337,67 @@ export function InvoiceForm({
           maxLength={2000}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Internal notes (not shown to the customer until 5b)."
+          placeholder="Internal notes (not shown to the customer on the payment page)."
           className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
+      </div>
+
+      <div className="space-y-3 rounded-md border border-border p-4">
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium">Payment instructions</h2>
+          <p className="text-xs text-muted-foreground">
+            Choose whether this invoice uses the workspace default or custom payment details.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="radio"
+              name="paymentMethodMode"
+              checked={useWorkspaceDefaultPaymentMethods}
+              onChange={() => {
+                setUseWorkspaceDefaultPaymentMethods(true);
+                setPaymentMethods(workspacePaymentMethods);
+              }}
+              className="mt-1"
+            />
+            <span className="space-y-1">
+              <span className="font-medium">Use workspace default</span>
+              {workspacePaymentMethods.length === 0 ? (
+                <span className="block text-xs text-muted-foreground">
+                  No workspace payment methods configured.
+                </span>
+              ) : (
+                workspacePaymentMethods.map((method, i) => (
+                  <span key={i} className="block text-xs text-muted-foreground">
+                    {getPaymentMethodLabel(method)}:{" "}
+                    {getPaymentMethodDetails(method)
+                      .map((d) => d.value)
+                      .join(" · ")}
+                  </span>
+                ))
+              )}
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="radio"
+              name="paymentMethodMode"
+              checked={!useWorkspaceDefaultPaymentMethods}
+              onChange={() => {
+                if (paymentMethods.length === 0 && workspacePaymentMethods.length > 0) {
+                  setPaymentMethods(workspacePaymentMethods);
+                }
+                setUseWorkspaceDefaultPaymentMethods(false);
+              }}
+              className="mt-1"
+            />
+            <span className="font-medium">Custom for this invoice</span>
+          </label>
+        </div>
+        {!useWorkspaceDefaultPaymentMethods ? (
+          <PaymentMethodsEditor value={paymentMethods} onChange={setPaymentMethods} />
+        ) : null}
       </div>
 
       <div className="rounded-md border border-border bg-muted/30 p-4">

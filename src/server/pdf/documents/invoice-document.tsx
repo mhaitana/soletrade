@@ -1,5 +1,10 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { brand } from "@/config/brand";
+import {
+  getPaymentMethodDetails,
+  getPaymentMethodLabel,
+  type PaymentMethods,
+} from "@/shared/types/payment-methods";
 
 /**
  * Invoice PDF document (Wave 4). Renders to PDF bytes via `renderPdf` - a workspace-member-only
@@ -36,6 +41,8 @@ export interface InvoicePdfData {
   notes: string | null;
   customerName: string | null;
   lineItems: InvoicePdfLineItem[];
+  /** Resolved payment methods to show on the PDF (invoice override → workspace default). */
+  paymentMethods?: PaymentMethods;
 }
 
 function money(cents: number, currency: string): string {
@@ -155,6 +162,23 @@ export function InvoiceDocument({
           <View style={styles.sectionGap}>
             <Text style={styles.label}>Notes</Text>
             <Text style={{ marginTop: 4 }}>{invoice.notes}</Text>
+          </View>
+        ) : null}
+
+        {invoice.paymentMethods && invoice.paymentMethods.length > 0 ? (
+          <View style={styles.sectionGap}>
+            <Text style={styles.label}>Payment details</Text>
+            {invoice.paymentMethods.map((method, index) => (
+              <View key={index} style={{ marginTop: 8 }}>
+                <Text style={styles.bold}>{getPaymentMethodLabel(method)}</Text>
+                {getPaymentMethodDetails(method).map((detail) => (
+                  <View key={detail.label} style={styles.totalRow}>
+                    <Text>{detail.label}</Text>
+                    <Text>{detail.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
           </View>
         ) : null}
       </Page>

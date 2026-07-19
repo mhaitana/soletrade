@@ -22,6 +22,12 @@ import {
 } from "@/modules/invoices";
 import type { InvoiceStatus } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
+import { getWorkspace } from "@/platform/workspaces";
+import {
+  parsePaymentMethods,
+  paymentMethodsSchema,
+  type PaymentMethods,
+} from "@/shared/types/payment-methods";
 
 const forbid = (msg = "You don't have permission to manage invoices.") => ({
   ok: false as const,
@@ -44,6 +50,7 @@ const createSchema = z.object({
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   // Form sends `notes || null`, so accept null (optional alone only allows undefined).
   notes: z.string().trim().max(2000).nullable().optional(),
+  paymentMethods: paymentMethodsSchema.nullable().optional(),
 });
 
 export type CreateInvoiceResult =
@@ -95,6 +102,7 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
         taxRate: parsed.data.taxRate,
         pricesIncludeTax: parsed.data.pricesIncludeTax,
         notes: parsed.data.notes ?? null,
+        paymentMethods: parsed.data.paymentMethods ?? null,
         lineItems,
       },
       ctx.user.id,
@@ -117,6 +125,7 @@ const updateSchema = z.object({
   pricesIncludeTax: z.boolean().optional().default(false),
   lineItems: z.array(lineItemSchema).min(1, "Add at least one line item."),
   notes: z.string().trim().max(2000).nullable().optional(),
+  paymentMethods: paymentMethodsSchema.nullable().optional(),
 });
 
 export type UpdateInvoiceResult =
@@ -165,6 +174,7 @@ export async function updateInvoiceAction(input: unknown): Promise<UpdateInvoice
         taxRate: rest.taxRate,
         pricesIncludeTax: rest.pricesIncludeTax,
         notes: rest.notes ?? null,
+        paymentMethods: rest.paymentMethods ?? null,
         lineItems,
       },
       ctx.user.id,
@@ -302,6 +312,7 @@ export type InvoiceEditData =
       installed: true;
       invoice: InvoiceWithItems | null;
       customers: CustomerRow[];
+      workspacePaymentMethods: PaymentMethods;
       canManage: boolean;
     }
   | { installed: false };
@@ -310,23 +321,44 @@ export async function loadInvoiceForEdit(invoiceId: string): Promise<InvoiceEdit
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "invoices"))) return { installed: false };
 
-  const [invoice, customers, canManage] = await Promise.all([
+  const [invoice, customers, workspace, canManage] = await Promise.all([
     getInvoice(ctx.workspaceId, branded<"InvoiceId">(invoiceId)),
     listCustomers(ctx.workspaceId),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:invoice").ok),
   ]);
-  return { installed: true, invoice, customers, canManage };
+  const paymentMethods = parsePaymentMethods(workspace?.paymentMethods ?? null);
+  return {
+    installed: true,
+    invoice,
+    customers,
+    workspacePaymentMethods: paymentMethods.ok ? paymentMethods.methods : [],
+    canManage,
+  };
 }
 
 /** Customer list for the new-invoice form (module-gated). */
 export async function loadCustomersForInvoice(): Promise<
-  { installed: true; customers: CustomerRow[]; canManage: boolean } | { installed: false }
+  | {
+      installed: true;
+      customers: CustomerRow[];
+      workspacePaymentMethods: PaymentMethods;
+      canManage: boolean;
+    }
+  | { installed: false }
 > {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "invoices"))) return { installed: false };
-  const [customers, canManage] = await Promise.all([
+  const [customers, workspace, canManage] = await Promise.all([
     listCustomers(ctx.workspaceId),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:invoice").ok),
   ]);
-  return { installed: true, customers, canManage };
+  const paymentMethods = parsePaymentMethods(workspace?.paymentMethods ?? null);
+  return {
+    installed: true,
+    customers,
+    workspacePaymentMethods: paymentMethods.ok ? paymentMethods.methods : [],
+    canManage,
+  };
 }

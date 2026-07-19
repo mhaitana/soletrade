@@ -55,10 +55,7 @@ describe("loadEnvFileOverride", () => {
 
   it("ignores comments and blank lines", () => {
     const envFile = path.join(tmpDir, ".env.prod");
-    writeFileSync(
-      envFile,
-      "\n# comment\nOVERRIDE_FOO=commented # inline ignored\n   \n",
-    );
+    writeFileSync(envFile, "\n# comment\nOVERRIDE_FOO=commented # inline ignored\n   \n");
 
     loadEnvFileOverride(envFile);
 

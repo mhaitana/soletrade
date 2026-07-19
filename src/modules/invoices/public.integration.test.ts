@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type CustomerId, type InvoiceId, type WorkspaceId } from "@/shared/types/ids";
-import { createWorkspace } from "@/platform/workspaces";
+import { createWorkspace, getWorkspace, updateWorkspace } from "@/platform/workspaces";
 import { createCustomer } from "@/platform/customers";
 import { onEvent } from "@/server/events";
 import {
@@ -128,6 +128,62 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
     expect(view!.lineItems).toHaveLength(1);
     expect(view!.totalCents).toBe(11000); // 10000 + 10% tax
     expect(view!.stripeChargeId).toBeNull();
+    expect(view!.paymentMethods).toEqual([]);
+  });
+
+  it("getInvoiceByPublicToken resolves workspace default payment methods", async () => {
+    const current = await getWorkspace(ws!);
+    const defaultMethods = [
+      {
+        type: "bank_transfer" as const,
+        label: "Default account",
+        accountName: "Pub Test",
+        bsb: "062-000",
+        accountNumber: "11122233",
+        bankName: "CBA",
+      },
+    ];
+    await updateWorkspace(
+      ws!,
+      {
+        name: current!.name,
+        defaultCurrency: current!.defaultCurrency,
+        invoicePrefix: current!.invoicePrefix,
+        quotePrefix: current!.quotePrefix,
+        timezone: current!.timezone,
+        fyStartMonth: current!.fyStartMonth,
+        paymentMethods: defaultMethods,
+      },
+      actor,
+    );
+
+    const { token } = await createSentInvoice();
+    const view = await getInvoiceByPublicToken(token);
+    expect(view!.paymentMethods).toEqual(defaultMethods);
+  });
+
+  it("getInvoiceByPublicToken prefers invoice override over workspace default payment methods", async () => {
+    const overrideMethods = [{ type: "paypal" as const, email: "override@globex.test" }];
+    const id = await createInvoice(
+      ws!,
+      {
+        customerId: customer,
+        issueDate: new Date("2026-01-20"),
+        taxRate: 0,
+        lineItems: [
+          { description: "Override payment methods test", quantity: 1, unitPriceCents: 5000 },
+        ],
+        paymentMethods: overrideMethods,
+      },
+      actor,
+    );
+    createdInvoiceIds.push(id);
+    await sendInvoice(ws!, id, actor);
+    const inv = await getInvoice(ws!, id);
+    const token = inv!.publicToken!;
+
+    const view = await getInvoiceByPublicToken(token);
+    expect(view!.paymentMethods).toEqual(overrideMethods);
   });
 
   it("markInvoiceViewed flips sent→viewed idempotently and publishes InvoiceViewed", async () => {

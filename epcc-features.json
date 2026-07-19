@@ -1,0 +1,106 @@
+{
+  "_warning": "Feature definitions are IMMUTABLE after planning approval. Only passes, status, and subtask statuses may be edited.",
+  "_planApproved": true,
+  "_planApprovedAt": "2026-07-19T00:00:00.000Z",
+  "_modifiableFields": ["passes", "status", "subtasks[].status", "verifiedAt", "commit"],
+  "features": [
+    {
+      "id": "F001",
+      "name": "Payment details on invoices",
+      "description": "Workspace-level payment instructions (bank transfer, PayPal, PayID) with optional per-invoice override, rendered on the public invoice page and PDF.",
+      "priority": "P0",
+      "implementationOrder": 1,
+      "dependencies": [],
+      "blockedBy": [],
+      "estimatedHours": 10,
+      "planReference": "EPCC_PLAN.md",
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-19T00:00:00.000Z",
+      "commit": "17ed78d",
+      "subtasks": [
+        {
+          "name": "Migration: add payment_methods jsonb columns to workspaces and invoices",
+          "status": "completed",
+          "estimatedHours": 0.5
+        },
+        {
+          "name": "Regenerate DB types and create shared payment-method Zod schema/types",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Update workspace service, Server Action, and settings loader for payment methods",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Settings form: add reusable payment-method editor UI",
+          "status": "completed",
+          "estimatedHours": 1.5
+        },
+        {
+          "name": "Invoice module: persist and resolve payment methods (workspace default vs invoice override)",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Invoice form: add payment-instructions override UI",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Extend invoice Server Action schemas with paymentMethods",
+          "status": "completed",
+          "estimatedHours": 0.5
+        },
+        {
+          "name": "Public invoice page: render resolved payment methods",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Invoice PDF: render resolved payment methods",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Unit tests for payment-method validation and resolution",
+          "status": "completed",
+          "estimatedHours": 0.5
+        },
+        {
+          "name": "Integration tests for workspace settings + invoice override",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Integration tests for public page and PDF route",
+          "status": "completed",
+          "estimatedHours": 0.5
+        },
+        {
+          "name": "Seed data: add demo workspace payment methods",
+          "status": "completed",
+          "estimatedHours": 0.5
+        }
+      ],
+      "acceptanceCriteria": [
+        "Workspace owner/admin can add, edit, remove, and re-order payment methods in /settings/general.",
+        "Supported method types: bank transfer (account name, BSB, account number, bank name, reference), PayPal (email), PayID (identifier).",
+        "Each invoice can use the workspace default or override with custom payment instructions.",
+        "Public invoice /i/[token] shows resolved payment methods when the invoice is payable.",
+        "When Stripe is configured, payment methods appear as an alternative to card payment; when absent, they become the primary payment path.",
+        "Invoice PDF download includes the resolved payment methods.",
+        "Malformed or unsupported payment-method JSON is rejected at the server boundary.",
+        "pnpm check (type-check + lint + test:ci) passes after implementation."
+      ]
+    }
+  ],
+  "validation": {
+    "planTasks": 13,
+    "mappedToFeatures": 13,
+    "unmappedTasks": [],
+    "featuresWithoutTasks": []
+  }
+}

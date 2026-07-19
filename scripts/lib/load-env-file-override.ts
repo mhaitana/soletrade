@@ -25,8 +25,7 @@ export function loadEnvFileOverride(filePath: string): void {
     let value = match[2] ?? "";
     value = value.trim();
     const quote = value[0];
-    const isQuoted =
-      (quote === '"' || quote === "'") && value.endsWith(quote) && value.length > 1;
+    const isQuoted = (quote === '"' || quote === "'") && value.endsWith(quote) && value.length > 1;
     if (isQuoted) {
       value = value.slice(1, -1);
       if (quote === '"') {

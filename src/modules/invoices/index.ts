@@ -15,6 +15,7 @@ import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { computeInvoiceTotals, lineItemAmountCents } from "./totals";
 import type { InvoiceStatus } from "@/server/db/enums";
+import type { Json } from "@/server/db/types";
 import type {
   CustomerId,
   InvoiceId,
@@ -22,6 +23,7 @@ import type {
   UserId,
   WorkspaceId,
 } from "@/shared/types/ids";
+import { resolveInvoicePaymentMethods, type PaymentMethods } from "@/shared/types/payment-methods";
 // Type-only: the contract the notifications platform expects on InvoiceSent/Overdue/Paid
 // metadata. Erased at runtime, so this is not a runtime cross-module import (modules may import
 // platform types; the boundary rule forbids platform importing modules, not the reverse).
@@ -59,6 +61,8 @@ export interface InvoiceInput {
   /** When true, line-item unit prices are tax-inclusive (gross); tax is back-calculated. */
   pricesIncludeTax?: boolean;
   notes?: string | null;
+  /** Optional per-invoice payment instructions; overrides workspace default when set. */
+  paymentMethods?: PaymentMethods | null;
   lineItems: LineItemInput[];
 }
 
@@ -81,6 +85,8 @@ export interface InvoiceRow {
   taxCents: number;
   totalCents: number;
   notes: string | null;
+  /** Per-invoice payment instructions (jsonb array); null when using workspace default. */
+  paymentMethods: PaymentMethods | null;
   publicToken: string | null;
   sentAt: Date | null;
   paidAt: Date | null;
@@ -105,7 +111,7 @@ export interface InvoiceWithItems extends InvoiceRow {
 }
 
 const INVOICE_COLUMNS =
-  "id, workspace_id, customer_id, number, status, issue_date, due_date, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, public_token, sent_at, paid_at, stripe_payment_intent_id, stripe_charge_id, created_at, updated_at, customers!left ( name ), workspaces!left ( name )";
+  "id, workspace_id, customer_id, number, status, issue_date, due_date, currency, tax_rate, prices_include_tax, subtotal_cents, tax_cents, total_cents, notes, payment_methods, public_token, sent_at, paid_at, stripe_payment_intent_id, stripe_charge_id, created_at, updated_at, customers!left ( name ), workspaces!left ( name )";
 
 const LINE_ITEM_COLUMNS =
   "id, invoice_id, description, quantity, unit_price_cents, amount_cents, position";
@@ -126,6 +132,7 @@ interface InvoiceRaw {
   tax_cents: number;
   total_cents: number;
   notes: string | null;
+  payment_methods: Json | null;
   public_token: string | null;
   sent_at: string | null;
   paid_at: string | null;
@@ -168,6 +175,7 @@ function toInvoiceRow(r: InvoiceRaw): InvoiceRow {
     taxCents: r.tax_cents,
     totalCents: r.total_cents,
     notes: r.notes,
+    paymentMethods: r.payment_methods as unknown as PaymentMethods | null,
     publicToken: r.public_token,
     sentAt: r.sent_at ? parsePgTimestamp(r.sent_at) : null,
     paidAt: r.paid_at ? parsePgTimestamp(r.paid_at) : null,
@@ -275,6 +283,10 @@ export async function createInvoice(
       p_tax_cents: totals.taxCents,
       p_total_cents: totals.totalCents,
       p_notes: input.notes ?? null,
+      p_payment_methods:
+        input.paymentMethods && input.paymentMethods.length > 0
+          ? (input.paymentMethods as unknown as Json)
+          : null,
       p_line_items: input.lineItems.map((it, i) => ({
         description: it.description,
         quantity: String(it.quantity),
@@ -394,6 +406,12 @@ export async function updateInvoice(
   if (newTaxRate !== undefined) set.tax_rate = newTaxRate;
   if (patch.pricesIncludeTax !== undefined) set.prices_include_tax = patch.pricesIncludeTax;
   if (patch.notes !== undefined) set.notes = patch.notes ?? null;
+  if (patch.paymentMethods !== undefined) {
+    set.payment_methods =
+      patch.paymentMethods && patch.paymentMethods.length > 0
+        ? (patch.paymentMethods as unknown as Json)
+        : null;
+  }
   if (totals) {
     set.subtotal_cents = totals.subtotalCents;
     set.tax_cents = totals.taxCents;
@@ -761,6 +779,8 @@ export interface PublicInvoiceView {
   paidAt: Date | null;
   /** Receipt reference on the paid confirmation screen; null until payment succeeds. */
   stripeChargeId: string | null;
+  /** Resolved payment methods to show the customer (invoice override → workspace default). */
+  paymentMethods: PaymentMethods;
 }
 
 /**
@@ -783,13 +803,16 @@ export async function getInvoiceByPublicToken(token: string): Promise<PublicInvo
   const r = inv as InvoiceRaw;
   if (r.status === "draft") return null;
 
-  const itemRows = await unwrap(
-    supabase
-      .from("invoice_line_items")
-      .select(LINE_ITEM_COLUMNS)
-      .eq("invoice_id", r.id)
-      .order("position", { ascending: true }),
-  );
+  const [itemRows, workspace] = await Promise.all([
+    unwrap(
+      supabase
+        .from("invoice_line_items")
+        .select(LINE_ITEM_COLUMNS)
+        .eq("invoice_id", r.id)
+        .order("position", { ascending: true }),
+    ),
+    getWorkspace(branded<"WorkspaceId">(r.workspace_id)),
+  ]);
 
   // Build the public view explicitly - never spread the internal row (it carries internal
   // ids, private `notes`, `publicToken`, `stripePaymentIntentId`, timestamps). Only the
@@ -819,6 +842,10 @@ export async function getInvoiceByPublicToken(token: string): Promise<PublicInvo
     sentAt: r.sent_at ? parsePgTimestamp(r.sent_at) : null,
     paidAt: r.paid_at ? parsePgTimestamp(r.paid_at) : null,
     stripeChargeId: r.stripe_charge_id,
+    paymentMethods: resolveInvoicePaymentMethods(
+      r.payment_methods,
+      workspace?.paymentMethods ?? null,
+    ),
   };
 }
 

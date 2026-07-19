@@ -50,7 +50,12 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
           Save before sending - sent invoices are locked.
         </p>
       </div>
-      <InvoiceForm mode="edit" invoice={data.invoice} customers={data.customers} />
+      <InvoiceForm
+        mode="edit"
+        invoice={data.invoice}
+        customers={data.customers}
+        workspacePaymentMethods={data.workspacePaymentMethods}
+      />
     </div>
   );
 }

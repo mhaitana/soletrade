@@ -1302,6 +1302,7 @@ export type Database = {
           notes: string | null;
           number: string;
           paid_at: string | null;
+          payment_methods: Json | null;
           prices_include_tax: boolean;
           public_token: string | null;
           sent_at: string | null;
@@ -1325,6 +1326,7 @@ export type Database = {
           notes?: string | null;
           number: string;
           paid_at?: string | null;
+          payment_methods?: Json | null;
           prices_include_tax?: boolean;
           public_token?: string | null;
           sent_at?: string | null;
@@ -1348,6 +1350,7 @@ export type Database = {
           notes?: string | null;
           number?: string;
           paid_at?: string | null;
+          payment_methods?: Json | null;
           prices_include_tax?: boolean;
           public_token?: string | null;
           sent_at?: string | null;
@@ -2690,6 +2693,7 @@ export type Database = {
           invoice_prefix: string;
           name: string;
           owner_user_id: string;
+          payment_methods: Json | null;
           quote_prefix: string;
           slug: string;
           timezone: string;
@@ -2704,6 +2708,7 @@ export type Database = {
           invoice_prefix?: string;
           name: string;
           owner_user_id: string;
+          payment_methods?: Json | null;
           quote_prefix?: string;
           slug: string;
           timezone?: string;
@@ -2718,6 +2723,7 @@ export type Database = {
           invoice_prefix?: string;
           name?: string;
           owner_user_id?: string;
+          payment_methods?: Json | null;
           quote_prefix?: string;
           slug?: string;
           timezone?: string;
@@ -2767,6 +2773,7 @@ export type Database = {
           p_line_items: Json;
           p_notes: string;
           p_number: string;
+          p_payment_methods?: Json;
           p_prices_include_tax: boolean;
           p_subtotal_cents: number;
           p_tax_cents: number;

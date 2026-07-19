@@ -91,6 +91,34 @@ describe.skipIf(!HAS_DB)("invoices integration (requires DATABASE_URL)", () => {
     expect(inv!.sentAt).toBeNull();
   });
 
+  it("creates a draft invoice with per-invoice payment methods", async () => {
+    const paymentMethods = [
+      {
+        type: "bank_transfer" as const,
+        accountName: "Invoice Account",
+        bsb: "032-000",
+        accountNumber: "987654321",
+        bankName: "Westpac",
+        reference: "Invoice number",
+      },
+    ];
+    const id = await createInvoice(
+      ws1!,
+      {
+        customerId: ws1Customer,
+        issueDate: new Date("2026-03-01"),
+        taxRate: 0,
+        lineItems: [{ description: "Payment methods test", quantity: 1, unitPriceCents: 2000 }],
+        paymentMethods,
+      },
+      actor,
+    );
+    createdInvoiceIds.push(id);
+
+    const inv = await getInvoice(ws1!, id);
+    expect(inv!.paymentMethods).toEqual(paymentMethods);
+  });
+
   it("numbers invoices per workspace per year (ws2 starts at 0001)", async () => {
     const id = await createInvoice(
       ws2!,
@@ -137,6 +165,16 @@ describe.skipIf(!HAS_DB)("invoices integration (requires DATABASE_URL)", () => {
     expect(inv!.subtotalCents).toBe(120000);
     expect(inv!.taxCents).toBe(12000);
     expect(inv!.totalCents).toBe(132000);
+  });
+
+  it("updates a draft invoice's payment methods", async () => {
+    const methods = [
+      { type: "paypal" as const, email: "finance@acme.test" },
+      { type: "payid" as const, identifier: "acme@payid.test" },
+    ];
+    await updateInvoice(ws1!, createdInvoiceIds[0]!, { paymentMethods: methods }, actor);
+    const inv = await getInvoice(ws1!, createdInvoiceIds[0]!);
+    expect(inv!.paymentMethods).toEqual(methods);
   });
 
   it("rejects editing a sent invoice (draft-only)", async () => {

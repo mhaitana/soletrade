@@ -5,6 +5,7 @@ import { cleanupWorkspaces, seedUsers } from "@/tests/db-helpers";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 import { createWorkspace, getWorkspace, updateWorkspace } from "@/platform/workspaces";
 import { createInvoice, getInvoice } from "@/modules/invoices";
+import { resolveInvoicePaymentMethods } from "@/shared/types/payment-methods";
 
 /**
  * Wave 4 Part F integration: migration 0018 wired the workspace's `invoicePrefix` /
@@ -66,6 +67,7 @@ describe.skipIf(!HAS_DB)(
           quotePrefix: "QUOTE-",
           timezone: "America/New_York",
           fyStartMonth: 4,
+          paymentMethods: [],
         },
         owner,
       );
@@ -76,11 +78,13 @@ describe.skipIf(!HAS_DB)(
       expect(updated!.quotePrefix).toBe("QUOTE-");
       expect(updated!.timezone).toBe("America/New_York");
       expect(updated!.fyStartMonth).toBe(4);
+      expect(updated!.paymentMethods).toEqual([]);
       // Re-read to confirm persistence.
       const reread = await getWorkspace(ws!);
       expect(reread!.invoicePrefix).toBe("INVOICE-");
       expect(reread!.defaultCurrency).toBe("USD");
       expect(reread!.fyStartMonth).toBe(4);
+      expect(reread!.paymentMethods).toEqual([]);
     });
 
     it("createInvoice uses the workspace invoice prefix + default currency", async () => {
@@ -101,6 +105,55 @@ describe.skipIf(!HAS_DB)(
       expect(reread).not.toBeNull();
       expect(reread!.number).toBe(`INVOICE-${year}-0001`);
       expect(reread!.currency).toBe("USD"); // workspace default, not hardcoded AUD
+    });
+
+    it("updateWorkspace persists paymentMethods and they cascade as the invoice default", async () => {
+      const methods = [
+        {
+          type: "bank_transfer" as const,
+          label: "Primary account",
+          accountName: "Settings Test Renamed",
+          bsb: "062-000",
+          accountNumber: "12345678",
+          bankName: "Commonwealth Bank",
+          reference: "Invoice number",
+        },
+        { type: "payid" as const, identifier: "settings@soletrade-test.local" },
+      ];
+      await updateWorkspace(
+        ws!,
+        {
+          name: "Settings Test Renamed",
+          defaultCurrency: "USD",
+          invoicePrefix: "INVOICE-",
+          quotePrefix: "QUOTE-",
+          timezone: "America/New_York",
+          fyStartMonth: 4,
+          paymentMethods: methods,
+        },
+        owner,
+      );
+      const reread = await getWorkspace(ws!);
+      expect(reread!.paymentMethods).toEqual(methods);
+
+      const invId = await createInvoice(
+        ws!,
+        {
+          issueDate: new Date("2026-01-15"),
+          taxRate: 0,
+          lineItems: [
+            { description: "Default payment methods test", quantity: 1, unitPriceCents: 1000 },
+          ],
+        },
+        owner,
+      );
+      const inv = await getInvoice(ws!, invId);
+      // The invoice row stores null when no override is set; the resolved view falls back to
+      // the workspace default so customers always see instructions.
+      expect(inv!.paymentMethods).toBeNull();
+      expect(resolveInvoicePaymentMethods(inv!.paymentMethods, reread!.paymentMethods)).toEqual(
+        methods,
+      );
     });
 
     it("workspace_settings table is gone (migration 0018 dropped it)", async () => {

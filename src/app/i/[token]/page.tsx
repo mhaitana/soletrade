@@ -9,10 +9,36 @@ import {
 import { env } from "@/shared/lib/env";
 import { brand } from "@/config/brand";
 import { Logo } from "@/shared/components/logo";
+import {
+  getPaymentMethodDetails,
+  getPaymentMethodLabel,
+  type PaymentMethods,
+} from "@/shared/types/payment-methods";
 import { InvoicePaymentForm } from "./invoice-payment-form";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+function PaymentMethodsBlock({ methods }: { methods: PaymentMethods }) {
+  return (
+    <div className="rounded-md border border-border bg-background p-4">
+      <h3 className="mb-2 text-sm font-medium">Pay by bank transfer, PayPal, or PayID</h3>
+      <div className="space-y-3">
+        {methods.map((method, index) => (
+          <div key={index} className="space-y-1">
+            <p className="text-sm font-medium">{getPaymentMethodLabel(method)}</p>
+            {getPaymentMethodDetails(method).map((detail) => (
+              <div key={detail.label} className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">{detail.label}</span>
+                <span className="tabular-nums">{detail.value}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -135,10 +161,13 @@ export default async function PublicInvoicePage({
 
           {/* Status-specific block */}
           {payable ? (
-            <div className="mt-6">
+            <div className="mt-6 space-y-4">
               {publishableKey ? (
                 <InvoicePaymentForm token={token} invoice={inv} publishableKey={publishableKey} />
-              ) : (
+              ) : null}
+              {inv.paymentMethods.length > 0 ? (
+                <PaymentMethodsBlock methods={inv.paymentMethods} />
+              ) : publishableKey ? null : (
                 <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
                   Online payment is not configured. Please contact the business to arrange payment.
                 </div>

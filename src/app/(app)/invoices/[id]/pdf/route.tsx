@@ -4,6 +4,7 @@ import { authorizeOrAudit } from "@/server/security";
 import { getInvoice } from "@/modules/invoices";
 import { getWorkspace } from "@/platform/workspaces";
 import { branded } from "@/shared/types/ids";
+import { resolveInvoicePaymentMethods } from "@/shared/types/payment-methods";
 import { renderPdf, pdfResponse } from "@/server/pdf";
 import { InvoiceDocument } from "@/server/pdf/documents/invoice-document";
 
@@ -34,7 +35,18 @@ export async function GET(
   // try wouldn't be caught by it (react-hooks/error-boundaries). `renderPdf` (renderToBuffer)
   // is the call that actually renders + can throw, so only that is wrapped.
   const workspace = await getWorkspace(ctx.workspaceId).catch(() => null);
-  const element = <InvoiceDocument invoice={invoice} workspaceName={workspace?.name ?? null} />;
+  const element = (
+    <InvoiceDocument
+      invoice={{
+        ...invoice,
+        paymentMethods: resolveInvoicePaymentMethods(
+          invoice.paymentMethods,
+          workspace?.paymentMethods ?? null,
+        ),
+      }}
+      workspaceName={workspace?.name ?? null}
+    />
+  );
   try {
     const buffer = await renderPdf(element);
     return pdfResponse(buffer, `${invoice.number}.pdf`);

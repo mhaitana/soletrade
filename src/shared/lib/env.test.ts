@@ -4,13 +4,17 @@ describe("env validation (shared/lib/env)", () => {
   it("exposes typed defaults that let the app boot without secrets", async () => {
     // Re-import in a clean module registry so NODE_ENV=test is applied. The test
     // setup loads `.env.local` into `process.env` (for the DB-gated integration
-    // tests), so a developer may legitimately set `AI_PROVIDER=openai` there to
-    // run the live assistant - that must not break this default assertion. We
-    // temporarily remove `AI_PROVIDER` so the re-import sees the schema default
-    // (`mock`), then restore it.
+    // tests), so a developer may legitimately set `AI_PROVIDER=openai` or model ids
+    // there to run the live assistant - that must not break this default assertion.
+    // We temporarily remove the env-supplied values so the re-import sees the schema
+    // defaults, then restore them.
     vi.resetModules();
     const previousProvider = process.env.AI_PROVIDER;
+    const previousAnthropicModel = process.env.ANTHROPIC_MODEL;
+    const previousOpenAiModel = process.env.OPENAI_MODEL;
     delete process.env.AI_PROVIDER;
+    delete process.env.ANTHROPIC_MODEL;
+    delete process.env.OPENAI_MODEL;
     try {
       const { env } = await import("@/shared/lib/env");
       expect(env.NODE_ENV).toBe("test");
@@ -25,6 +29,9 @@ describe("env validation (shared/lib/env)", () => {
       expect(env.UPSTASH_REDIS_REST_URL).toBeUndefined();
     } finally {
       if (previousProvider !== undefined) process.env.AI_PROVIDER = previousProvider;
+      if (previousAnthropicModel !== undefined)
+        process.env.ANTHROPIC_MODEL = previousAnthropicModel;
+      if (previousOpenAiModel !== undefined) process.env.OPENAI_MODEL = previousOpenAiModel;
     }
   });
 

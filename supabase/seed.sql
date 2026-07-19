@@ -95,12 +95,16 @@ ON CONFLICT (id) DO NOTHING;
 -- 2. Workspaces (WS1 full demo, WS2 smaller NZD studio - owner owns both)
 -- ----------------------------------------------------------------------------
 INSERT INTO workspaces
-  (id, name, slug, owner_user_id, default_currency, timezone, invoice_prefix, quote_prefix, fy_start_month, created_at)
+  (id, name, slug, owner_user_id, default_currency, timezone, invoice_prefix, quote_prefix, fy_start_month, payment_methods, created_at)
 VALUES
   ('11111111-1111-4111-8111-111111111010', 'Soletrade Demo Co',  'soletrade-demo', '11111111-1111-4111-8111-111111110001',
-   'AUD', 'Australia/Sydney', 'INV-', 'QUO-', 7, '2025-07-01 00:00:00'),
+   'AUD', 'Australia/Sydney', 'INV-', 'QUO-', 7,
+   '[{"type":"bank_transfer","label":"Soletrade Demo Account","accountName":"Soletrade Demo Co","bsb":"062-000","accountNumber":"12345678","bankName":"Commonwealth Bank","reference":"Invoice number"},{"type":"payid","identifier":"demo@soletrade.test"}]'::jsonb,
+   '2025-07-01 00:00:00'),
   ('11111111-1111-4111-8111-111111111020', 'Bellflower Studio', 'bellflower',   '11111111-1111-4111-8111-111111110001',
-   'NZD', 'Pacific/Auckland', 'BF-',  'QB-',  4, '2025-04-01 00:00:00');
+   'NZD', 'Pacific/Auckland', 'BF-',  'QB-',  4,
+   '[{"type":"bank_transfer","label":"Bellflower Account","accountName":"Bellflower Studio","bsb":"01-0001","accountNumber":"987654321","bankName":"ANZ","reference":"Invoice number"}]'::jsonb,
+   '2025-04-01 00:00:00');
 
 -- ----------------------------------------------------------------------------
 -- 3. Workspace members (all 5 roles in WS1; owner-only in WS2)

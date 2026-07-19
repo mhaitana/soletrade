@@ -20,7 +20,11 @@ export default async function NewInvoicePage() {
         <h1 className="text-2xl font-semibold tracking-tight">New invoice</h1>
         <p className="text-sm text-muted-foreground">Drafts can be edited until they are sent.</p>
       </div>
-      <InvoiceForm mode="create" customers={data.customers} />
+      <InvoiceForm
+        mode="create"
+        customers={data.customers}
+        workspacePaymentMethods={data.workspacePaymentMethods}
+      />
     </div>
   );
 }

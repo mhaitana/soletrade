@@ -8,6 +8,8 @@ import { branded } from "@/shared/types/ids";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { env } from "@/shared/lib/env";
+import type { Json } from "@/server/db/types";
+import { parsePaymentMethods, type PaymentMethods } from "@/shared/types/payment-methods";
 
 export interface WorkspaceMembership {
   workspaceId: WorkspaceId;
@@ -29,6 +31,7 @@ export interface WorkspaceRow {
   quotePrefix: string;
   timezone: string;
   fyStartMonth: number;
+  paymentMethods: PaymentMethods;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -45,6 +48,7 @@ function toWorkspaceRow(r: {
   quote_prefix: string;
   timezone: string;
   fy_start_month: number;
+  payment_methods: Json | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -59,6 +63,10 @@ function toWorkspaceRow(r: {
     quotePrefix: r.quote_prefix,
     timezone: r.timezone,
     fyStartMonth: r.fy_start_month,
+    paymentMethods: (() => {
+      const parsed = parsePaymentMethods(r.payment_methods);
+      return parsed.ok ? parsed.methods : [];
+    })(),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at,
@@ -66,7 +74,7 @@ function toWorkspaceRow(r: {
 }
 
 const WORKSPACE_COLUMNS =
-  "id, name, slug, owner_user_id, default_currency, invoice_prefix, quote_prefix, timezone, fy_start_month, created_at, updated_at, deleted_at";
+  "id, name, slug, owner_user_id, default_currency, invoice_prefix, quote_prefix, timezone, fy_start_month, payment_methods, created_at, updated_at, deleted_at";
 
 /** Cookie holding the user's currently-active workspace id. */
 export const ACTIVE_WORKSPACE_COOKIE = "soletrade:wid";
@@ -163,6 +171,8 @@ export interface WorkspaceUpdateInput {
   timezone: string;
   /** Financial-year start month, 1–12 (1 = January, 7 = July). */
   fyStartMonth: number;
+  /** Customer-facing payment methods (jsonb array). Empty array is stored as `[]`. */
+  paymentMethods: PaymentMethods;
 }
 
 /**
@@ -187,6 +197,9 @@ export async function updateWorkspace(
         quote_prefix: input.quotePrefix,
         timezone: input.timezone,
         fy_start_month: input.fyStartMonth,
+        payment_methods: (input.paymentMethods.length > 0
+          ? input.paymentMethods
+          : null) as unknown as Json,
         updated_at: new Date().toISOString(),
       })
       .eq("id", workspaceId)
@@ -208,6 +221,7 @@ export async function updateWorkspace(
       quotePrefix: input.quotePrefix,
       timezone: input.timezone,
       fyStartMonth: input.fyStartMonth,
+      paymentMethodsCount: input.paymentMethods.length,
     },
   });
   await writeAudit({
@@ -223,6 +237,7 @@ export async function updateWorkspace(
       quotePrefix: input.quotePrefix,
       timezone: input.timezone,
       fyStartMonth: input.fyStartMonth,
+      paymentMethodsCount: input.paymentMethods.length,
     },
   });
   return toWorkspaceRow(updated);

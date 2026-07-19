@@ -39,6 +39,7 @@ describe.skipIf(!HAS_DB)("tax lodgement honours fyStartMonth (migration 0022)", 
         quotePrefix: "QUO-",
         timezone: "Pacific/Auckland",
         fyStartMonth: 4,
+        paymentMethods: [],
       },
       owner,
     );
