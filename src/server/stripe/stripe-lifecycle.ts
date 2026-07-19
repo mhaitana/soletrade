@@ -97,6 +97,7 @@ export async function createCheckoutSession(
     email?: string | null;
     successUrl: string;
     cancelUrl: string;
+    allowPromotionCodes?: boolean;
   },
 ): Promise<{ url: string; sessionId: string }> {
   if (opts.moduleKeys.length === 0) {
@@ -121,6 +122,7 @@ export async function createCheckoutSession(
     customer: customerId,
     line_items: lineItems,
     client_reference_id: String(workspaceId),
+    allow_promotion_codes: opts.allowPromotionCodes ?? false,
     subscription_data: {
       metadata: { workspaceId: String(workspaceId), interval: opts.interval },
     },

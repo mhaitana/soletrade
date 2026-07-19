@@ -118,6 +118,7 @@ export async function startBillingCheckoutAction(
       email: ctx.user.email || null,
       successUrl: `${appUrl}/billing?session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}/billing`,
+      allowPromotionCodes: true,
     });
     return { ok: true, url };
   } catch (err) {

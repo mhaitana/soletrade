@@ -19,6 +19,7 @@ import { loadEnvConfig } from "@next/env";
 import Module from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadEnvFileOverride } from "./lib/load-env-file-override";
 
 // `Module._resolveFilename` is a private Node loader hook (not in the @types/node public
 // surface), so declare the minimal shape we use.
@@ -72,7 +73,10 @@ loadEnvConfig(process.cwd());
 
 // Allow overriding with a custom env file (e.g. --env-file .env.prod).
 if (envFileFlag) {
-  process.loadEnvFile(path.resolve(process.cwd(), envFileFlag));
+  loadEnvFileOverride(envFileFlag);
+  const key = process.env.STRIPE_SECRET_KEY ?? "";
+  const mode = key.startsWith("sk_live") ? "live" : key.startsWith("sk_test") ? "test" : "unknown";
+  console.log(`\nUsing ${mode} Stripe mode from ${envFileFlag}`);
 }
 
 async function main() {
