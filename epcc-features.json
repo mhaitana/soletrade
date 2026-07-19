@@ -17,7 +17,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-19T00:00:00.000Z",
-      "commit": "17ed78d",
+      "commit": "b164eab",
       "subtasks": [
         {
           "name": "Migration: add payment_methods jsonb columns to workspaces and invoices",
