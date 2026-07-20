@@ -16,6 +16,14 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "src/shared/ui/**", // shadcn primitives - vendored, do not lint
   ]),
+  {
+    files: ["e2e/**/*.ts"],
+    rules: {
+      // Playwright fixture callbacks receive a `use` parameter that ESLint's
+      // React Hooks plugin misidentifies as a hook; it is not a React render.
+      "react-hooks/rules-of-hooks": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

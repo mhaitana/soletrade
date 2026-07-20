@@ -39,25 +39,38 @@ export default defineConfig({
 
     /* Video is heavy; only keep it on first retry */
     video: "on-first-retry",
+
+    /* Generating auth fixtures and loading workspace-scoped pages can exceed
+       the default 30s under concurrent local dev-server load. */
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
 
-  /* Viewport/device projects */
+  /* Generous timeout for the first auth-fixture generation pass. */
+  timeout: 60_000,
+
+  /* Auth fixture generation runs once before any viewport project. */
   projects: [
+    { name: "setup", testMatch: /e2e\/setup\/auth-setup\.ts/ },
     {
       name: "Desktop Chrome",
       use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
     },
     {
       name: "iPhone 12/13",
       use: { ...devices["iPhone 12"] },
+      dependencies: ["setup"],
     },
     {
       name: "Pixel 7",
       use: { ...devices["Pixel 7"] },
+      dependencies: ["setup"],
     },
     {
       name: "iPad Mini",
       use: { ...devices["iPad Mini"] },
+      dependencies: ["setup"],
     },
   ],
 

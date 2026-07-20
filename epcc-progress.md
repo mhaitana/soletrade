@@ -1,5 +1,40 @@
 # EPCC Progress Log
 
+## Session: CODE - 2026-07-20T23:55:00Z
+**Feature**: INFRA-002 - Playwright Auth Fixtures
+**Status**: verified
+**Duration**: ~35 minutes
+
+### What changed
+- Created `e2e/fixtures/auth.ts` with seeded role definitions, a real browser sign-in helper, file-lock guarded storage-state generation, and a `switchWorkspace` helper that works on desktop and mobile.
+- Extended Playwright's `test` fixture to provide `ownerPage`, `adminPage`, `accountantPage`, `employeePage`, `readonlyPage`, and `pendingPage` loaded from saved storage states.
+- Added `e2e/setup/auth-setup.ts` as a setup project so storage states are generated once before the main test projects run.
+- Added `e2e/auth/roles.spec.ts` covering: dashboard access per role, workspace switching for the owner, role-based nav visibility (audit hidden from readonly), readonly billing view-only, and employee billing block.
+- Updated `playwright.config.ts` to depend all viewport projects on the new `setup` project and increased timeouts to handle dev-server cold starts under concurrent workers.
+- Updated `eslint.config.mjs` to disable `react-hooks/rules-of-hooks` in `e2e/**/*.ts` because Playwright fixture callbacks use a `use` parameter.
+- Cleaned transient `.next/dev/types/validator.ts` generation artifacts that were failing `pnpm type-check`.
+
+### Validation
+| Gate | Status |
+|------|--------|
+| `pnpm check` | ✅ passes (type-check, lint, test:ci, format:check) |
+| Vitest | ✅ 734 passed across 81 test files |
+| `pnpm test:e2e` | ✅ 46/46 passed across all viewport projects |
+
+### Notes
+- The workspace switcher trigger carries `aria-label="Switch workspace"`, so role spec assertions target that accessible name and then assert inner text contains the workspace name.
+- Pending user (no workspace membership) is redirected to `/onboarding`; the test uses `domcontentloaded` and a 60s navigation timeout because the cold dev-server redirect can exceed the default 30s under load.
+- Turbopack emits transient `ChunkLoadError` unhandled rejections under concurrent workers, but they do not fail assertions; production E2E builds would eliminate this noise.
+
+### Git State
+- Branch: main
+- Feature commit: 17f1a063bc86fa4afcdfa63b2f535b251dd0c9a0
+
+### Next Step
+Run `/epcc-code F006` (core E2E smoke flows).
+
+---
+
 ## Session: CODE - 2026-07-20T23:15:00Z
 **Feature**: INFRA-001 - Playwright E2E Scaffold
 **Status**: verified

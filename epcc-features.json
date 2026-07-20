@@ -196,8 +196,10 @@
       "blockedBy": ["INFRA-001"],
       "estimatedHours": 4,
       "planReference": "EPCC_PLAN.md#phase-7-playwright-auth-fixtures",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-20T23:55:00Z",
+      "commit": "17f1a063bc86fa4afcdfa63b2f535b251dd0c9a0",
       "acceptanceCriteria": [
         "e2e/fixtures/auth.ts signs in each seeded role and saves storage state under e2e/.auth/",
         "Each role fixture loads in <2s after initial storage-state generation",
@@ -206,9 +208,9 @@
         "Auth rate-limiting is avoided by reusing storage state"
       ],
       "subtasks": [
-        { "name": "Create role fixtures", "status": "pending", "estimatedHours": 2 },
-        { "name": "Role-based access smoke spec", "status": "pending", "estimatedHours": 1.5 },
-        { "name": "Fixture utilities", "status": "pending", "estimatedHours": 0.5 }
+        { "name": "Create role fixtures", "status": "completed", "estimatedHours": 2 },
+        { "name": "Role-based access smoke spec", "status": "completed", "estimatedHours": 1.5 },
+        { "name": "Fixture utilities", "status": "completed", "estimatedHours": 0.5 }
       ]
     },
     {
