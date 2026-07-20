@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Check, Pencil, Send, Trash2, XCircle } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import {
@@ -27,7 +28,7 @@ const DIALOG_COPY: Record<Action["kind"], { title: string; description: string; 
   send: {
     title: "Send invoice?",
     description:
-      "This locks the invoice and issues a shareable public token. No email is sent in this phase.",
+      "This locks the invoice, creates a public payment link, and emails the customer a payable link.",
     cta: "Send",
   },
   markPaid: {
@@ -75,6 +76,10 @@ export function InvoiceDetailActions({
       if (!res.ok) {
         setError(res.error ?? "Action failed.");
         return;
+      }
+      setPending(null);
+      if (kind === "send") {
+        toast.success("Invoice sent.");
       }
       if (kind === "delete") router.push("/invoices");
       router.refresh();
