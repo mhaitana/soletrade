@@ -26,10 +26,10 @@
 
 ### Git State
 - Branch: main
-- Feature commit: TBD
+- Feature commit: 5d54255
 
 ### Next Step
-Record INFRA-001 verification SHA in `epcc-features.json`, then run `/epcc-code INFRA-002` (Playwright auth fixtures for seeded roles).
+Run `/epcc-code INFRA-002` (Playwright auth fixtures for seeded roles).
 
 ---
 

@@ -167,7 +167,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-20T23:15:00Z",
-      "commit": "TBD",
+      "commit": "5d54255",
       "acceptanceCriteria": [
         "pnpm test:e2e runs the health spec against the local dev server",
         "playwright.config.ts includes Desktop Chrome, iPhone 12/13, Pixel 7, and iPad Mini projects",
