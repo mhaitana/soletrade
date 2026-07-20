@@ -1,106 +1,267 @@
 {
-  "_warning": "Feature definitions are IMMUTABLE after planning approval. Only passes, status, and subtask statuses may be edited.",
+  "_warning": "Feature definitions are IMMUTABLE after planning approval. Only passes, status, and subtasks[].status may be modified after approval.",
   "_planApproved": true,
-  "_planApprovedAt": "2026-07-19T00:00:00.000Z",
-  "_modifiableFields": ["passes", "status", "subtasks[].status", "verifiedAt", "commit"],
+  "_planApprovedAt": "2026-07-20T15:05:00Z",
+  "_modifiableFields": ["passes", "status", "subtasks[].status"],
+  "validation": {
+    "planTasks": 34,
+    "mappedToFeatures": 34,
+    "unmappedTasks": [],
+    "featuresWithoutTasks": []
+  },
   "features": [
     {
       "id": "F001",
-      "name": "Payment details on invoices",
-      "description": "Workspace-level payment instructions (bank transfer, PayPal, PayID) with optional per-invoice override, rendered on the public invoice page and PDF.",
+      "name": "PWA Installable Manifest",
+      "description": "Make soletrade installable as a PWA by generating the required icon set, extending the brand-driven web app manifest, and wiring root metadata.",
       "priority": "P0",
       "implementationOrder": 1,
       "dependencies": [],
       "blockedBy": [],
-      "estimatedHours": 10,
-      "planReference": "EPCC_PLAN.md",
+      "estimatedHours": 5,
+      "planReference": "EPCC_PLAN.md#phase-1-pwa-installability",
       "status": "verified",
       "passes": 1,
-      "verifiedAt": "2026-07-19T00:00:00.000Z",
-      "commit": "b164eab",
+      "verifiedAt": "2026-07-20T12:30:00Z",
+      "commit": "TBD",
+      "acceptanceCriteria": [
+        "public/icons/ contains 192×192, 512×512, maskable 512, apple-touch-icon 180, and favicon PNGs",
+        "src/app/manifest.ts includes icons, scope, orientation, lang, categories, shortcuts, and prefer_related_applications",
+        "src/app/layout.tsx emits apple-touch-icon and favicon links via metadata.icons",
+        "src/app/manifest.test.ts passes with icon size and theme_color assertions",
+        "Lighthouse PWA audit shows 100/100 installable"
+      ],
       "subtasks": [
+        { "name": "Generate and commit PWA icon set", "status": "completed", "estimatedHours": 2 },
         {
-          "name": "Migration: add payment_methods jsonb columns to workspaces and invoices",
-          "status": "completed",
-          "estimatedHours": 0.5
-        },
-        {
-          "name": "Regenerate DB types and create shared payment-method Zod schema/types",
-          "status": "completed",
-          "estimatedHours": 1
-        },
-        {
-          "name": "Update workspace service, Server Action, and settings loader for payment methods",
-          "status": "completed",
-          "estimatedHours": 1
-        },
-        {
-          "name": "Settings form: add reusable payment-method editor UI",
+          "name": "Extend manifest and root metadata",
           "status": "completed",
           "estimatedHours": 1.5
         },
-        {
-          "name": "Invoice module: persist and resolve payment methods (workspace default vs invoice override)",
-          "status": "completed",
-          "estimatedHours": 1
-        },
-        {
-          "name": "Invoice form: add payment-instructions override UI",
-          "status": "completed",
-          "estimatedHours": 1
-        },
-        {
-          "name": "Extend invoice Server Action schemas with paymentMethods",
-          "status": "completed",
-          "estimatedHours": 0.5
-        },
-        {
-          "name": "Public invoice page: render resolved payment methods",
-          "status": "completed",
-          "estimatedHours": 1
-        },
-        {
-          "name": "Invoice PDF: render resolved payment methods",
-          "status": "completed",
-          "estimatedHours": 1
-        },
-        {
-          "name": "Unit tests for payment-method validation and resolution",
-          "status": "completed",
-          "estimatedHours": 0.5
-        },
-        {
-          "name": "Integration tests for workspace settings + invoice override",
-          "status": "completed",
-          "estimatedHours": 1
-        },
-        {
-          "name": "Integration tests for public page and PDF route",
-          "status": "completed",
-          "estimatedHours": 0.5
-        },
-        {
-          "name": "Seed data: add demo workspace payment methods",
-          "status": "completed",
-          "estimatedHours": 0.5
-        }
-      ],
+        { "name": "Update manifest tests", "status": "completed", "estimatedHours": 1 },
+        { "name": "Validate installability", "status": "completed", "estimatedHours": 0.5 }
+      ]
+    },
+    {
+      "id": "F002",
+      "name": "Mobile Touch Targets",
+      "description": "Increase the minimum hit area of buttons, inputs, icon-only triggers, selects, and assistant controls on narrow viewports while preserving desktop layouts.",
+      "priority": "P0",
+      "implementationOrder": 2,
+      "dependencies": [],
+      "blockedBy": [],
+      "estimatedHours": 6,
+      "planReference": "EPCC_PLAN.md#phase-2-mobile-touch-targets",
+      "status": "pending",
+      "passes": 0,
       "acceptanceCriteria": [
-        "Workspace owner/admin can add, edit, remove, and re-order payment methods in /settings/general.",
-        "Supported method types: bank transfer (account name, BSB, account number, bank name, reference), PayPal (email), PayID (identifier).",
-        "Each invoice can use the workspace default or override with custom payment instructions.",
-        "Public invoice /i/[token] shows resolved payment methods when the invoice is payable.",
-        "When Stripe is configured, payment methods appear as an alternative to card payment; when absent, they become the primary payment path.",
-        "Invoice PDF download includes the resolved payment methods.",
-        "Malformed or unsupported payment-method JSON is rejected at the server boundary.",
-        "pnpm check (type-check + lint + test:ci) passes after implementation."
+        "Top 15 interactive controls have height ≥44 px at 390px viewport",
+        "Custom <select> elements use text-base below md to prevent iOS auto-zoom",
+        "Assistant suggested prompts, write-tool toggles, and send/stop buttons are ≥40 px tall on small screens",
+        "Desktop screenshots at 1280px show no visual regressions",
+        "Vitest suite remains green"
+      ],
+      "subtasks": [
+        { "name": "Audit and baseline touch targets", "status": "pending", "estimatedHours": 1.5 },
+        { "name": "Button and input responsive sizing", "status": "pending", "estimatedHours": 2 },
+        { "name": "Fix custom select zoom", "status": "pending", "estimatedHours": 1 },
+        { "name": "Enlarge assistant controls", "status": "pending", "estimatedHours": 1 },
+        { "name": "Visual regression baseline", "status": "pending", "estimatedHours": 0.5 }
+      ]
+    },
+    {
+      "id": "F003",
+      "name": "Responsive Dialog Wrapper",
+      "description": "Create and adopt a shared ResponsiveDialog component that renders a Sheet on small screens and a Dialog on desktop, then migrate the most-used confirmation flows.",
+      "priority": "P0",
+      "implementationOrder": 3,
+      "dependencies": [],
+      "blockedBy": [],
+      "estimatedHours": 6,
+      "planReference": "EPCC_PLAN.md#phase-3-responsive-dialogs",
+      "status": "pending",
+      "passes": 0,
+      "acceptanceCriteria": [
+        "ResponsiveDialog component exists and preserves Radix trigger/content/footer APIs",
+        "Customer-create dialog opens as bottom sheet at 390px and centered modal at 1280px",
+        "Quote accept, billing cancellation, billing manage actions, members/modules confirmations use ResponsiveDialog",
+        "No horizontal scroll is required to reach primary actions in any migrated dialog at 390px",
+        "Desktop modal behaviour unchanged"
+      ],
+      "subtasks": [
+        { "name": "Create ResponsiveDialog primitive", "status": "pending", "estimatedHours": 2 },
+        {
+          "name": "Migrate customer-create and quote-accept dialogs",
+          "status": "pending",
+          "estimatedHours": 1.5
+        },
+        {
+          "name": "Migrate billing and cancellation modals",
+          "status": "pending",
+          "estimatedHours": 1.5
+        },
+        {
+          "name": "Migrate settings confirmation dialogs",
+          "status": "pending",
+          "estimatedHours": 1
+        }
+      ]
+    },
+    {
+      "id": "F004",
+      "name": "Mobile Dense Table Variants",
+      "description": "Make the densest read-only tables usable on 390px-wide screens by converting invoice/quote line items, books summary, and tax lodged quarters into card rows or overflow-x-auto wrappers.",
+      "priority": "P1",
+      "implementationOrder": 4,
+      "dependencies": [],
+      "blockedBy": [],
+      "estimatedHours": 5,
+      "planReference": "EPCC_PLAN.md#phase-4-mobile-dense-tables",
+      "status": "pending",
+      "passes": 0,
+      "acceptanceCriteria": [
+        "Invoice detail line items are readable without horizontal pinch-zoom at 390px",
+        "Quote detail line items are readable without horizontal pinch-zoom at 390px",
+        "Books summary is readable without horizontal pinch-zoom at 390px",
+        "Tax lodged-quarters table is readable without horizontal pinch-zoom at 390px",
+        "Totals alignment remains correct on desktop"
+      ],
+      "subtasks": [
+        { "name": "Invoice/quote line-item card rows", "status": "pending", "estimatedHours": 2 },
+        { "name": "Books summary mobile variant", "status": "pending", "estimatedHours": 1.5 },
+        { "name": "Tax lodged-quarters mobile variant", "status": "pending", "estimatedHours": 1.5 }
+      ]
+    },
+    {
+      "id": "F005",
+      "name": "Responsive Quote Signature Canvas",
+      "description": "Resize the quote-accept signature canvas using a container ResizeObserver and devicePixelRatio scaling instead of a fixed 480×140 resolution.",
+      "priority": "P1",
+      "implementationOrder": 5,
+      "dependencies": [],
+      "blockedBy": [],
+      "estimatedHours": 2,
+      "planReference": "EPCC_PLAN.md#phase-5-quote-signature-canvas",
+      "status": "pending",
+      "passes": 0,
+      "acceptanceCriteria": [
+        "Signature canvas fills available width on 390px and 1280px viewports",
+        "Canvas redraws correctly when viewport is resized",
+        "Signature image remains valid for quote acceptance after resize",
+        "No visual distortion on high-DPI displays"
+      ],
+      "subtasks": [
+        { "name": "Responsive signature sizing", "status": "pending", "estimatedHours": 2 }
+      ]
+    },
+    {
+      "id": "INFRA-001",
+      "name": "Playwright E2E Scaffold",
+      "description": "Install and configure @playwright/test, create playwright.config.ts with desktop and mobile projects, add package scripts, and wire local Supabase seed reset as global setup.",
+      "priority": "P0",
+      "implementationOrder": 6,
+      "dependencies": [],
+      "blockedBy": [],
+      "estimatedHours": 4,
+      "planReference": "EPCC_PLAN.md#phase-6-playwright-e2e-scaffold",
+      "status": "pending",
+      "passes": 0,
+      "acceptanceCriteria": [
+        "pnpm test:e2e runs the health spec against the local dev server",
+        "playwright.config.ts includes Desktop Chrome, iPhone 12/13, Pixel 7, and iPad Mini projects",
+        "pnpm db:reset runs once as global setup before specs",
+        "Playwright does not break pnpm test:ci or Vitest tests",
+        "README.md documents how to run E2E tests"
+      ],
+      "subtasks": [
+        { "name": "Install and configure Playwright", "status": "pending", "estimatedHours": 1.5 },
+        { "name": "Add package scripts and CI wiring", "status": "pending", "estimatedHours": 1 },
+        { "name": "Playwright health check spec", "status": "pending", "estimatedHours": 0.5 },
+        { "name": "Global setup/teardown", "status": "pending", "estimatedHours": 1 }
+      ]
+    },
+    {
+      "id": "INFRA-002",
+      "name": "Playwright Auth Fixtures",
+      "description": "Create storage-state fixtures for each seeded role (owner, admin, accountant, employee, readonly) and helpers for switching workspace and selecting seeded entities.",
+      "priority": "P0",
+      "implementationOrder": 7,
+      "dependencies": ["INFRA-001"],
+      "blockedBy": ["INFRA-001"],
+      "estimatedHours": 4,
+      "planReference": "EPCC_PLAN.md#phase-7-playwright-auth-fixtures",
+      "status": "pending",
+      "passes": 0,
+      "acceptanceCriteria": [
+        "e2e/fixtures/auth.ts signs in each seeded role and saves storage state under e2e/.auth/",
+        "Each role fixture loads in <2s after initial storage-state generation",
+        "e2e/auth/roles.spec.ts verifies expected navigation visibility per role",
+        "Fixture utilities allow switching between WS1 and WS2",
+        "Auth rate-limiting is avoided by reusing storage state"
+      ],
+      "subtasks": [
+        { "name": "Create role fixtures", "status": "pending", "estimatedHours": 2 },
+        { "name": "Role-based access smoke spec", "status": "pending", "estimatedHours": 1.5 },
+        { "name": "Fixture utilities", "status": "pending", "estimatedHours": 0.5 }
+      ]
+    },
+    {
+      "id": "F006",
+      "name": "Core E2E Smoke Flows",
+      "description": "Implement seed-data-driven end-to-end specs covering login/dashboard, create-and-send invoice, accept quote, create books transaction, and invite member.",
+      "priority": "P1",
+      "implementationOrder": 8,
+      "dependencies": ["INFRA-001", "INFRA-002"],
+      "blockedBy": ["INFRA-001", "INFRA-002"],
+      "estimatedHours": 6,
+      "planReference": "EPCC_PLAN.md#phase-8-core-e2e-smoke-flows",
+      "status": "pending",
+      "passes": 0,
+      "acceptanceCriteria": [
+        "e2e/dashboard.spec.ts passes on desktop and iPhone",
+        "e2e/invoices/create-send.spec.ts passes on desktop",
+        "e2e/quotes/accept-convert.spec.ts passes on desktop using a fresh public token",
+        "e2e/books/create-transaction.spec.ts passes on desktop",
+        "e2e/settings/invite-member.spec.ts passes on desktop"
+      ],
+      "subtasks": [
+        { "name": "Dashboard smoke spec", "status": "pending", "estimatedHours": 1 },
+        { "name": "Create-and-send invoice spec", "status": "pending", "estimatedHours": 1.5 },
+        { "name": "Accept quote spec", "status": "pending", "estimatedHours": 1.5 },
+        { "name": "Books transaction spec", "status": "pending", "estimatedHours": 1 },
+        { "name": "Invite member spec", "status": "pending", "estimatedHours": 1 }
+      ]
+    },
+    {
+      "id": "INFRA-003",
+      "name": "Minimal Service Worker / Offline Fallback",
+      "description": "Add a minimal network-first service worker registered from a client component, with a static /offline fallback, after PWA manifest installability is verified.",
+      "priority": "P1",
+      "implementationOrder": 9,
+      "dependencies": ["F001"],
+      "blockedBy": ["F001"],
+      "estimatedHours": 5.5,
+      "planReference": "EPCC_PLAN.md#phase-9-service-worker-follow-up-phase",
+      "status": "pending",
+      "passes": 0,
+      "acceptanceCriteria": [
+        "src/app/offline/page.tsx exists and renders without JavaScript",
+        "Service worker precaches /_next/static/*, /fonts/*, /icons/*",
+        "Service worker uses network-first for navigations and serves /offline on failure",
+        "/api/*, /i/*, /q/*, /invite/*, and Stripe scripts are excluded from caching",
+        "Registration works on desktop Chrome and mobile Safari"
+      ],
+      "subtasks": [
+        { "name": "Create /offline fallback page", "status": "pending", "estimatedHours": 1 },
+        { "name": "Create minimal service worker", "status": "pending", "estimatedHours": 2 },
+        {
+          "name": "Register service worker from root layout",
+          "status": "pending",
+          "estimatedHours": 1
+        },
+        { "name": "Add service-worker tests", "status": "pending", "estimatedHours": 1 },
+        { "name": "Validate caching exclusions", "status": "pending", "estimatedHours": 0.5 }
       ]
     }
-  ],
-  "validation": {
-    "planTasks": 13,
-    "mappedToFeatures": 13,
-    "unmappedTasks": [],
-    "featuresWithoutTasks": []
-  }
+  ]
 }

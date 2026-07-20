@@ -45,7 +45,9 @@ describe("InvoiceDetailActions", () => {
 
   it("opens the send dialog and describes that an email is sent", async () => {
     sendInvoiceActionMock.mockResolvedValue({ ok: true });
-    render(<InvoiceDetailActions invoiceId="00000000-0000-0000-0000-000000000001" status="draft" />);
+    render(
+      <InvoiceDetailActions invoiceId="00000000-0000-0000-0000-000000000001" status="draft" />,
+    );
 
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -57,7 +59,9 @@ describe("InvoiceDetailActions", () => {
 
   it("closes the dialog and toasts on successful send", async () => {
     sendInvoiceActionMock.mockResolvedValue({ ok: true });
-    render(<InvoiceDetailActions invoiceId="00000000-0000-0000-0000-000000000001" status="draft" />);
+    render(
+      <InvoiceDetailActions invoiceId="00000000-0000-0000-0000-000000000001" status="draft" />,
+    );
 
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
     await userEvent.click(screen.getByRole("button", { name: /^send$/i }));
@@ -75,7 +79,9 @@ describe("InvoiceDetailActions", () => {
 
   it("keeps the dialog open and shows the error when send fails", async () => {
     sendInvoiceActionMock.mockResolvedValue({ ok: false, error: "Not authorized." });
-    render(<InvoiceDetailActions invoiceId="00000000-0000-0000-0000-000000000001" status="draft" />);
+    render(
+      <InvoiceDetailActions invoiceId="00000000-0000-0000-0000-000000000001" status="draft" />,
+    );
 
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
     await userEvent.click(screen.getByRole("button", { name: /^send$/i }));

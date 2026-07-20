@@ -1,5 +1,102 @@
 # EPCC Progress Log
 
+## Session: CODE - 2026-07-20T12:30:00Z
+**Feature**: F001 - PWA Installable Manifest
+**Status**: verified
+**Duration**: ~45 minutes
+
+### What changed
+- Generated a placeholder PWA icon set in `public/icons/` (192×192, 512×512, 512×512 maskable, 180 apple-touch-icon, 16×16 and 32×32 favicons) from warm-white SVG masters using `sharp`.
+- Added `src/config/manifest.ts` as the brand-driven manifest source of truth, consumed by the new `/api/manifest` route so root-level auth redirects do not intercept the manifest.
+- Updated root metadata in `src/app/layout.tsx` to emit `manifest`, apple-touch-icon, favicon, and shortcut icon links.
+- Added `scripts/generate-pwa-icons.ts` and the `icons:generate` pnpm script for reproducible icon generation.
+- Updated `src/app/manifest.test.ts` and added `src/app/api/manifest/route.test.ts` for coverage.
+
+### Validation
+| Gate | Status |
+|------|--------|
+| `pnpm check` | ✅ passes (type-check, lint, test:ci, format:check) |
+| Tests | ✅ 734 passed across 81 test files |
+| Lighthouse 11 PWA audit on `/login` | ✅ 100/100, installable-manifest + maskable-icon passing |
+
+### Notes
+- Next.js root-level manifest convention route handlers were redirecting to `/login`; serving via `/api/manifest` avoids the auth middleware on that path.
+- The acceptance criteria referenced `src/app/manifest.ts`; that file was removed in favor of `src/config/manifest.ts` + `/api/manifest`. Functionally equivalent and verified by tests.
+- Placeholder icons should be replaced with final brand assets before production.
+
+### Git State
+- Branch: main
+- Feature commit: TBD (pending)
+
+### Next Step
+Record F001 verification SHA in `epcc-features.json`, then run `/epcc-code INFRA-001` to scaffold Playwright E2E, or `/epcc-code F002` for mobile touch targets.
+
+---
+
+## Session: EXPLORE - 2026-07-20T14:45:00Z
+**Target**: Whole-app mobile usability, PWA installability, and Playwright E2E with Supabase seed data
+**Thoroughness**: high
+**Duration**: ~35 minutes
+
+### Areas Explored
+- Mobile responsiveness across `(app)`, `(auth)`, `(marketing)`, public token pages, admin and assistant surfaces
+- PWA readiness: manifest, icon assets, metadata, service worker / offline strategy
+- Existing test infrastructure: Vitest unit/integration suite, DB helpers, coverage config
+- Playwright E2E gap: dependency, config, fixtures, seed-data-driven auth and page-flow tests
+- `supabase/seed.sql` users, workspaces, invoices, quotes, books, drive and cross-module event wiring
+
+### Key Patterns Found
+- Mobile layouts are already responsive (safe-area insets, flex-wrap, overflow-x-auto, public pages mobile-first) but touch targets and dense tables are below mobile guidelines
+- Manifest exists and is brand-driven, but missing icon set and install-critical fields, so the app is not installable today
+- Vitest suite is strong (726 tests passing), but Playwright is greenfield: no dependency, config, or e2e specs
+- Seed data is rich and can directly power E2E fixtures with known passwords
+
+### Files Examined
+~35 files including `src/app/manifest.ts`, `src/app/layout.tsx`, `src/app/globals.css`, `src/shared/components/app-shell/app-shell.tsx`, `src/shared/ui/button.tsx`, `src/shared/ui/input.tsx`, `src/shared/ui/dialog.tsx`, `src/shared/ui/sheet.tsx`, `src/shared/ui/segmented-control.tsx`, `src/shared/ui/data-table.tsx`, `src/app/(app)/customers/customers-table.tsx`, `src/app/(app)/invoices/[id]/page.tsx`, `src/app/(app)/quotes/[id]/page.tsx`, `src/app/(app)/books/books-summary.tsx`, `src/app/(app)/books/tax/page.tsx`, `src/app/(app)/assistant/assistant-chat.tsx`, `src/app/q/[token]/quote-accept-form.tsx`, `src/app/i/[token]/page.tsx`, `supabase/seed.sql`, `package.json`, `vitest.config.ts`, plus prior agent transcripts.
+
+### Handoff Notes
+- Ready for: `/epcc-plan` implementation phase scoped to manifest/icons, mobile touch targets, responsive dialogs, and Playwright scaffold + auth fixtures + core smoke specs
+- Blockers: need a high-resolution Soletrade mark to generate the PWA icon set; otherwise none
+- Follow-up: confirm whether offline/service-worker behaviour is required beyond basic Add to Home Screen installability
+
+### Git State
+- Commit: d64381a
+- Branch: main
+- Clean: no (`epcc-features.json`, `EPCC_PLAN.md` created; `EPCC_EXPLORE.md` and `epcc-progress.md` updated)
+
+---
+
+## Session: PLAN - 2026-07-20T15:05:00Z
+**Target**: Mobile UX, PWA installability, Playwright E2E
+**Status**: Approved
+
+### Plan Overview
+- **Phases**: 9
+- **Total tasks**: 34
+- **Estimated effort**: ~39.5h
+- **Features**: F001 PWA manifest, F002 mobile touch targets, F003 responsive dialogs, F004 mobile dense tables, F005 responsive signature, INFRA-001 Playwright scaffold, INFRA-002 auth fixtures, F006 core smoke flows, INFRA-003 service worker / offline fallback
+
+### Approved Decisions
+- **Icon asset**: generate a placeholder PWA icon set from the existing favicon; replace with final brand asset before production.
+- **Service worker**: include a minimal network-first service worker with a static `/offline` fallback **after** F001 installability passes.
+- **Mobile sizing**: use `max-md:` responsive modifiers to preserve desktop density.
+- **E2E**: local `pnpm dev` + `pnpm db:reset`; storage-state fixtures seeded from `supabase/seed.sql`.
+
+### Risks Highlighted
+- Mobile size changes could break desktop density → mitigated by responsive modifiers.
+- Auth rate-limiting during fixture setup → mitigated by storage-state reuse.
+- Two-context quote-accept test flakiness → mitigated by explicit waits and fresh public-token extraction.
+
+### Git State
+- Commit: d64381a
+- Branch: main
+- Clean: no (`epcc-features.json` created, `EPCC_PLAN.md` approved, `EPCC_EXPLORE.md` and `epcc-progress.md` updated)
+
+### Next Step
+Run `/epcc-code INFRA-001` to scaffold Playwright first, or `/epcc-code F001` to start with the PWA manifest.
+
+---
+
 ## Session: EXPLORE - 2026-07-20T11:30:00Z
 **Target**: Invoice email delivery in production (send-invoice modal, Resend wiring)
 **Thoroughness**: medium
@@ -92,3 +189,27 @@ Pending — run `/epcc-commit`.
 **Resume at**: `/epcc-commit` to save the verified change.
 **Blockers**: None.
 **Next action**: Commit the implementation files + EPCC docs.
+
+---
+
+## Session: COMMIT - 2026-07-20T11:57:00Z
+**Target**: fix-invoice-send-modal-and-email-feedback
+**Status**: Committed
+
+### Summary
+Committed the verified change to `main` as `d64381a`.
+
+### Quality Gates
+| Gate | Status |
+|------|--------|
+| Tests | ✅ 726 passed (80 test files) |
+| Lint | ✅ clean |
+| Type check | ✅ clean |
+
+### Commit Details
+- **SHA**: d64381a
+- **Message**: fix(invoices): close send dialog on success, toast, and update copy
+- **Files changed**: 6 (+379 −1)
+
+### Next Steps
+- Optional: push `main` to remote, or create a feature branch + PR for review.

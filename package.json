@@ -24,7 +24,8 @@
     "db:types": "supabase gen types types --local --lang=typescript > src/server/db/types.ts",
     "stripe:setup": "tsx scripts/stripe-setup.ts",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/stripe/webhooks",
-    "branding:check": "tsx scripts/check-branding.ts"
+    "branding:check": "tsx scripts/check-branding.ts",
+    "icons:generate": "tsx scripts/generate-pwa-icons.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",
@@ -73,6 +74,7 @@
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",
     "prettier": "^3.9.4",
+    "sharp": "0.33.5",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5",
