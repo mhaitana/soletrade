@@ -164,8 +164,10 @@
       "blockedBy": [],
       "estimatedHours": 4,
       "planReference": "EPCC_PLAN.md#phase-6-playwright-e2e-scaffold",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-20T23:15:00Z",
+      "commit": "TBD",
       "acceptanceCriteria": [
         "pnpm test:e2e runs the health spec against the local dev server",
         "playwright.config.ts includes Desktop Chrome, iPhone 12/13, Pixel 7, and iPad Mini projects",
@@ -174,10 +176,14 @@
         "README.md documents how to run E2E tests"
       ],
       "subtasks": [
-        { "name": "Install and configure Playwright", "status": "pending", "estimatedHours": 1.5 },
-        { "name": "Add package scripts and CI wiring", "status": "pending", "estimatedHours": 1 },
-        { "name": "Playwright health check spec", "status": "pending", "estimatedHours": 0.5 },
-        { "name": "Global setup/teardown", "status": "pending", "estimatedHours": 1 }
+        {
+          "name": "Install and configure Playwright",
+          "status": "completed",
+          "estimatedHours": 1.5
+        },
+        { "name": "Add package scripts and CI wiring", "status": "completed", "estimatedHours": 1 },
+        { "name": "Playwright health check spec", "status": "completed", "estimatedHours": 0.5 },
+        { "name": "Global setup/teardown", "status": "completed", "estimatedHours": 1 }
       ]
     },
     {

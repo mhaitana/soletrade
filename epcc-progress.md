@@ -1,5 +1,38 @@
 # EPCC Progress Log
 
+## Session: CODE - 2026-07-20T23:15:00Z
+**Feature**: INFRA-001 - Playwright E2E Scaffold
+**Status**: verified
+**Duration**: ~55 minutes
+
+### What changed
+- Installed `@playwright/test` and Playwright browsers (Chromium + WebKit).
+- Added `playwright.config.ts` with four projects (Desktop Chrome, iPhone 12/13, Pixel 7, iPad Mini), `webServer` for `pnpm dev`, and global setup/teardown hooks.
+- Created `e2e/setup/global.ts` to start Supabase if needed and run `pnpm db:reset` once before specs; `e2e/setup/teardown.ts` stops Supabase only in CI.
+- Created `e2e/health.spec.ts` smoke test asserting the seeded `/login` page renders.
+- Added `test:e2e`, `test:e2e:ui`, `test:e2e:ci` package scripts and documented setup in `README.md` / `.env.example`.
+- Updated `.gitignore` to ignore Playwright artifacts.
+
+### Validation
+| Gate | Status |
+|------|--------|
+| `pnpm check` | ✅ passes (type-check, lint, test:ci, format:check) |
+| Vitest | ✅ 734 passed across 81 test files |
+| `pnpm test:e2e` | ✅ 4/4 passed across all viewport projects |
+
+### Notes
+- A transient `PostgREST error [undefined]` appeared on the first `pnpm test:ci` run in `quotes/public.integration.test.ts`. The same test passed in isolation and the full suite passed on retry, confirming local Supabase flakiness rather than a code regression.
+- Playwright E2E is additive under `e2e/` and does not interfere with `pnpm test:ci`.
+
+### Git State
+- Branch: main
+- Feature commit: TBD
+
+### Next Step
+Record INFRA-001 verification SHA in `epcc-features.json`, then run `/epcc-code INFRA-002` (Playwright auth fixtures for seeded roles).
+
+---
+
 ## Session: CODE - 2026-07-20T12:30:00Z
 **Feature**: F001 - PWA Installable Manifest
 **Status**: verified

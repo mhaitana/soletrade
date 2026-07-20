@@ -43,4 +43,12 @@ next-env.d.ts
 # supabase CLI local artifacts (config.toml + migrations/ + seed.sql ARE committed)
 supabase/.temp
 supabase/.branches
+
+# playwright / e2e artifacts
+e2e/test-results/
+e2e/.auth/
+e2e/report/
+playwright-report/
+playwright/.cache/
+
 .claude/scheduled_tasks.lock

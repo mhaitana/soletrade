@@ -78,6 +78,31 @@ Dev login credentials:
 Seed is **local-dev only** - `supabase db push` does not run `seed.sql` on the
 linked remote, so these test users never reach production.
 
+### End-to-end tests (Playwright)
+
+The `e2e/` directory contains Playwright specs that run against the local Next.js
+dev server and the seeded Supabase database. The harness resets the DB once via
+`pnpm db:reset` before the suite starts, so every spec begins from the same known
+world.
+
+```bash
+pnpm db:start            # start Supabase if it isn't already running
+pnpm test:e2e            # run all specs headless (Desktop + iPhone + Pixel + iPad)
+pnpm test:e2e:ui         # open the Playwright UI for debugging
+pnpm test:e2e:ci         # CI mode: no server reuse, single worker, 2 retries
+```
+
+Requirements:
+
+- Local Supabase stack must be reachable (`pnpm db:start`).
+- `pnpm dev` must be able to boot (Playwright starts it automatically, or reuses
+  an already-running instance locally).
+- Browsers must be installed (`pnpm exec playwright install` is run once after
+  adding the dependency).
+
+The default base URL is `http://localhost:3000`. Override it with the
+`PLAYWRIGHT_BASE_URL` environment variable or in `.env.local`.
+
 ## Scripts
 
 | Script              | Purpose                                  |
@@ -90,6 +115,9 @@ linked remote, so these test users never reach production.
 | `pnpm test:ci`      | Vitest run (CI)                           |
 | `pnpm format`       | Prettier write                            |
 | `pnpm check`        | type-check + lint + tests + format:check |
+| `pnpm test:e2e`     | Playwright E2E specs (headless)           |
+| `pnpm test:e2e:ui` | Playwright E2E specs (interactive UI)     |
+| `pnpm test:e2e:ci` | Playwright E2E specs (CI mode)            |
 | `pnpm db:start`     | Start local Supabase stack                |
 | `pnpm db:stop`      | Stop local Supabase stack                 |
 | `pnpm db:status`    | Show local Supabase URLs + keys           |

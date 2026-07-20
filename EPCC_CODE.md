@@ -1,33 +1,37 @@
-# Implementation: fix-invoice-send-modal-and-email-feedback
+# Implementation: INFRA-001 — Playwright E2E Scaffold
 
 **Mode**: default | **Date**: 2026-07-20 | **Status**: Complete
 
-## 1. Changes (2 files)
+## 1. Changes (8 files)
 
-**Modified**: `src/app/(app)/invoices/invoice-detail-actions.tsx`
-- Imported `toast` from `sonner`.
-- Updated the Send-dialog description from *"No email is sent in this phase"* to *"This locks the invoice, creates a public payment link, and emails the customer a payable link."*
-- On a successful action, `setPending(null)` now closes the confirmation dialog immediately, and a `toast.success("Invoice sent.")` appears for the `send` action.
+**Created**:
+- `playwright.config.ts` — Playwright config with `testDir: "./e2e"`, Desktop Chrome / iPhone 12 / Pixel 7 / iPad Mini projects, `webServer` for `pnpm dev`, and global setup/teardown hooks.
+- `e2e/setup/global.ts` — Starts Supabase if needed and runs `pnpm db:reset` once before specs.
+- `e2e/setup/teardown.ts` — Stops Supabase in CI; leaves it running in local dev.
+- `e2e/health.spec.ts` — Smoke test asserting the seeded `/login` page renders across all viewports.
 
-**Created**: `src/app/(app)/invoices/invoice-detail-actions.test.tsx`
-- New component test suite (3 tests) covering:
-  - Dialog opens and shows the updated email copy.
-  - Confirming Send closes the dialog, calls the action, toasts, and refreshes the route.
-  - A failed send keeps the dialog open, displays the error, and does not toast.
+**Modified**:
+- `package.json` — Added `test:e2e`, `test:e2e:ui`, and `test:e2e:ci` scripts.
+- `.env.example` — Added `PLAYWRIGHT_BASE_URL` documentation.
+- `README.md` — Added E2E setup/running section and listed the new scripts.
+- `.gitignore` — Ignored `e2e/test-results/`, `e2e/.auth/`, `e2e/report/`, `playwright-report/`, and `playwright/.cache/`.
 
 ## 2. Quality
 
-**Tests**: 80 test files passed, 726 tests passed (including the 3 new component tests).
+**Vitest**: 81 test files, 734 tests passed.
+**E2E**: `pnpm test:e2e` — 4/4 passed (Desktop Chrome, iPhone 12/13, Pixel 7, iPad Mini).
 **Type-check**: clean (`tsc --noEmit`).
-**Lint**: clean after removing an unused `Mock` import.
+**Lint**: clean (`eslint`).
+**Format**: clean (`prettier --check`).
 
 ## 3. Decisions
 
-- **Client-side toast instead of Server Action status plumbing**: Kept the change minimal and aligned with the existing architecture where email delivery is best-effort. The toast confirms the invoice transition + `InvoiceSent` event publish, not Resend acceptance.
-- **Close dialog inline inside `startTransition`**: The success callback already runs inside a transition; clearing `pending` there is the natural place and matches how the component controls dialog state elsewhere.
+- **Use `pnpm dev` as `webServer` command**: Fastest iteration. `reuseExistingServer: !process.env.CI` lets a developer keep a dev server running. CI gets a clean boot.
+- **Global setup runs `pnpm db:reset` once**: Keeps every spec deterministic against `supabase/seed.sql`. The setup starts Supabase only if it is not already running, and teardown stops it only in CI.
+- **Health spec first, role fixtures later**: INFRA-001 only verifies the harness works. Auth fixtures and workflow specs are deferred to INFRA-002 / Phase 7 per the approved plan.
 
 ## 4. Handoff
 
 **Run**: `/epcc-commit` when ready.
 **Blockers**: None.
-**TODOs**: Investigate production Resend delivery separately (Vercel env + Resend domain verification checklist in `EPCC_EXPLORE.md`).
+**TODOs**: Implement INFRA-002 (auth fixtures for seeded roles) and Phase 7 workflow specs (dashboard, invoice create/send, quote accept, books transaction, invite member).

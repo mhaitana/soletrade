@@ -13,6 +13,9 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "test:watch": "vitest watch",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:ci": "CI=true playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm type-check && pnpm lint && pnpm test:ci && pnpm format:check",
@@ -61,6 +64,7 @@
   },
   "devDependencies": {
     "@next/env": "^16.2.10",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
