@@ -26,7 +26,7 @@
 
 ### Git State
 - Branch: main
-- Feature commit: TBD (pending)
+- Feature commit: 3e9b604
 
 ### Next Step
 Record F001 verification SHA in `epcc-features.json`, then run `/epcc-code INFRA-001` to scaffold Playwright E2E, or `/epcc-code F002` for mobile touch targets.

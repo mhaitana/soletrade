@@ -23,7 +23,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-20T12:30:00Z",
-      "commit": "TBD",
+      "commit": "3e9b604",
       "acceptanceCriteria": [
         "public/icons/ contains 192×192, 512×512, maskable 512, apple-touch-icon 180, and favicon PNGs",
         "src/app/manifest.ts includes icons, scope, orientation, lang, categories, shortcuts, and prefer_related_applications",
