@@ -199,7 +199,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-20T23:55:00Z",
-      "commit": "17f1a063bc86fa4afcdfa63b2f535b251dd0c9a0",
+      "commit": "9b8d302d610d2e0fc1a11b6b26909cf6b6060ec7",
       "acceptanceCriteria": [
         "e2e/fixtures/auth.ts signs in each seeded role and saves storage state under e2e/.auth/",
         "Each role fixture loads in <2s after initial storage-state generation",
