@@ -55,7 +55,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-21T06:57:00Z",
-      "commit": "PLACEHOLDER",
+      "commit": "382a13b",
       "acceptanceCriteria": [
         "Top 15 interactive controls have height ≥44 px at 390px viewport",
         "Custom <select> elements use text-base below md to prevent iOS auto-zoom",

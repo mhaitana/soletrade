@@ -31,7 +31,7 @@
 
 ### Git State
 - Branch: main
-- Feature commit: PLACEHOLDER
+- Feature commit: 382a13b
 
 ### Next Step
 Run `/epcc-code F003` (Responsive Dialog Wrapper).
