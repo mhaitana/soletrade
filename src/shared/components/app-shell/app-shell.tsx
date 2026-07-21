@@ -78,7 +78,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors max-md:px-4 max-md:py-3",
               active
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -93,7 +93,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
       <Link
         href="/settings/modules"
         onClick={onNavigate}
-        className="mt-1 flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        className="mt-1 flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground max-md:px-4 max-md:py-3"
       >
         <Plus className="size-4 shrink-0" aria-hidden />
         <span>Add module</span>

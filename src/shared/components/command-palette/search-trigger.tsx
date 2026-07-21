@@ -41,7 +41,10 @@ export function SearchTrigger({ installedModules }: SearchTriggerProps) {
         variant="outline"
         onClick={() => setOpen(true)}
         aria-label="Search (⌘K)"
-        className={cn("text-muted-foreground", "w-9 px-0 sm:w-56 sm:justify-start sm:px-3")}
+        className={cn(
+          "text-muted-foreground",
+          "w-9 px-0 max-md:min-w-11 sm:w-56 sm:justify-start sm:px-3",
+        )}
       >
         <Search className="size-4 shrink-0" aria-hidden />
         <span className="hidden sm:inline">Search…</span>

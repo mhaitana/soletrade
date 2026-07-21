@@ -1,5 +1,43 @@
 # EPCC Progress Log
 
+## Session: CODE - 2026-07-21T06:30:00Z
+**Feature**: F002 - Mobile Touch Targets
+**Status**: verified
+**Duration**: ~90 minutes
+
+### What changed
+- Updated `src/shared/ui/button.tsx` to add `max-md:min-h-11` to default/size variants and `max-md:size-11` to icon variants so top-bar icon buttons, dialog/sheet close buttons, and small action buttons are ≥44px on narrow screens.
+- Updated `src/shared/ui/input.tsx` to add `max-md:min-h-11`; it already uses `text-base md:text-sm` to avoid iOS auto-zoom.
+- Updated `src/shared/ui/segmented-control.tsx` filter pills with `max-md:min-h-11 max-md:px-4 max-md:py-2.5 max-md:text-sm` so dashboard/invoices/quotes/books/drive filters are tall enough.
+- Updated `src/shared/ui/sheet.tsx` and `src/shared/ui/dialog.tsx` close buttons to `size-9 max-md:size-11`.
+- Updated `src/app/(app)/settings/layout.tsx` and `src/shared/components/app-shell/app-shell.tsx` nav links with `max-md:px-4 max-md:py-3` for 44px tabs/side-nav items.
+- Updated `src/app/(app)/settings/general-form.tsx`, `src/shared/components/payment-methods-editor.tsx`, and admin select classes to use `max-md:h-11 max-md:text-base` on native `<select>` elements.
+- Updated `src/app/(app)/customers/customers-table.tsx` to make customer name links and edit/delete buttons at least 44px on mobile.
+- Updated `src/app/(app)/assistant/assistant-chat.tsx` suggested prompts and write-tools toggle to `max-md:min-h-10` with larger padding/font; send/stop icon buttons inherit the 44px icon size.
+- Updated `src/shared/components/command-palette/search-trigger.tsx` to `max-md:min-w-11` so the top-bar search trigger is square on mobile.
+- Added `e2e/mobile/touch-targets.spec.ts` with an owner-driven Playwright audit covering app-shell icons, dashboard filters, customer list controls, settings tabs/selects, and assistant controls on a 390px viewport.
+
+### Validation
+| Gate | Status |
+|------|--------|
+| `pnpm check` | ✅ passes (type-check, lint, test:ci, format:check) |
+| Vitest | ✅ 734 passed across 81 test files |
+| `pnpm test:e2e e2e/mobile/touch-targets.spec.ts --project="iPhone 12/13"` | ✅ 11/11 passed |
+| `pnpm test:e2e e2e/auth/roles.spec.ts e2e/health.spec.ts --project="Desktop Chrome"` | ✅ 16/16 passed (no desktop regression) |
+
+### Notes
+- All sizing changes are scoped with `max-md:` so desktop screenshots at 1280px are visually unchanged.
+- The new touch-target audit uses Playwright's iPhone 12/13 project (390px CSS width) and asserts bounding-box heights directly.
+
+### Git State
+- Branch: main
+- Feature commit: PLACEHOLDER
+
+### Next Step
+Run `/epcc-code F003` (Responsive Dialog Wrapper).
+
+---
+
 ## Session: CODE - 2026-07-20T23:55:00Z
 **Feature**: INFRA-002 - Playwright Auth Fixtures
 **Status**: verified

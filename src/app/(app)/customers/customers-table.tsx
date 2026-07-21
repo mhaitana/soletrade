@@ -64,7 +64,7 @@ export function CustomersTable({
               <div className="min-w-0 flex-1">
                 <Link
                   href={`/customers/${c.id}`}
-                  className="truncate text-sm font-medium hover:underline"
+                  className="truncate text-sm font-medium hover:underline max-md:block max-md:min-h-11 max-md:py-3"
                 >
                   {c.name}
                 </Link>
@@ -75,7 +75,13 @@ export function CustomersTable({
               </div>
               {canManage ? (
                 <div className="flex items-center gap-1">
-                  <Button asChild variant="ghost" size="sm" aria-label={`Edit ${c.name}`}>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Edit ${c.name}`}
+                    className="max-md:min-h-11"
+                  >
                     <Link href={`/customers/${c.id}/edit`}>
                       <Pencil className="size-4" aria-hidden />
                     </Link>
@@ -84,6 +90,7 @@ export function CustomersTable({
                     variant="ghost"
                     size="sm"
                     aria-label={`Delete ${c.name}`}
+                    className="max-md:min-h-11"
                     disabled={isPending}
                     onClick={() => setDeleting(c)}
                   >

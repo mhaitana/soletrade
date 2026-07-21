@@ -72,7 +72,7 @@ export function PaymentMethodsEditor({ value, onChange, disabled }: PaymentMetho
                   const type = e.target.value as PaymentMethod["type"];
                   replace(index, makeNewMethod(type));
                 }}
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-8 max-md:h-11 max-md:text-base rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="bank_transfer">Bank transfer</option>
                 <option value="paypal">PayPal</option>
@@ -83,7 +83,7 @@ export function PaymentMethodsEditor({ value, onChange, disabled }: PaymentMetho
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-7"
+                  className="size-7 max-md:size-11"
                   disabled={disabled || index === 0}
                   aria-label="Move up"
                   onClick={() => move(index, -1)}
@@ -94,7 +94,7 @@ export function PaymentMethodsEditor({ value, onChange, disabled }: PaymentMetho
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-7"
+                  className="size-7 max-md:size-11"
                   disabled={disabled || index === value.length - 1}
                   aria-label="Move down"
                   onClick={() => move(index, 1)}
@@ -105,7 +105,7 @@ export function PaymentMethodsEditor({ value, onChange, disabled }: PaymentMetho
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-7 text-destructive"
+                  className="size-7 max-md:size-11 text-destructive"
                   disabled={disabled}
                   aria-label="Remove payment method"
                   onClick={() => remove(index)}

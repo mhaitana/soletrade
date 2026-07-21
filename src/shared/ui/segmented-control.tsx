@@ -52,7 +52,7 @@ export function SegmentedControl({
         >
           <span
             className={cn(
-              "block rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+              "block rounded-md border px-3 py-1.5 text-xs font-medium transition-colors max-md:min-h-11 max-md:px-4 max-md:py-2.5 max-md:text-sm",
               item.active
                 ? "border-border bg-card text-foreground"
                 : "border-transparent text-muted-foreground hover:bg-card/60 hover:text-foreground",

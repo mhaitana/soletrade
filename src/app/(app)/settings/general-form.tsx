@@ -42,7 +42,7 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
   );
 
   const selectClass =
-    "h-9 w-full rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "h-9 max-md:h-11 w-full rounded-md border border-input bg-background px-3 text-sm max-md:text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
   const error = !state.ok ? state.error : "";
 

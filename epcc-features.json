@@ -52,8 +52,10 @@
       "blockedBy": [],
       "estimatedHours": 6,
       "planReference": "EPCC_PLAN.md#phase-2-mobile-touch-targets",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-21T06:57:00Z",
+      "commit": "PLACEHOLDER",
       "acceptanceCriteria": [
         "Top 15 interactive controls have height ≥44 px at 390px viewport",
         "Custom <select> elements use text-base below md to prevent iOS auto-zoom",
@@ -62,11 +64,11 @@
         "Vitest suite remains green"
       ],
       "subtasks": [
-        { "name": "Audit and baseline touch targets", "status": "pending", "estimatedHours": 1.5 },
-        { "name": "Button and input responsive sizing", "status": "pending", "estimatedHours": 2 },
-        { "name": "Fix custom select zoom", "status": "pending", "estimatedHours": 1 },
-        { "name": "Enlarge assistant controls", "status": "pending", "estimatedHours": 1 },
-        { "name": "Visual regression baseline", "status": "pending", "estimatedHours": 0.5 }
+        { "name": "Audit and baseline touch targets", "status": "completed", "estimatedHours": 1.5 },
+        { "name": "Button and input responsive sizing", "status": "completed", "estimatedHours": 2 },
+        { "name": "Fix custom select zoom", "status": "completed", "estimatedHours": 1 },
+        { "name": "Enlarge assistant controls", "status": "completed", "estimatedHours": 1 },
+        { "name": "Visual regression baseline", "status": "completed", "estimatedHours": 0.5 }
       ]
     },
     {

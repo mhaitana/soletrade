@@ -223,7 +223,7 @@ export function AssistantChat({
                     : "Send a message first to enable write tools"
                 }
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-10 max-md:px-3 max-md:py-2 max-md:text-sm",
                   writeEnabled
                     ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
                     : "border-border text-muted-foreground hover:bg-muted/40",
@@ -253,7 +253,7 @@ export function AssistantChat({
                       type="button"
                       onClick={() => void sendMessage({ text: p }, { body: { conversationId } })}
                       disabled={busy}
-                      className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50"
+                      className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50 max-md:min-h-10 max-md:px-4 max-md:py-2 max-md:text-sm"
                     >
                       {p}
                     </button>
