@@ -129,8 +129,10 @@
       "blockedBy": [],
       "estimatedHours": 5,
       "planReference": "EPCC_PLAN.md#phase-4-mobile-dense-tables",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-22T20:45:00Z",
+      "commit": "PENDING_COMMIT",
       "acceptanceCriteria": [
         "Invoice detail line items are readable without horizontal pinch-zoom at 390px",
         "Quote detail line items are readable without horizontal pinch-zoom at 390px",
@@ -139,9 +141,9 @@
         "Totals alignment remains correct on desktop"
       ],
       "subtasks": [
-        { "name": "Invoice/quote line-item card rows", "status": "pending", "estimatedHours": 2 },
-        { "name": "Books summary mobile variant", "status": "pending", "estimatedHours": 1.5 },
-        { "name": "Tax lodged-quarters mobile variant", "status": "pending", "estimatedHours": 1.5 }
+        { "name": "Invoice/quote line-item card rows", "status": "completed", "estimatedHours": 2 },
+        { "name": "Books summary mobile variant", "status": "completed", "estimatedHours": 1.5 },
+        { "name": "Tax lodged-quarters mobile variant", "status": "completed", "estimatedHours": 1.5 }
       ]
     },
     {

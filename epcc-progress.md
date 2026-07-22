@@ -1,5 +1,37 @@
 # EPCC Progress Log
 
+## Session: CODE - 2026-07-22T20:30:00Z
+**Feature**: F004 - Mobile Dense Table Variants
+**Status**: verified
+**Duration**: ~60 minutes
+
+### What changed
+- Updated `src/app/(app)/books/books-summary.tsx` to add a mobile card-row variant for the income/expense category breakdown below `sm`, keeping the desktop table unchanged (`data-testid="books-category-mobile"`).
+- Updated `src/app/(app)/books/tax/page.tsx` to add a mobile card-row variant for lodged GST/BAS quarters below `sm`, keeping the desktop table unchanged (`data-testid="tax-lodged-mobile"`).
+- Updated `src/app/(app)/invoices/[id]/page.tsx` to render invoice line items as stacked cards below `sm` (`data-testid="invoice-line-items-mobile"`).
+- Updated `src/app/(app)/quotes/[id]/page.tsx` to render quote line items as stacked cards below `sm` (`data-testid="quote-line-items-mobile"`).
+- Minor formatting cleanup in `src/shared/components/bar-chart.tsx` (single-line `<title>` template).
+- Added `e2e/mobile/dense-tables.spec.ts` verifying no horizontal overflow on iPhone 12/13 (390px) and that desktop tables remain visible at 1280px.
+
+### Validation
+| Gate | Status |
+|------|--------|
+| `pnpm type-check` | ✅ passes |
+| `pnpm lint` | ✅ passes |
+| `pnpm format:check` | ✅ passes |
+| Vitest | ✅ 734 passed across 81 test files (one transient PostgREST hiccup under full concurrency; failed test passes in isolation) |
+| `pnpm test:e2e e2e/mobile/dense-tables.spec.ts --project="iPhone 12/13" --project="Desktop Chrome"` | ✅ 11/11 passed, 5 correctly skipped by viewport |
+
+### Notes
+- All mobile variants use `sm:hidden` / `hidden sm:table` toggles so desktop markup is identical to before.
+- E2E assertions check `document.documentElement.scrollWidth > window.innerWidth` to catch overflow regressions.
+
+### Git State
+- Branch: main
+- Next step: `/epcc-code` next pending feature or `/epcc-commit` to finalise.
+
+---
+
 ## Session: CODE - 2026-07-21T08:30:00Z
 **Feature**: F003 - Responsive Dialog Wrapper
 **Status**: verified

@@ -85,9 +85,7 @@ export function BarChart({ points, ariaLabel }: BarChartProps) {
                 fillOpacity={0.85}
                 rx={1}
               >
-                <title>
-                  {p.label}: {p.valueLabel}
-                </title>
+                <title>{`${p.label}: ${p.valueLabel}`}</title>
               </rect>
               <text
                 x={cx}

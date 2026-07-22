@@ -106,7 +106,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
       </dl>
 
       <div className="overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-sm">
+        <table className="hidden w-full text-sm sm:table">
           <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th scope="col" className="px-4 py-2.5 font-medium">
@@ -138,6 +138,21 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             ))}
           </tbody>
         </table>
+        <div className="sm:hidden divide-y divide-border" data-testid="quote-line-items-mobile">
+          {q.lineItems.map((it) => (
+            <div key={it.id} className="px-4 py-3 space-y-1">
+              <p className="text-sm font-medium">{it.description}</p>
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>
+                  {it.quantity} × {formatCents(it.unitPriceCents, q.currency)}
+                </span>
+                <span className="font-medium tabular-nums text-foreground">
+                  {formatCents(it.amountCents, q.currency)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {q.sections.length > 0 ? (

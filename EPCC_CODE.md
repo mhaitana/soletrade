@@ -1,37 +1,35 @@
-# Implementation: INFRA-001 — Playwright E2E Scaffold
+# Implementation: F004 — Mobile Dense Table Variants
 
-**Mode**: default | **Date**: 2026-07-20 | **Status**: Complete
+**Mode**: default | **Date**: 2026-07-22 | **Status**: Verified
 
-## 1. Changes (8 files)
+## 1. Changes (6 files)
 
 **Created**:
-- `playwright.config.ts` — Playwright config with `testDir: "./e2e"`, Desktop Chrome / iPhone 12 / Pixel 7 / iPad Mini projects, `webServer` for `pnpm dev`, and global setup/teardown hooks.
-- `e2e/setup/global.ts` — Starts Supabase if needed and runs `pnpm db:reset` once before specs.
-- `e2e/setup/teardown.ts` — Stops Supabase in CI; leaves it running in local dev.
-- `e2e/health.spec.ts` — Smoke test asserting the seeded `/login` page renders across all viewports.
+- `e2e/mobile/dense-tables.spec.ts` — Playwright audit for invoice/quote line-item tables and tax lodged-quarters table collapsing into stacked cards on narrow viewports, plus desktop assertions that tables remain visible at 1280px.
 
 **Modified**:
-- `package.json` — Added `test:e2e`, `test:e2e:ui`, and `test:e2e:ci` scripts.
-- `.env.example` — Added `PLAYWRIGHT_BASE_URL` documentation.
-- `README.md` — Added E2E setup/running section and listed the new scripts.
-- `.gitignore` — Ignored `e2e/test-results/`, `e2e/.auth/`, `e2e/report/`, `playwright-report/`, and `playwright/.cache/`.
+- `src/app/(app)/books/books-summary.tsx` — Added mobile card-row variant for income/expense category breakdown below `sm` (`data-testid="books-category-mobile"`).
+- `src/app/(app)/books/tax/page.tsx` — Added mobile card-row variant for lodged GST/BAS quarters below `sm` (`data-testid="tax-lodged-mobile"`), kept desktop table intact.
+- `src/app/(app)/invoices/[id]/page.tsx` — Renders invoice line items as stacked cards below `sm` (`data-testid="invoice-line-items-mobile"`).
+- `src/app/(app)/quotes/[id]/page.tsx` — Renders quote line items as stacked cards below `sm` (`data-testid="quote-line-items-mobile"`).
+- `src/shared/components/bar-chart.tsx` — Minor Prettier cleanup: collapsed `<title>` children to a single template literal.
 
 ## 2. Quality
 
-**Vitest**: 81 test files, 734 tests passed.
-**E2E**: `pnpm test:e2e` — 4/4 passed (Desktop Chrome, iPhone 12/13, Pixel 7, iPad Mini).
+**Vitest**: 81 test files, 734 tests passed. One transient PostgREST hiccup under full concurrent load; the affected tests pass when run in isolation.
+**E2E**: `pnpm test:e2e e2e/mobile/dense-tables.spec.ts --project="iPhone 12/13" --project="Desktop Chrome"` — 11/11 passed, 5 correctly skipped by viewport filter.
 **Type-check**: clean (`tsc --noEmit`).
 **Lint**: clean (`eslint`).
 **Format**: clean (`prettier --check`).
 
 ## 3. Decisions
 
-- **Use `pnpm dev` as `webServer` command**: Fastest iteration. `reuseExistingServer: !process.env.CI` lets a developer keep a dev server running. CI gets a clean boot.
-- **Global setup runs `pnpm db:reset` once**: Keeps every spec deterministic against `supabase/seed.sql`. The setup starts Supabase only if it is not already running, and teardown stops it only in CI.
-- **Health spec first, role fixtures later**: INFRA-001 only verifies the harness works. Auth fixtures and workflow specs are deferred to INFRA-002 / Phase 7 per the approved plan.
+- **Responsive toggle pattern**: Used `hidden sm:table` for desktop tables and `sm:hidden` for mobile card rows. This preserves the existing desktop markup and avoids layout shifts on larger screens.
+- **No new dependencies**: Reused Tailwind responsive utilities and existing `Card`/`Badge` primitives from the design system.
+- **Overflow assertion in E2E**: `assertNoHorizontalOverflow` compares `document.documentElement.scrollWidth > window.innerWidth` to catch pinch-zoom regressions on real narrow viewports.
 
 ## 4. Handoff
 
 **Run**: `/epcc-commit` when ready.
 **Blockers**: None.
-**TODOs**: Implement INFRA-002 (auth fixtures for seeded roles) and Phase 7 workflow specs (dashboard, invoice create/send, quote accept, books transaction, invite member).
+**TODOs**: Verify F004 is recorded in `epcc-features.json`; move on to next pending feature.

@@ -90,7 +90,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       </dl>
 
       <div className="overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-sm">
+        <table className="hidden w-full text-sm sm:table">
           <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th scope="col" className="px-4 py-2.5 font-medium">
@@ -122,6 +122,21 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             ))}
           </tbody>
         </table>
+        <div className="sm:hidden divide-y divide-border" data-testid="invoice-line-items-mobile">
+          {inv.lineItems.map((it) => (
+            <div key={it.id} className="px-4 py-3 space-y-1">
+              <p className="text-sm font-medium">{it.description}</p>
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>
+                  {it.quantity} × {formatCents(it.unitPriceCents, inv.currency)}
+                </span>
+                <span className="font-medium tabular-nums text-foreground">
+                  {formatCents(it.amountCents, inv.currency)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="ml-auto w-full max-w-xs space-y-2">

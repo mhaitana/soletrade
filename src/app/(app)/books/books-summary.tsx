@@ -129,24 +129,47 @@ function CategoryBreakdownCard({
         {empty || rows.length === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">No transactions in this period.</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
-            <tbody className="divide-y divide-border">
+          <>
+            <table className="hidden mt-2 w-full text-sm sm:table">
+              <tbody className="divide-y divide-border">
+                {rows.map((r) => {
+                  const label = categoryLabel(type, r.category) ?? r.category;
+                  return (
+                    <tr key={r.category}>
+                      <td className="py-1.5 text-foreground">{label}</td>
+                      <td className="py-1.5 text-right text-muted-foreground tabular-nums">
+                        {r.count}
+                      </td>
+                      <td className="py-1.5 pl-4 text-right font-medium tabular-nums text-foreground">
+                        {formatCents(r.amountCents, currency)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div
+              className="sm:hidden mt-2 divide-y divide-border"
+              data-testid="books-category-mobile"
+            >
               {rows.map((r) => {
                 const label = categoryLabel(type, r.category) ?? r.category;
                 return (
-                  <tr key={r.category}>
-                    <td className="py-1.5 text-foreground">{label}</td>
-                    <td className="py-1.5 text-right text-muted-foreground tabular-nums">
-                      {r.count}
-                    </td>
-                    <td className="py-1.5 pl-4 text-right font-medium tabular-nums text-foreground">
-                      {formatCents(r.amountCents, currency)}
-                    </td>
-                  </tr>
+                  <div key={r.category} className="py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-foreground">{label}</span>
+                      <span className="text-sm font-medium tabular-nums text-foreground">
+                        {formatCents(r.amountCents, currency)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {r.count} transaction{r.count === 1 ? "" : "s"}
+                    </p>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

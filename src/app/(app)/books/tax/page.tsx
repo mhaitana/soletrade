@@ -148,54 +148,94 @@ export default async function TaxPage() {
           {lodgedPeriods.length === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">No quarters lodged yet.</p>
           ) : (
-            <table className="mt-2 w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th scope="col" className="px-0 py-2 font-medium">
-                    Period
-                  </th>
-                  <th scope="col" className="px-0 py-2 text-right font-medium">
-                    GST collected
-                  </th>
-                  <th scope="col" className="px-0 py-2 text-right font-medium">
-                    GST paid
-                  </th>
-                  <th scope="col" className="px-0 py-2 text-right font-medium">
-                    Net GST
-                  </th>
-                  <th scope="col" className="px-0 py-2 text-right font-medium">
-                    Lodged
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {lodgedPeriods.map((p) => (
-                  <tr key={p.id}>
-                    <td className="px-0 py-2">
-                      <Badge variant="secondary">{p.periodLabel}</Badge>
-                    </td>
-                    <td className="px-0 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-500">
-                      {formatCents(p.gstCollectedCents, CURRENCY)}
-                    </td>
-                    <td className="px-0 py-2 text-right tabular-nums text-foreground">
-                      {formatCents(p.gstPaidCents, CURRENCY)}
-                    </td>
-                    <td
-                      className={`px-0 py-2 text-right font-medium tabular-nums ${
-                        p.netGstCents >= 0
-                          ? "text-destructive"
-                          : "text-emerald-600 dark:text-emerald-500"
-                      }`}
-                    >
-                      {formatCents(p.netGstCents, CURRENCY)}
-                    </td>
-                    <td className="px-0 py-2 text-right text-muted-foreground">
-                      {p.lodgedAt ? formatDate(p.lodgedAt) : "-"}
-                    </td>
+            <div className="mt-2 overflow-hidden rounded-lg border border-border">
+              <table className="hidden w-full text-sm sm:table">
+                <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-4 py-2.5 font-medium">
+                      Period
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-medium">
+                      GST collected
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-medium">
+                      GST paid
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-medium">
+                      Net GST
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-medium">
+                      Lodged
+                    </th>
                   </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {lodgedPeriods.map((p) => (
+                    <tr key={p.id}>
+                      <td className="px-4 py-3">
+                        <Badge variant="secondary">{p.periodLabel}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-500">
+                        {formatCents(p.gstCollectedCents, CURRENCY)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                        {formatCents(p.gstPaidCents, CURRENCY)}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-medium tabular-nums ${
+                          p.netGstCents >= 0
+                            ? "text-destructive"
+                            : "text-emerald-600 dark:text-emerald-500"
+                        }`}
+                      >
+                        {formatCents(p.netGstCents, CURRENCY)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {p.lodgedAt ? formatDate(p.lodgedAt) : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="sm:hidden divide-y divide-border" data-testid="tax-lodged-mobile">
+                {lodgedPeriods.map((p) => (
+                  <div key={p.id} className="px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="secondary">{p.periodLabel}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {p.lodgedAt ? formatDate(p.lodgedAt) : "-"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Collected</p>
+                        <p className="tabular-nums text-emerald-600 dark:text-emerald-500">
+                          {formatCents(p.gstCollectedCents, CURRENCY)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Paid</p>
+                        <p className="tabular-nums text-foreground">
+                          {formatCents(p.gstPaidCents, CURRENCY)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Net GST</p>
+                        <p
+                          className={`font-medium tabular-nums ${
+                            p.netGstCents >= 0
+                              ? "text-destructive"
+                              : "text-emerald-600 dark:text-emerald-500"
+                          }`}
+                        >
+                          {formatCents(p.netGstCents, CURRENCY)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
