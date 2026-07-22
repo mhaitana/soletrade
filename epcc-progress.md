@@ -26,9 +26,14 @@
 - All mobile variants use `sm:hidden` / `hidden sm:table` toggles so desktop markup is identical to before.
 - E2E assertions check `document.documentElement.scrollWidth > window.innerWidth` to catch overflow regressions.
 
+### Checkpoint Commits
+- `c38789b` — feat(mobile): F004 dense table card rows + Playwright audit
+- `1cdca31` — chore: record F004 verification commit hash in epcc-features.json
+
 ### Git State
 - Branch: main
-- Next step: `/epcc-code` next pending feature or `/epcc-commit` to finalise.
+- Remote: origin (pushed)
+- Next step: `/epcc-code` next pending feature.
 
 ---
 
