@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -14,6 +14,8 @@ import {
   ResponsiveDialogTitle,
 } from "@/shared/components/responsive-dialog";
 import { acceptQuoteAction, declineQuoteAction } from "./actions";
+
+const SIGNATURE_ASPECT_RATIO = 480 / 140;
 
 type Pending = "accept" | "decline" | null;
 
@@ -38,10 +40,68 @@ export function QuoteAcceptForm({
 
   // Signature pad - minimal dependency-free canvas. Declared directly in the component (not via
   // a hook return) so the React Compiler doesn't flag ref access during render.
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const lastRef = useRef<{ x: number; y: number } | null>(null);
   const [hasStrokes, setHasStrokes] = useState(false);
+
+  // Resize the canvas to fill its container, scaling by devicePixelRatio for crisp strokes on
+  // high-DPI displays. Existing strokes are snapshoted and redrawn so a viewport resize doesn't
+  // erase a half-drawn signature.
+  useEffect(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    let raf = 0;
+
+    function resizeCanvas() {
+      if (!container || !canvas) return;
+
+      const cssWidth = Math.max(1, Math.floor(container.clientWidth));
+      const cssHeight = Math.max(1, Math.floor(cssWidth / SIGNATURE_ASPECT_RATIO));
+      const dpr = window.devicePixelRatio || 1;
+
+      // Snapshot existing artwork before resizing clears the canvas.
+      let snapshotSrc: string | null = null;
+      if (hasStrokes && canvas.width > 0 && canvas.height > 0) {
+        snapshotSrc = canvas.toDataURL("image/png");
+      }
+
+      canvas.width = cssWidth * dpr;
+      canvas.height = cssHeight * dpr;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 2 * dpr;
+
+      if (snapshotSrc) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = snapshotSrc;
+      }
+    }
+
+    function scheduleResize() {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(resizeCanvas);
+    }
+
+    const ro = new ResizeObserver(scheduleResize);
+    ro.observe(container);
+    scheduleResize();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [hasStrokes]);
 
   function pointerPos(e: React.PointerEvent<HTMLCanvasElement>) {
     const c = canvasRef.current;
@@ -71,11 +131,13 @@ export function QuoteAcceptForm({
     const ctx = c.getContext("2d");
     if (!ctx) return;
     const p = pointerPos(e);
+    const dpr = window.devicePixelRatio || 1;
     ctx.beginPath();
     ctx.moveTo(lastRef.current.x, lastRef.current.y);
     ctx.lineTo(p.x, p.y);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * dpr;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.strokeStyle = "#0f172a";
     ctx.stroke();
     lastRef.current = p;
@@ -246,17 +308,18 @@ export function QuoteAcceptForm({
                     Draw your signature below, or leave it blank - your typed name is acceptable
                     evidence.
                   </p>
-                  <canvas
-                    ref={canvasRef}
-                    width={480}
-                    height={140}
-                    onPointerDown={onPointerDown}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={onPointerUp}
-                    onPointerLeave={onPointerUp}
-                    className="w-full touch-none rounded-md border border-input bg-white"
-                    aria-label="Signature pad"
-                  />
+                  <div ref={containerRef} className="w-full">
+                    <canvas
+                      ref={canvasRef}
+                      onPointerDown={onPointerDown}
+                      onPointerMove={onPointerMove}
+                      onPointerUp={onPointerUp}
+                      onPointerLeave={onPointerUp}
+                      className="h-auto w-full touch-none rounded-md border border-input bg-white"
+                      aria-label="Signature pad"
+                      data-testid="signature-canvas"
+                    />
+                  </div>
                   <Button
                     type="button"
                     variant="outline"

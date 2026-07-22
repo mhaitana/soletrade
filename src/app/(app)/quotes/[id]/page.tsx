@@ -86,6 +86,15 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         </div>
       ) : null}
 
+      {q.publicToken ? (
+        <div className="rounded-md border border-border bg-muted/30 p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Public link</p>
+          <p className="mt-1 break-all font-mono text-sm" data-testid="quote-public-link">
+            /q/{q.publicToken}
+          </p>
+        </div>
+      ) : null}
+
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
           <dt className="text-xs uppercase tracking-wide text-muted-foreground">Issued</dt>
