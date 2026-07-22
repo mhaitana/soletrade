@@ -31,8 +31,8 @@
 
 ### Git State
 - Branch: main
-- Feature commit: TBD
-- Next step: record verification SHA in `epcc-features.json`, then run `/epcc-code F004` (Mobile Dense Table Variants).
+- Feature commit: 9e33f4d
+- Next step: Run `/epcc-code F004` (Mobile Dense Table Variants).
 
 ---
 

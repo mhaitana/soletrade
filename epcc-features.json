@@ -92,7 +92,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-21T08:45:00Z",
-      "commit": "TBD",
+      "commit": "9e33f4d",
       "acceptanceCriteria": [
         "ResponsiveDialog component exists and preserves Radix trigger/content/footer APIs",
         "Customer-create dialog opens as bottom sheet at 390px and centered modal at 1280px",
