@@ -143,7 +143,11 @@
       "subtasks": [
         { "name": "Invoice/quote line-item card rows", "status": "completed", "estimatedHours": 2 },
         { "name": "Books summary mobile variant", "status": "completed", "estimatedHours": 1.5 },
-        { "name": "Tax lodged-quarters mobile variant", "status": "completed", "estimatedHours": 1.5 }
+        {
+          "name": "Tax lodged-quarters mobile variant",
+          "status": "completed",
+          "estimatedHours": 1.5
+        }
       ]
     },
     {
@@ -156,8 +160,10 @@
       "blockedBy": [],
       "estimatedHours": 2,
       "planReference": "EPCC_PLAN.md#phase-5-quote-signature-canvas",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-22T12:35:24Z",
+      "commit": "6f0c6c0",
       "acceptanceCriteria": [
         "Signature canvas fills available width on 390px and 1280px viewports",
         "Canvas redraws correctly when viewport is resized",
@@ -165,7 +171,7 @@
         "No visual distortion on high-DPI displays"
       ],
       "subtasks": [
-        { "name": "Responsive signature sizing", "status": "pending", "estimatedHours": 2 }
+        { "name": "Responsive signature sizing", "status": "completed", "estimatedHours": 2 }
       ]
     },
     {

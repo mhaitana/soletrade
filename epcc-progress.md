@@ -1,5 +1,45 @@
 # EPCC Progress Log
 
+## Session: CODE - 2026-07-22T12:35:00Z
+**Feature**: F005 - Responsive Quote Signature Canvas
+**Status**: verified
+**Duration**: ~95 minutes
+
+### What changed
+- Updated `src/app/q/[token]/quote-accept-form.tsx` to make the signature pad responsive:
+  - Container `ResizeObserver` resizes the `<canvas>` bitmap to the rendered container width.
+  - Scales the bitmap by `window.devicePixelRatio` for crisp strokes on high-DPI displays.
+  - Snapshots the canvas before resize and redraws the PNG so strokes survive viewport changes.
+  - Draws with pointer events and coordinate scaling (`canvas.width / rect.width`) to stay accurate after reflow.
+  - Adds a "Clear signature" control and exposes `data-testid="signature-canvas"` for E2E.
+- Updated `src/app/(app)/quotes/[id]/page.tsx` to add `data-testid="quote-public-link"` around the public token link so the E2E spec can extract a fresh token per run.
+- Added `e2e/quotes/responsive-signature.spec.ts` Playwright audit covering:
+  - Mobile flow (390×844) opening the public quote page, accepting, drawing a signature inside the responsive sheet, and confirming acceptance.
+  - Desktop flow (1280×720) plus a mid-test resize to 900×600 to assert the canvas reflows and the signature remains valid.
+
+### Validation
+| Gate | Status |
+|------|--------|
+| `pnpm check` | ✅ passes (type-check, lint, test:ci, format:check) |
+| `pnpm type-check` | ✅ clean |
+| `pnpm lint` | ✅ clean |
+| `pnpm format:check` | ✅ clean |
+| Vitest | ✅ 734 passed across 81 test files |
+| `pnpm test:e2e e2e/quotes/responsive-signature.spec.ts` | ✅ 14/14 passed across all viewport projects |
+
+### Notes
+- Canvas aspect ratio is fixed at 480/140; the internal bitmap always matches `container.clientWidth × DPR`.
+- Mobile sheet requires `scrollIntoViewIfNeeded()` and a second `boundingBox()` measurement before drawing so pointer coordinates hit the canvas, not the underlying decline/background buttons.
+- Each test creates a unique customer via the owner fixture to avoid row-order collisions in the shared workspace.
+- Width assertions use a 6px tolerance to absorb WebKit sub-pixel layout rounding.
+
+### Git State
+- Branch: main
+- Feature commit: `6f0c6c0`
+- Next step: Commit EPCC bookkeeping (`epcc-features.json`, `epcc-progress.md`, `EPCC_CODE.md`).
+
+---
+
 ## Session: CODE - 2026-07-22T20:30:00Z
 **Feature**: F004 - Mobile Dense Table Variants
 **Status**: verified
