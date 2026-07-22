@@ -8,13 +8,13 @@ import { Label } from "@/shared/ui/label";
 import { Badge } from "@/shared/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/shared/components/responsive-dialog";
 import {
   inviteMemberAction,
   removeMemberAction,
@@ -283,17 +283,20 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
         </div>
       ) : null}
 
-      <Dialog open={removeTarget !== null} onOpenChange={(o) => !o && setRemoveTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove member?</DialogTitle>
-            <DialogDescription>
+      <ResponsiveDialog
+        open={removeTarget !== null}
+        onOpenChange={(o) => !o && setRemoveTarget(null)}
+      >
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Remove member?</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
               {removeTarget
                 ? `This removes ${removeTarget.label} from the workspace. They will lose access immediately. The audit log keeps a record.`
                 : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setRemoveTarget(null)} disabled={isPending}>
               Cancel
             </Button>
@@ -307,9 +310,9 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
             >
               {isPending ? "Removing…" : "Remove"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

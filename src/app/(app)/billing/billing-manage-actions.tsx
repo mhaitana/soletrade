@@ -4,15 +4,15 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/shared/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from "@/shared/components/responsive-dialog";
 import {
   cancelSubscriptionAction,
   previewCancelSubscriptionAction,
@@ -122,37 +122,37 @@ export function BillingManageActions({ interval }: BillingManageActionsProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Dialog>
-        <DialogTrigger asChild>
+      <ResponsiveDialog>
+        <ResponsiveDialogTrigger asChild>
           <Button variant="outline" disabled={switchPending}>
             {switchPending ? "Switching…" : switchLabel}
           </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Switch to {targetInterval} billing?</DialogTitle>
-            <DialogDescription>
+        </ResponsiveDialogTrigger>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Switch to {targetInterval} billing?</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
               Your prices update to {targetInterval} billing starting next cycle. No charge or
               credit is issued now - the change takes effect on your next invoice.
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
           {switchError ? (
             <p role="alert" className="text-sm text-destructive">
               {switchError}
             </p>
           ) : null}
-          <DialogFooter>
-            <DialogClose asChild>
+          <ResponsiveDialogFooter>
+            <ResponsiveDialogClose asChild>
               <Button variant="outline" disabled={switchPending}>
                 Cancel
               </Button>
-            </DialogClose>
+            </ResponsiveDialogClose>
             <Button onClick={onSwitch} disabled={switchPending}>
               {switchPending ? "Switching…" : "Confirm switch"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       <Button
         variant="destructive"

@@ -6,13 +6,13 @@ import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/shared/components/responsive-dialog";
 import { MODULES, MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 import {
   disableModuleAction,
@@ -55,7 +55,7 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewPayload | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogOpen, setResponsiveDialogOpen] = useState(false);
   const [previewingKey, setPreviewingKey] = useState<ModuleKey | null>(null);
 
   // Cancellation flow state.
@@ -74,7 +74,7 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
         setError(res.error);
         return;
       }
-      setDialogOpen(false);
+      setResponsiveDialogOpen(false);
       setPreview(null);
       router.refresh();
     });
@@ -94,7 +94,7 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
       return;
     }
     setPreview(res);
-    setDialogOpen(true);
+    setResponsiveDialogOpen(true);
   }
 
   async function onDisableClick(key: ModuleKey) {
@@ -256,21 +256,23 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
       </div>
 
       {/* Add-module proration confirm */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+      <ResponsiveDialog open={dialogOpen} onOpenChange={setResponsiveDialogOpen}>
+        <ResponsiveDialogContent>
           {preview ? (
             <>
-              <DialogHeader>
-                <DialogTitle>Add {MODULES[preview.moduleKey].name}?</DialogTitle>
-                <DialogDescription>
+              <ResponsiveDialogHeader>
+                <ResponsiveDialogTitle>
+                  Add {MODULES[preview.moduleKey].name}?
+                </ResponsiveDialogTitle>
+                <ResponsiveDialogDescription>
                   You&apos;re adding <strong>{MODULES[preview.moduleKey].name}</strong> as{" "}
                   {preview.becomesAnchor
                     ? "your anchor app (the highest-priced module in your stack)"
                     : "an add-on"}
                   . A prorated charge for the rest of the current billing period is collected today;
                   the full {preview.interval} price applies from your next invoice.
-                </DialogDescription>
-              </DialogHeader>
+                </ResponsiveDialogDescription>
+              </ResponsiveDialogHeader>
               <dl className="grid grid-cols-2 gap-y-2 text-sm">
                 <dt className="text-muted-foreground">Due today (prorated)</dt>
                 <dd className="text-right font-medium tabular-nums">{preview.proratedDisplay}</dd>
@@ -284,11 +286,11 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
                 <dt className="text-muted-foreground">Period ends</dt>
                 <dd className="text-right">{formatDate(preview.periodEnd)}</dd>
               </dl>
-              <DialogFooter>
+              <ResponsiveDialogFooter>
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setDialogOpen(false);
+                    setResponsiveDialogOpen(false);
                     setPreview(null);
                   }}
                   disabled={pendingConfirm}
@@ -298,11 +300,11 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
                 <Button onClick={() => void runEnable(preview.moduleKey)} disabled={pendingConfirm}>
                   {pendingConfirm ? "Adding…" : `Add for ${preview.proratedDisplay}`}
                 </Button>
-              </DialogFooter>
+              </ResponsiveDialogFooter>
             </>
           ) : null}
-        </DialogContent>
-      </Dialog>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Cancel-module options */}
       <CancellationModal

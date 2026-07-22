@@ -6,13 +6,13 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/shared/components/responsive-dialog";
 import { acceptQuoteAction, declineQuoteAction } from "./actions";
 
 type Pending = "accept" | "decline" | null;
@@ -189,13 +189,13 @@ export function QuoteAcceptForm({
         </p>
       ) : null}
 
-      <Dialog
+      <ResponsiveDialog
         open={pending !== null}
         onOpenChange={(o) => {
           if (!o && !isPending) setPending(null);
         }}
       >
-        <DialogContent>
+        <ResponsiveDialogContent>
           {error ? (
             <p className="text-sm text-destructive" role="alert">
               {error}
@@ -203,13 +203,13 @@ export function QuoteAcceptForm({
           ) : null}
           {pending === "accept" ? (
             <>
-              <DialogHeader>
-                <DialogTitle>Accept this quote?</DialogTitle>
-                <DialogDescription>
+              <ResponsiveDialogHeader>
+                <ResponsiveDialogTitle>Accept this quote?</ResponsiveDialogTitle>
+                <ResponsiveDialogDescription>
                   Enter your name below to confirm you accept the terms and total shown. The
                   business will be notified and can convert this quote to an invoice.
-                </DialogDescription>
-              </DialogHeader>
+                </ResponsiveDialogDescription>
+              </ResponsiveDialogHeader>
 
               <div className="space-y-4 py-2">
                 <div className="space-y-1.5">
@@ -292,35 +292,35 @@ export function QuoteAcceptForm({
                 ) : null}
               </div>
 
-              <DialogFooter>
+              <ResponsiveDialogFooter>
                 <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
                   Cancel
                 </Button>
                 <Button onClick={() => run("accept")} disabled={isPending}>
                   {isPending ? "Accepting…" : "Confirm accept"}
                 </Button>
-              </DialogFooter>
+              </ResponsiveDialogFooter>
             </>
           ) : (
             <>
-              <DialogHeader>
-                <DialogTitle>Decline this quote?</DialogTitle>
-                <DialogDescription>
+              <ResponsiveDialogHeader>
+                <ResponsiveDialogTitle>Decline this quote?</ResponsiveDialogTitle>
+                <ResponsiveDialogDescription>
                   Confirming you decline this quote. The business will be notified.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
+                </ResponsiveDialogDescription>
+              </ResponsiveDialogHeader>
+              <ResponsiveDialogFooter>
                 <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
                   Cancel
                 </Button>
                 <Button variant="destructive" onClick={() => run("decline")} disabled={isPending}>
                   {isPending ? "Working…" : "Confirm decline"}
                 </Button>
-              </DialogFooter>
+              </ResponsiveDialogFooter>
             </>
           )}
-        </DialogContent>
-      </Dialog>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </>
   );
 }

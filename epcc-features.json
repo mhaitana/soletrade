@@ -64,8 +64,16 @@
         "Vitest suite remains green"
       ],
       "subtasks": [
-        { "name": "Audit and baseline touch targets", "status": "completed", "estimatedHours": 1.5 },
-        { "name": "Button and input responsive sizing", "status": "completed", "estimatedHours": 2 },
+        {
+          "name": "Audit and baseline touch targets",
+          "status": "completed",
+          "estimatedHours": 1.5
+        },
+        {
+          "name": "Button and input responsive sizing",
+          "status": "completed",
+          "estimatedHours": 2
+        },
         { "name": "Fix custom select zoom", "status": "completed", "estimatedHours": 1 },
         { "name": "Enlarge assistant controls", "status": "completed", "estimatedHours": 1 },
         { "name": "Visual regression baseline", "status": "completed", "estimatedHours": 0.5 }
@@ -81,8 +89,10 @@
       "blockedBy": [],
       "estimatedHours": 6,
       "planReference": "EPCC_PLAN.md#phase-3-responsive-dialogs",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-21T08:45:00Z",
+      "commit": "TBD",
       "acceptanceCriteria": [
         "ResponsiveDialog component exists and preserves Radix trigger/content/footer APIs",
         "Customer-create dialog opens as bottom sheet at 390px and centered modal at 1280px",
@@ -91,20 +101,20 @@
         "Desktop modal behaviour unchanged"
       ],
       "subtasks": [
-        { "name": "Create ResponsiveDialog primitive", "status": "pending", "estimatedHours": 2 },
+        { "name": "Create ResponsiveDialog primitive", "status": "completed", "estimatedHours": 2 },
         {
           "name": "Migrate customer-create and quote-accept dialogs",
-          "status": "pending",
+          "status": "completed",
           "estimatedHours": 1.5
         },
         {
           "name": "Migrate billing and cancellation modals",
-          "status": "pending",
+          "status": "completed",
           "estimatedHours": 1.5
         },
         {
           "name": "Migrate settings confirmation dialogs",
-          "status": "pending",
+          "status": "completed",
           "estimatedHours": 1
         }
       ]

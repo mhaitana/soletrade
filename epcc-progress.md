@@ -1,5 +1,41 @@
 # EPCC Progress Log
 
+## Session: CODE - 2026-07-21T08:30:00Z
+**Feature**: F003 - Responsive Dialog Wrapper
+**Status**: verified
+**Duration**: ~75 minutes
+
+### What changed
+- Created `src/shared/lib/use-media-query.ts` with SSR-safe `useMediaQuery` and `useIsMobile` helpers (mobile breakpoint `< 768px`).
+- Created `src/shared/components/responsive-dialog.tsx` — a single component that renders Radix `Sheet` on mobile and Radix `Dialog` on desktop, preserving `Trigger`, `Content`, `Header`, `Footer`, `Title`, `Description`, and `Close` sub-component APIs.
+- Migrated six production dialogs to `ResponsiveDialog`:
+  - `src/app/(app)/customers/customer-create-dialog.tsx`
+  - `src/app/q/[token]/quote-accept-form.tsx`
+  - `src/app/(app)/billing/cancellation-modal.tsx`
+  - `src/app/(app)/billing/billing-manage-actions.tsx`
+  - `src/app/(app)/settings/members/members-manager.tsx`
+  - `src/app/(app)/settings/modules/modules-manager.tsx`
+- Added `e2e/mobile/responsive-dialog.spec.ts` verifying the members remove confirmation renders as a bottom sheet on iPhone 12/13 / Pixel 7 and as a centered dialog on Desktop Chrome / iPad Mini.
+
+### Validation
+| Gate | Status |
+|------|--------|
+| `pnpm check` | ✅ passes (type-check, lint, test:ci, format:check) |
+| Vitest | ✅ 734 passed across 81 test files |
+| `pnpm test:e2e e2e/mobile/responsive-dialog.spec.ts` | ✅ 10/10 passed across all viewport projects |
+
+### Notes
+- `useIsMobile` returns `false` during SSR/hydration and flips to the real match-media result on first client render to avoid hydration mismatches when swapping Sheet/Dialog markup.
+- E2E test selects by accessible names (`Remove <email>`) because the buttons expose `aria-label` overrides.
+- iPad Mini is classified as desktop by the 767px breakpoint, so the spec skips the sheet assertion on that project.
+
+### Git State
+- Branch: main
+- Feature commit: TBD
+- Next step: record verification SHA in `epcc-features.json`, then run `/epcc-code F004` (Mobile Dense Table Variants).
+
+---
+
 ## Session: CODE - 2026-07-21T06:30:00Z
 **Feature**: F002 - Mobile Touch Targets
 **Status**: verified
