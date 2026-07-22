@@ -132,7 +132,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-22T20:45:00Z",
-      "commit": "PENDING_COMMIT",
+      "commit": "c38789b",
       "acceptanceCriteria": [
         "Invoice detail line items are readable without horizontal pinch-zoom at 390px",
         "Quote detail line items are readable without horizontal pinch-zoom at 390px",
