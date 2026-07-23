@@ -243,8 +243,10 @@
       "blockedBy": ["INFRA-001", "INFRA-002"],
       "estimatedHours": 6,
       "planReference": "EPCC_PLAN.md#phase-8-core-e2e-smoke-flows",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
+      "verifiedAt": "2026-07-23T00:15:00Z",
+      "commit": "F006_COMMIT_SHA",
       "acceptanceCriteria": [
         "e2e/dashboard.spec.ts passes on desktop and iPhone",
         "e2e/invoices/create-send.spec.ts passes on desktop",
@@ -253,11 +255,11 @@
         "e2e/settings/invite-member.spec.ts passes on desktop"
       ],
       "subtasks": [
-        { "name": "Dashboard smoke spec", "status": "pending", "estimatedHours": 1 },
-        { "name": "Create-and-send invoice spec", "status": "pending", "estimatedHours": 1.5 },
-        { "name": "Accept quote spec", "status": "pending", "estimatedHours": 1.5 },
-        { "name": "Books transaction spec", "status": "pending", "estimatedHours": 1 },
-        { "name": "Invite member spec", "status": "pending", "estimatedHours": 1 }
+        { "name": "Dashboard smoke spec", "status": "completed", "estimatedHours": 1 },
+        { "name": "Create-and-send invoice spec", "status": "completed", "estimatedHours": 1.5 },
+        { "name": "Accept quote spec", "status": "completed", "estimatedHours": 1.5 },
+        { "name": "Books transaction spec", "status": "completed", "estimatedHours": 1 },
+        { "name": "Invite member spec", "status": "completed", "estimatedHours": 1 }
       ]
     },
     {

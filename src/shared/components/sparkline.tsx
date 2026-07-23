@@ -102,9 +102,7 @@ export function Sparkline({ points, ariaLabel }: SparklineProps) {
         />
         {points.map((p, i) => (
           <circle key={p.month} cx={x(i)} cy={y(p.value)} r={2} fill={PRIMARY}>
-            <title>
-              {p.month}: {p.label}
-            </title>
+            <title>{`${p.month}: ${p.label}`}</title>
           </circle>
         ))}
       </svg>
