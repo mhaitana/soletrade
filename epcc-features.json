@@ -2,7 +2,11 @@
   "_warning": "Feature definitions are IMMUTABLE after planning approval. Only passes, status, and subtasks[].status may be modified after approval.",
   "_planApproved": true,
   "_planApprovedAt": "2026-07-20T15:05:00Z",
-  "_modifiableFields": ["passes", "status", "subtasks[].status"],
+  "_modifiableFields": [
+    "passes",
+    "status",
+    "subtasks[].status"
+  ],
   "validation": {
     "planTasks": 34,
     "mappedToFeatures": 34,
@@ -25,21 +29,33 @@
       "verifiedAt": "2026-07-20T12:30:00Z",
       "commit": "3e9b604",
       "acceptanceCriteria": [
-        "public/icons/ contains 192×192, 512×512, maskable 512, apple-touch-icon 180, and favicon PNGs",
+        "public/icons/ contains 192\u00d7192, 512\u00d7512, maskable 512, apple-touch-icon 180, and favicon PNGs",
         "src/app/manifest.ts includes icons, scope, orientation, lang, categories, shortcuts, and prefer_related_applications",
         "src/app/layout.tsx emits apple-touch-icon and favicon links via metadata.icons",
         "src/app/manifest.test.ts passes with icon size and theme_color assertions",
         "Lighthouse PWA audit shows 100/100 installable"
       ],
       "subtasks": [
-        { "name": "Generate and commit PWA icon set", "status": "completed", "estimatedHours": 2 },
+        {
+          "name": "Generate and commit PWA icon set",
+          "status": "completed",
+          "estimatedHours": 2
+        },
         {
           "name": "Extend manifest and root metadata",
           "status": "completed",
           "estimatedHours": 1.5
         },
-        { "name": "Update manifest tests", "status": "completed", "estimatedHours": 1 },
-        { "name": "Validate installability", "status": "completed", "estimatedHours": 0.5 }
+        {
+          "name": "Update manifest tests",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Validate installability",
+          "status": "completed",
+          "estimatedHours": 0.5
+        }
       ]
     },
     {
@@ -57,9 +73,9 @@
       "verifiedAt": "2026-07-21T06:57:00Z",
       "commit": "382a13b",
       "acceptanceCriteria": [
-        "Top 15 interactive controls have height ≥44 px at 390px viewport",
+        "Top 15 interactive controls have height \u226544 px at 390px viewport",
         "Custom <select> elements use text-base below md to prevent iOS auto-zoom",
-        "Assistant suggested prompts, write-tool toggles, and send/stop buttons are ≥40 px tall on small screens",
+        "Assistant suggested prompts, write-tool toggles, and send/stop buttons are \u226540 px tall on small screens",
         "Desktop screenshots at 1280px show no visual regressions",
         "Vitest suite remains green"
       ],
@@ -74,9 +90,21 @@
           "status": "completed",
           "estimatedHours": 2
         },
-        { "name": "Fix custom select zoom", "status": "completed", "estimatedHours": 1 },
-        { "name": "Enlarge assistant controls", "status": "completed", "estimatedHours": 1 },
-        { "name": "Visual regression baseline", "status": "completed", "estimatedHours": 0.5 }
+        {
+          "name": "Fix custom select zoom",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Enlarge assistant controls",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Visual regression baseline",
+          "status": "completed",
+          "estimatedHours": 0.5
+        }
       ]
     },
     {
@@ -101,7 +129,11 @@
         "Desktop modal behaviour unchanged"
       ],
       "subtasks": [
-        { "name": "Create ResponsiveDialog primitive", "status": "completed", "estimatedHours": 2 },
+        {
+          "name": "Create ResponsiveDialog primitive",
+          "status": "completed",
+          "estimatedHours": 2
+        },
         {
           "name": "Migrate customer-create and quote-accept dialogs",
           "status": "completed",
@@ -141,8 +173,16 @@
         "Totals alignment remains correct on desktop"
       ],
       "subtasks": [
-        { "name": "Invoice/quote line-item card rows", "status": "completed", "estimatedHours": 2 },
-        { "name": "Books summary mobile variant", "status": "completed", "estimatedHours": 1.5 },
+        {
+          "name": "Invoice/quote line-item card rows",
+          "status": "completed",
+          "estimatedHours": 2
+        },
+        {
+          "name": "Books summary mobile variant",
+          "status": "completed",
+          "estimatedHours": 1.5
+        },
         {
           "name": "Tax lodged-quarters mobile variant",
           "status": "completed",
@@ -153,7 +193,7 @@
     {
       "id": "F005",
       "name": "Responsive Quote Signature Canvas",
-      "description": "Resize the quote-accept signature canvas using a container ResizeObserver and devicePixelRatio scaling instead of a fixed 480×140 resolution.",
+      "description": "Resize the quote-accept signature canvas using a container ResizeObserver and devicePixelRatio scaling instead of a fixed 480\u00d7140 resolution.",
       "priority": "P1",
       "implementationOrder": 5,
       "dependencies": [],
@@ -171,7 +211,11 @@
         "No visual distortion on high-DPI displays"
       ],
       "subtasks": [
-        { "name": "Responsive signature sizing", "status": "completed", "estimatedHours": 2 }
+        {
+          "name": "Responsive signature sizing",
+          "status": "completed",
+          "estimatedHours": 2
+        }
       ]
     },
     {
@@ -201,9 +245,21 @@
           "status": "completed",
           "estimatedHours": 1.5
         },
-        { "name": "Add package scripts and CI wiring", "status": "completed", "estimatedHours": 1 },
-        { "name": "Playwright health check spec", "status": "completed", "estimatedHours": 0.5 },
-        { "name": "Global setup/teardown", "status": "completed", "estimatedHours": 1 }
+        {
+          "name": "Add package scripts and CI wiring",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Playwright health check spec",
+          "status": "completed",
+          "estimatedHours": 0.5
+        },
+        {
+          "name": "Global setup/teardown",
+          "status": "completed",
+          "estimatedHours": 1
+        }
       ]
     },
     {
@@ -212,8 +268,12 @@
       "description": "Create storage-state fixtures for each seeded role (owner, admin, accountant, employee, readonly) and helpers for switching workspace and selecting seeded entities.",
       "priority": "P0",
       "implementationOrder": 7,
-      "dependencies": ["INFRA-001"],
-      "blockedBy": ["INFRA-001"],
+      "dependencies": [
+        "INFRA-001"
+      ],
+      "blockedBy": [
+        "INFRA-001"
+      ],
       "estimatedHours": 4,
       "planReference": "EPCC_PLAN.md#phase-7-playwright-auth-fixtures",
       "status": "verified",
@@ -228,9 +288,21 @@
         "Auth rate-limiting is avoided by reusing storage state"
       ],
       "subtasks": [
-        { "name": "Create role fixtures", "status": "completed", "estimatedHours": 2 },
-        { "name": "Role-based access smoke spec", "status": "completed", "estimatedHours": 1.5 },
-        { "name": "Fixture utilities", "status": "completed", "estimatedHours": 0.5 }
+        {
+          "name": "Create role fixtures",
+          "status": "completed",
+          "estimatedHours": 2
+        },
+        {
+          "name": "Role-based access smoke spec",
+          "status": "completed",
+          "estimatedHours": 1.5
+        },
+        {
+          "name": "Fixture utilities",
+          "status": "completed",
+          "estimatedHours": 0.5
+        }
       ]
     },
     {
@@ -239,8 +311,14 @@
       "description": "Implement seed-data-driven end-to-end specs covering login/dashboard, create-and-send invoice, accept quote, create books transaction, and invite member.",
       "priority": "P1",
       "implementationOrder": 8,
-      "dependencies": ["INFRA-001", "INFRA-002"],
-      "blockedBy": ["INFRA-001", "INFRA-002"],
+      "dependencies": [
+        "INFRA-001",
+        "INFRA-002"
+      ],
+      "blockedBy": [
+        "INFRA-001",
+        "INFRA-002"
+      ],
       "estimatedHours": 6,
       "planReference": "EPCC_PLAN.md#phase-8-core-e2e-smoke-flows",
       "status": "verified",
@@ -255,11 +333,31 @@
         "e2e/settings/invite-member.spec.ts passes on desktop"
       ],
       "subtasks": [
-        { "name": "Dashboard smoke spec", "status": "completed", "estimatedHours": 1 },
-        { "name": "Create-and-send invoice spec", "status": "completed", "estimatedHours": 1.5 },
-        { "name": "Accept quote spec", "status": "completed", "estimatedHours": 1.5 },
-        { "name": "Books transaction spec", "status": "completed", "estimatedHours": 1 },
-        { "name": "Invite member spec", "status": "completed", "estimatedHours": 1 }
+        {
+          "name": "Dashboard smoke spec",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Create-and-send invoice spec",
+          "status": "completed",
+          "estimatedHours": 1.5
+        },
+        {
+          "name": "Accept quote spec",
+          "status": "completed",
+          "estimatedHours": 1.5
+        },
+        {
+          "name": "Books transaction spec",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Invite member spec",
+          "status": "completed",
+          "estimatedHours": 1
+        }
       ]
     },
     {
@@ -268,12 +366,16 @@
       "description": "Add a minimal network-first service worker registered from a client component, with a static /offline fallback, after PWA manifest installability is verified.",
       "priority": "P1",
       "implementationOrder": 9,
-      "dependencies": ["F001"],
-      "blockedBy": ["F001"],
+      "dependencies": [
+        "F001"
+      ],
+      "blockedBy": [
+        "F001"
+      ],
       "estimatedHours": 5.5,
       "planReference": "EPCC_PLAN.md#phase-9-service-worker-follow-up-phase",
-      "status": "pending",
-      "passes": 0,
+      "status": "verified",
+      "passes": 1,
       "acceptanceCriteria": [
         "src/app/offline/page.tsx exists and renders without JavaScript",
         "Service worker precaches /_next/static/*, /fonts/*, /icons/*",
@@ -282,16 +384,34 @@
         "Registration works on desktop Chrome and mobile Safari"
       ],
       "subtasks": [
-        { "name": "Create /offline fallback page", "status": "pending", "estimatedHours": 1 },
-        { "name": "Create minimal service worker", "status": "pending", "estimatedHours": 2 },
         {
-          "name": "Register service worker from root layout",
-          "status": "pending",
+          "name": "Create /offline fallback page",
+          "status": "completed",
           "estimatedHours": 1
         },
-        { "name": "Add service-worker tests", "status": "pending", "estimatedHours": 1 },
-        { "name": "Validate caching exclusions", "status": "pending", "estimatedHours": 0.5 }
-      ]
+        {
+          "name": "Create minimal service worker",
+          "status": "completed",
+          "estimatedHours": 2
+        },
+        {
+          "name": "Register service worker from root layout",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Add service-worker tests",
+          "status": "completed",
+          "estimatedHours": 1
+        },
+        {
+          "name": "Validate caching exclusions",
+          "status": "completed",
+          "estimatedHours": 0.5
+        }
+      ],
+      "verifiedAt": "2026-07-22T22:15:00Z",
+      "commit": "171744c"
     }
   ]
 }
