@@ -246,7 +246,7 @@
       "status": "verified",
       "passes": 1,
       "verifiedAt": "2026-07-23T00:15:00Z",
-      "commit": "F006_COMMIT_SHA",
+      "commit": "698b160",
       "acceptanceCriteria": [
         "e2e/dashboard.spec.ts passes on desktop and iPhone",
         "e2e/invoices/create-send.spec.ts passes on desktop",
