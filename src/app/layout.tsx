@@ -6,6 +6,7 @@ import { Toaster } from "@/shared/ui/sonner";
 import { Analytics } from "@vercel/analytics/next";
 import { brand } from "@/config/brand";
 import { urls } from "@/config/urls";
+import { ServiceWorkerRegister } from "./service-worker-register";
 
 const fontSans = Inter({
   variable: "--font-sans",
@@ -81,6 +82,7 @@ export default function RootLayout({
           {children}
           <Toaster />
           <Analytics />
+          <ServiceWorkerRegister />
         </ThemeProvider>
       </body>
     </html>

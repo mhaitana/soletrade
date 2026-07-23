@@ -432,3 +432,39 @@ Committed the verified change to `main` as `d64381a`.
 
 ### Next Steps
 - Optional: push `main` to remote, or create a feature branch + PR for review.
+
+---
+
+## Session: CODE - 2026-07-22T22:15:00Z
+**Target**: INFRA-003 — Minimal Service Worker / Offline Fallback
+**Mode**: default
+**Status**: Complete
+
+### Summary
+Implemented the service worker / offline fallback follow-up to F001. Created a static `/offline` page, a minimal `public/sw.js`, a production-gated client registration component, and Playwright smoke tests. Added `/offline` and `/sw.js` to the proxy public-prefix whitelist so unauthenticated users can access the fallback.
+
+### Files Modified
+- `src/app/offline/page.tsx` — new static offline fallback page.
+- `src/app/offline/reload-button.tsx` — new client component for the reload button.
+- `public/sw.js` — new minimal service worker with precaching and explicit sensitive-route exclusions.
+- `src/app/service-worker-register.tsx` — new client registration component.
+- `src/app/layout.tsx` — wire in `ServiceWorkerRegister`.
+- `src/proxy.ts` — add `/offline` and `/sw.js` to `PUBLIC_PREFIXES`.
+- `e2e/service-worker/service-worker.spec.ts` — new E2E smoke tests.
+- `EPCC_CODE.md` — implementation notes.
+
+### Quality Metrics
+- `pnpm test:ci`: 81 files, 734 tests passed.
+- `pnpm test:e2e e2e/service-worker/service-worker.spec.ts`: 14/14 passed (all viewport projects).
+- `pnpm build`: succeeded; `/offline` prerendered static.
+- `pnpm type-check`: clean.
+- `pnpm lint`: clean.
+- `pnpm format --check`: clean.
+
+### Checkpoint Commit
+Pending — commit feature files, then record verification hash in `epcc-features.json`.
+
+### Handoff Notes
+**Resume at**: commit feature files and update `epcc-features.json` / `epcc-progress.md`.
+**Blockers**: None.
+**Next action**: Commit.

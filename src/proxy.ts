@@ -25,6 +25,8 @@ const PUBLIC_PREFIXES = [
   "/privacy",
   "/terms",
   "/support",
+  "/offline",
+  "/sw.js",
   "/i/",
   "/q/",
   "/invite/",
