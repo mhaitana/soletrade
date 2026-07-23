@@ -462,9 +462,10 @@ Implemented the service worker / offline fallback follow-up to F001. Created a s
 - `pnpm format --check`: clean.
 
 ### Checkpoint Commit
-Pending — commit feature files, then record verification hash in `epcc-features.json`.
+- **Feature commit**: `171744c` — `feat(pwa): INFRA-003 minimal service worker with /offline fallback`
+- **Verification record commit**: `4ebf612` — `chore: record INFRA-003 verification commit hash in epcc-features.json`
 
 ### Handoff Notes
-**Resume at**: commit feature files and update `epcc-features.json` / `epcc-progress.md`.
+**Resume at**: INFRA-003 is complete; next incomplete feature from `epcc-features.json` can be selected.
 **Blockers**: None.
-**Next action**: Commit.
+**Next action**: Continue with next feature or push `main` to remote.
