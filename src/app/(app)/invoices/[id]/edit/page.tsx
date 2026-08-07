@@ -55,6 +55,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
         invoice={data.invoice}
         customers={data.customers}
         workspacePaymentMethods={data.workspacePaymentMethods}
+        defaultCurrency={data.defaultCurrency}
       />
     </div>
   );

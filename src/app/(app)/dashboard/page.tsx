@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -10,6 +10,7 @@ import { ActivityFeed } from "../activity/activity-feed";
 import { loadDashboardPage } from "./actions";
 import { KpiCard } from "./kpi-card";
 import { ModuleSummaryCard } from "./module-summary-card";
+import { AttentionList } from "./attention-list";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard" };
@@ -23,10 +24,10 @@ const PERIOD_NOUN: Record<Exclude<Period, "all">, string> = {
 };
 
 const CHECKLIST = [
-  "Create your workspace",
-  "Enable your first module",
-  "Add a customer",
-  "Send your first invoice or quote",
+  { label: "Create your workspace", complete: true },
+  { label: "Enable your first module", complete: false },
+  { label: "Add a customer", complete: false },
+  { label: "Send your first invoice or quote", complete: false },
 ];
 
 export default async function DashboardPage({
@@ -62,16 +63,20 @@ export default async function DashboardPage({
           </CardHeader>
           <CardContent className="space-y-3">
             {CHECKLIST.map((step, i) => (
-              <div key={step} className="flex items-center gap-3 text-sm">
+              <div key={step.label} className="flex items-center gap-3 text-sm">
                 <span
-                  className="grid size-5 place-items-center rounded-full border border-border text-xs text-muted-foreground"
+                  className={`grid size-5 place-items-center rounded-full border text-xs ${
+                    step.complete
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-border text-muted-foreground"
+                  }`}
                   aria-hidden
                 >
-                  {i + 1}
+                  {step.complete ? <Check className="size-3" /> : i + 1}
                 </span>
-                <span className="text-foreground">{step}</span>
-                <Badge variant="outline" className="ml-auto text-muted-foreground">
-                  Pending
+                <span className="text-foreground">{step.label}</span>
+                <Badge variant={step.complete ? "success" : "outline"} className="ml-auto">
+                  {step.complete ? "Done" : "Next"}
                 </Badge>
               </div>
             ))}
@@ -126,9 +131,12 @@ export default async function DashboardPage({
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Business overview
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{data.workspaceName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your business at a glance - {period === "all" ? "all time" : `this ${period}`}.
+            Money, work, and follow-ups - {period === "all" ? "all time" : `this ${period}`}.
           </p>
         </div>
         {/* Period selector - SegmentedControl; active period highlighted. */}
@@ -150,6 +158,18 @@ export default async function DashboardPage({
             <KpiCard key={kpi.id} kpi={kpi} periodNoun={periodNoun} />
           ))}
         </div>
+      </section>
+
+      <section aria-labelledby="attention-heading">
+        <div className="mb-3">
+          <h2 id="attention-heading" className="text-base font-semibold">
+            Needs attention
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            The next actions most likely to keep cash and paperwork moving.
+          </p>
+        </div>
+        <AttentionList items={data.attentionItems} />
       </section>
 
       {/* Per-module summary cards */}

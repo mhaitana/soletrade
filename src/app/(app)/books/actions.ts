@@ -68,7 +68,7 @@ export async function createTransactionAction(input: unknown): Promise<CreateTra
   const txInput: TransactionInput = {
     type: d.type as BookType,
     amountCents: d.amountCents,
-    currency: d.currency ?? "AUD",
+    currency: d.currency,
     date: d.date,
     description: d.description,
     category: d.category,
@@ -132,7 +132,7 @@ export async function updateTransactionAction(input: unknown): Promise<UpdateTra
       {
         type: rest.type as BookType,
         amountCents: rest.amountCents,
-        currency: rest.currency ?? "AUD",
+        currency: rest.currency,
         date: rest.date,
         description: rest.description,
         category: rest.category,
@@ -193,6 +193,7 @@ export type BooksPageData =
       typeFilter: BookType | null;
       search: string;
       period: Period;
+      currency: string;
       summary: TransactionSummary;
     }
   | { installed: false };
@@ -238,6 +239,7 @@ export async function loadBooksPage(params?: {
       amountCents: t.amountCents,
       date: t.date,
       category: t.category,
+      gstCents: t.gstCents,
     })),
   );
   return {
@@ -247,6 +249,7 @@ export async function loadBooksPage(params?: {
     typeFilter: params?.type ?? null,
     search,
     period,
+    currency: workspace.defaultCurrency,
     summary,
   };
 }
@@ -271,6 +274,7 @@ export type BookEditData =
       installed: true;
       transaction: TransactionRow | null;
       customers: CustomerRow[];
+      defaultCurrency: string;
       canManage: boolean;
     }
   | { installed: false };
@@ -279,23 +283,37 @@ export async function loadTransactionForEdit(transactionId: string): Promise<Boo
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
 
-  const [transaction, customers, canManage] = await Promise.all([
+  const [transaction, customers, workspace, canManage] = await Promise.all([
     getTransaction(ctx.workspaceId, branded<"BookTransactionId">(transactionId)),
     listCustomers(ctx.workspaceId),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
-  return { installed: true, transaction, customers, canManage };
+  return {
+    installed: true,
+    transaction,
+    customers,
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
+    canManage,
+  };
 }
 
 /** Customer list for the new-transaction form (module-gated). */
 export async function loadCustomersForBook(): Promise<
-  { installed: true; customers: CustomerRow[]; canManage: boolean } | { installed: false }
+  | { installed: true; customers: CustomerRow[]; defaultCurrency: string; canManage: boolean }
+  | { installed: false }
 > {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
-  const [customers, canManage] = await Promise.all([
+  const [customers, workspace, canManage] = await Promise.all([
     listCustomers(ctx.workspaceId),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
-  return { installed: true, customers, canManage };
+  return {
+    installed: true,
+    customers,
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
+    canManage,
+  };
 }

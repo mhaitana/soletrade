@@ -68,7 +68,7 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "create:invoice")).ok) return forbid();
 
   // Every invoice must be linked to an emailable customer (no walk-in) - the email is
   // used to send the invoice. The picker disables no-email customers, but the server
@@ -98,7 +98,7 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
         customerId: branded<"CustomerId">(parsed.data.customerId),
         issueDate: parsed.data.issueDate,
         dueDate: parsed.data.dueDate ?? null,
-        currency: parsed.data.currency ?? "AUD",
+        currency: parsed.data.currency,
         taxRate: parsed.data.taxRate,
         pricesIncludeTax: parsed.data.pricesIncludeTax,
         notes: parsed.data.notes ?? null,
@@ -170,7 +170,7 @@ export async function updateInvoiceAction(input: unknown): Promise<UpdateInvoice
         customerId: branded<"CustomerId">(rest.customerId),
         issueDate: rest.issueDate,
         dueDate: rest.dueDate ?? null,
-        currency: rest.currency ?? "AUD",
+        currency: rest.currency,
         taxRate: rest.taxRate,
         pricesIncludeTax: rest.pricesIncludeTax,
         notes: rest.notes ?? null,
@@ -313,6 +313,7 @@ export type InvoiceEditData =
       invoice: InvoiceWithItems | null;
       customers: CustomerRow[];
       workspacePaymentMethods: PaymentMethods;
+      defaultCurrency: string;
       canManage: boolean;
     }
   | { installed: false };
@@ -333,6 +334,7 @@ export async function loadInvoiceForEdit(invoiceId: string): Promise<InvoiceEdit
     invoice,
     customers,
     workspacePaymentMethods: paymentMethods.ok ? paymentMethods.methods : [],
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
     canManage,
   };
 }
@@ -343,6 +345,7 @@ export async function loadCustomersForInvoice(): Promise<
       installed: true;
       customers: CustomerRow[];
       workspacePaymentMethods: PaymentMethods;
+      defaultCurrency: string;
       canManage: boolean;
     }
   | { installed: false }
@@ -352,13 +355,14 @@ export async function loadCustomersForInvoice(): Promise<
   const [customers, workspace, canManage] = await Promise.all([
     listCustomers(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
-    Promise.resolve(authorize(ctx.role, "manage:invoice").ok),
+    Promise.resolve(authorize(ctx.role, "create:invoice").ok),
   ]);
   const paymentMethods = parsePaymentMethods(workspace?.paymentMethods ?? null);
   return {
     installed: true,
     customers,
     workspacePaymentMethods: paymentMethods.ok ? paymentMethods.methods : [],
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
     canManage,
   };
 }

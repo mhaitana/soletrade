@@ -13,6 +13,7 @@ import {
 } from "@/platform/customers";
 import { writeAudit } from "@/platform/audit";
 import { listActivity } from "@/platform/activity";
+import { getWorkspace } from "@/platform/workspaces";
 import {
   createInvoice,
   getInvoice,
@@ -70,8 +71,6 @@ import {
  * the gate too - defence in depth - and returns a trimmed, JSON-serializable
  * shape (money as integer cents + currency; the model formats for display).
  */
-
-const CURRENCY = "AUD";
 
 /** Trim a Date to an ISO string for JSON-serializable tool output. */
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
@@ -178,7 +177,8 @@ export async function computeWorkspaceOverview(
   const hasModule = (key: ModuleKey) => installedModules.includes(key);
   const range = periodRange("month");
 
-  const [booksRows, invoiceRows, quoteRows, activityPage] = await Promise.all([
+  const [workspace, booksRows, invoiceRows, quoteRows, activityPage] = await Promise.all([
+    getWorkspace(workspaceId),
     hasModule("books") && can("view:books")
       ? listTransactions(workspaceId, {
           dateFrom: range.start ?? undefined,
@@ -201,7 +201,7 @@ export async function computeWorkspaceOverview(
 
   return {
     installedModules,
-    currency: CURRENCY,
+    currency: workspace?.defaultCurrency ?? "AUD",
     kpis: {
       cashCents: booksSummary?.netCents ?? null,
       outstandingCents: invoiceSummary?.outstandingCents ?? null,
@@ -248,7 +248,7 @@ export function buildAssistantTools(
   // 1. Workspace overview - always offered; returns nulls for uninstalled modules.
   tools.getWorkspaceOverview = tool({
     description:
-      "Get a high-level overview of the workspace: installed modules, current-month cash position (Books net), outstanding invoices, revenue this month, pending quotes value, and the 5 most recent activity events. Call this first when the user asks a broad question like 'how's my business doing'.",
+      "Get a high-level overview of the workspace: installed modules, current-month net cash flow (Books income minus expenses), outstanding invoices, revenue this month, accepted quotes ready to invoice, and the 5 most recent activity events. Call this first when the user asks a broad question like 'how's my business doing'.",
     inputSchema: z.object({}),
     execute: async () => computeWorkspaceOverview(ctx, installedModules),
   });
@@ -1331,10 +1331,10 @@ export async function buildMockAssistantReply(
   const lines: string[] = [
     "Here's a snapshot of your workspace (current month):",
     `- Installed modules: ${data.installedModules.length ? data.installedModules.join(", ") : "none yet"}`,
-    `- Cash position: ${fmt(data.kpis.cashCents)}`,
+    `- Net cash flow: ${fmt(data.kpis.cashCents)}`,
     `- Outstanding invoices: ${fmt(data.kpis.outstandingCents)}${data.kpis.overdueInvoiceCount ? ` (${data.kpis.overdueInvoiceCount} overdue)` : ""}`,
     `- Revenue this month: ${fmt(data.kpis.revenueCents)}`,
-    `- Pending quotes (accepted, not converted): ${fmt(data.kpis.pendingQuotesCents)}`,
+    `- Ready to invoice (accepted quotes): ${fmt(data.kpis.pendingQuotesCents)}`,
   ];
   if (data.recentActivity && data.recentActivity.length > 0) {
     lines.push("Recent activity:");

@@ -15,6 +15,7 @@ import { PaymentMethodsEditor } from "@/shared/components/payment-methods-editor
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { computeInvoiceTotals } from "@/modules/invoices/totals";
+import { formatCents } from "@/platform/billing/pricing";
 import {
   createInvoiceAction,
   updateInvoiceAction,
@@ -59,11 +60,13 @@ export function InvoiceForm({
   invoice,
   customers,
   workspacePaymentMethods,
+  defaultCurrency,
 }: {
   mode: "create" | "edit";
   invoice?: InvoiceWithItems;
   customers: PickerCustomer[];
   workspacePaymentMethods: PaymentMethods;
+  defaultCurrency: string;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -154,7 +157,7 @@ export function InvoiceForm({
       customerId,
       issueDate: new Date(issueDate),
       dueDate: dueDate ? new Date(dueDate) : null,
-      currency: "AUD" as string,
+      currency: invoice?.currency ?? defaultCurrency,
       taxRate: Number(taxRate) || 0,
       pricesIncludeTax,
       notes: notes || null,
@@ -308,7 +311,7 @@ export function InvoiceForm({
                 min={0}
                 step="0.01"
                 inputMode="decimal"
-                placeholder="Unit $"
+                placeholder={`Unit ${invoice?.currency ?? defaultCurrency}`}
                 value={it.unitPriceDollars}
                 onChange={(e) => updateItem(it.key, { unitPriceDollars: e.target.value })}
                 className="tabular-nums"
@@ -405,17 +408,23 @@ export function InvoiceForm({
           <span className="text-muted-foreground">
             {pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
           </span>
-          <span className="tabular-nums">${(totals.subtotalCents / 100).toFixed(2)}</span>
+          <span className="tabular-nums">
+            {formatCents(totals.subtotalCents, invoice?.currency ?? defaultCurrency)}
+          </span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
             Tax ({Number(taxRate) || 0}%{pricesIncludeTax ? ", included" : ""})
           </span>
-          <span className="tabular-nums">${(totals.taxCents / 100).toFixed(2)}</span>
+          <span className="tabular-nums">
+            {formatCents(totals.taxCents, invoice?.currency ?? defaultCurrency)}
+          </span>
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-base font-medium">
           <span>Total</span>
-          <span className="tabular-nums">${(totals.totalCents / 100).toFixed(2)}</span>
+          <span className="tabular-nums">
+            {formatCents(totals.totalCents, invoice?.currency ?? defaultCurrency)}
+          </span>
         </div>
       </div>
 

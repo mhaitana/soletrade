@@ -31,4 +31,13 @@ describe("activity labels", () => {
     expect(describeActivity("OCRCompleted").label).toBe("ocr completed");
     expect(describeActivity("VATReturnFiled").label).toBe("vat return filed");
   });
+
+  it("maps legacy dotted event names to useful activity text", () => {
+    expect(describeActivity("quote.accepted")).toEqual({
+      label: "accepted a quote",
+      tone: "positive",
+    });
+    expect(describeActivity("invoice.sent").label).toBe("sent an invoice");
+    expect(describeActivity("custom.event_name").label).toBe("custom event name");
+  });
 });

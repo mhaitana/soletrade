@@ -33,7 +33,12 @@ export default async function EditTransactionPage({ params }: { params: Promise<
         <h1 className="text-2xl font-semibold tracking-tight">Edit transaction</h1>
         <p className="text-sm text-muted-foreground">Update the details of this transaction.</p>
       </div>
-      <BookForm mode="edit" tx={data.transaction} customers={data.customers} />
+      <BookForm
+        mode="edit"
+        tx={data.transaction}
+        customers={data.customers}
+        defaultCurrency={data.defaultCurrency}
+      />
     </div>
   );
 }

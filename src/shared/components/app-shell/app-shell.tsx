@@ -24,17 +24,22 @@ import { ThemeToggle } from "@/shared/components/theme-toggle";
 import { NotificationBell } from "@/shared/components/notification-bell/notification-bell";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
 import { AccountMenu } from "./account-menu";
+import { QuickCreateMenu } from "./quick-create-menu";
 import { SearchTrigger } from "@/shared/components/command-palette/search-trigger";
 import { MODULES, type ModuleKey } from "@/shared/constants/modules";
 import type { LucideIcon } from "lucide-react";
+import type { WorkspaceRole } from "@/server/db/enums";
 import type { WorkspaceId } from "@/shared/types/ids";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
+
+const MODULE_HREFS = new Set(Object.values(MODULES).map((module) => module.href));
 
 export type AppShellProps = {
   workspaces: WorkspaceOption[];
   activeWorkspaceId: WorkspaceId;
   installedModules: ModuleKey[];
+  role: WorkspaceRole;
   userEmail: string;
   /** Initial unread notification count (server-rendered for first-paint badge). */
   notificationCount: number;
@@ -105,10 +110,22 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  // Bottom nav: max 5 items (bottom-nav-limit). 4 pinned + "More".
-  const pinned = items.filter((i) =>
-    ["/dashboard", "/customers", "/activity", "/billing"].includes(i.href),
-  );
+  // Prioritise daily work on mobile: Dashboard + up to three installed modules.
+  // When a workspace has fewer modules, fill the remaining slots with Customers
+  // and Assistant. Administrative destinations stay available under More.
+  const preferredHrefs = [
+    "/dashboard",
+    ...items.filter((item) => MODULE_HREFS.has(item.href)).map((item) => item.href),
+    "/customers",
+    "/assistant",
+  ];
+  const pinned = preferredHrefs
+    .map((href) => items.find((item) => item.href === href))
+    .filter((item): item is NavItem => Boolean(item))
+    .filter(
+      (item, index, all) => all.findIndex((candidate) => candidate.href === item.href) === index,
+    )
+    .slice(0, 4);
   return (
     <nav
       aria-label="Mobile primary"
@@ -162,6 +179,7 @@ export function AppShell({
   workspaces,
   activeWorkspaceId,
   installedModules,
+  role,
   userEmail,
   notificationCount,
   children,
@@ -216,6 +234,8 @@ export function AppShell({
           </Sheet>
 
           <WorkspaceSwitcher workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
+
+          <QuickCreateMenu installedModules={installedModules} role={role} />
 
           <SearchTrigger installedModules={installedModules} />
 

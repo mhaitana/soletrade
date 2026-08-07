@@ -10,13 +10,11 @@ import { LodgeQuarterButton } from "./lodge-quarter-button";
 export const metadata = { title: "Tax" };
 export const dynamic = "force-dynamic";
 
-const CURRENCY = "AUD";
-
 export default async function TaxPage() {
   const data = await loadTaxPage();
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="books" />;
 
-  const { gstSummary, lodgedPeriods, canManage, currentQuarter } = data;
+  const { gstSummary, lodgedPeriods, canManage, currentQuarter, currency } = data;
 
   // Current-quarter BAS: GST collected − GST paid = net GST (obligation or refund).
   const currentPoint = gstSummary.byQuarter.find(
@@ -31,7 +29,7 @@ export default async function TaxPage() {
     key: q.label,
     label: `Q${q.quarter}`,
     value: q.netGstCents,
-    valueLabel: formatCents(q.netGstCents, CURRENCY),
+    valueLabel: formatCents(q.netGstCents, currency),
   }));
 
   // Tax runway: project the next-quarter obligation from the most recent quarter's
@@ -58,7 +56,7 @@ export default async function TaxPage() {
               GST collected
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-500">
-              {formatCents(currentCollectedCents, CURRENCY)}
+              {formatCents(currentCollectedCents, currency)}
             </p>
           </CardContent>
         </Card>
@@ -68,7 +66,7 @@ export default async function TaxPage() {
               GST paid
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
-              {formatCents(currentPaidCents, CURRENCY)}
+              {formatCents(currentPaidCents, currency)}
             </p>
           </CardContent>
         </Card>
@@ -84,7 +82,7 @@ export default async function TaxPage() {
                   : "text-emerald-600 dark:text-emerald-500"
               }`}
             >
-              {formatCents(currentNetGstCents, CURRENCY)}
+              {formatCents(currentNetGstCents, currency)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {currentNetGstCents >= 0 ? "Owed to the ATO" : "Refund due"}
@@ -115,7 +113,7 @@ export default async function TaxPage() {
                   : "text-emerald-600 dark:text-emerald-500"
               }`}
             >
-              {formatCents(projectedNextQuarterCents, CURRENCY)}
+              {formatCents(projectedNextQuarterCents, currency)}
             </p>
           </CardContent>
         </Card>
@@ -176,10 +174,10 @@ export default async function TaxPage() {
                         <Badge variant="secondary">{p.periodLabel}</Badge>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-500">
-                        {formatCents(p.gstCollectedCents, CURRENCY)}
+                        {formatCents(p.gstCollectedCents, currency)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                        {formatCents(p.gstPaidCents, CURRENCY)}
+                        {formatCents(p.gstPaidCents, currency)}
                       </td>
                       <td
                         className={`px-4 py-3 text-right font-medium tabular-nums ${
@@ -188,7 +186,7 @@ export default async function TaxPage() {
                             : "text-emerald-600 dark:text-emerald-500"
                         }`}
                       >
-                        {formatCents(p.netGstCents, CURRENCY)}
+                        {formatCents(p.netGstCents, currency)}
                       </td>
                       <td className="px-4 py-3 text-right text-muted-foreground">
                         {p.lodgedAt ? formatDate(p.lodgedAt) : "-"}
@@ -210,13 +208,13 @@ export default async function TaxPage() {
                       <div>
                         <p className="text-xs text-muted-foreground">Collected</p>
                         <p className="tabular-nums text-emerald-600 dark:text-emerald-500">
-                          {formatCents(p.gstCollectedCents, CURRENCY)}
+                          {formatCents(p.gstCollectedCents, currency)}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Paid</p>
                         <p className="tabular-nums text-foreground">
-                          {formatCents(p.gstPaidCents, CURRENCY)}
+                          {formatCents(p.gstPaidCents, currency)}
                         </p>
                       </div>
                       <div>
@@ -228,7 +226,7 @@ export default async function TaxPage() {
                               : "text-emerald-600 dark:text-emerald-500"
                           }`}
                         >
-                          {formatCents(p.netGstCents, CURRENCY)}
+                          {formatCents(p.netGstCents, currency)}
                         </p>
                       </div>
                     </div>

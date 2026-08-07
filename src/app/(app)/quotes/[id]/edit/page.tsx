@@ -50,7 +50,12 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           Save before sending - sent quotes are locked.
         </p>
       </div>
-      <QuoteForm mode="edit" quote={data.quote} customers={data.customers} />
+      <QuoteForm
+        mode="edit"
+        quote={data.quote}
+        customers={data.customers}
+        defaultCurrency={data.defaultCurrency}
+      />
     </div>
   );
 }

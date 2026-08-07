@@ -31,9 +31,11 @@ function isoDate(d: Date | null | undefined): string {
 export function DriveEarningForm({
   mode,
   earning,
+  defaultCurrency,
 }: {
   mode: "create" | "edit";
   earning?: EarningRow;
+  defaultCurrency: string;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -57,7 +59,7 @@ export function DriveEarningForm({
     const input = {
       platform,
       amountCents: dollarsToCents(amountDollars),
-      currency: "AUD" as string,
+      currency: earning?.currency ?? defaultCurrency,
       date: new Date(date),
       description: description.trim(),
       notes: notes || null,
@@ -104,7 +106,7 @@ export function DriveEarningForm({
           ) : null}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="amountDollars">Amount</Label>
+          <Label htmlFor="amountDollars">Amount ({earning?.currency ?? defaultCurrency})</Label>
           <Input
             id="amountDollars"
             name="amountDollars"

@@ -69,7 +69,7 @@ export async function createEarningAction(input: unknown): Promise<CreateEarning
   const earningInput: EarningInput = {
     platform: d.platform,
     amountCents: d.amountCents,
-    currency: d.currency ?? "AUD",
+    currency: d.currency,
     date: d.date,
     description: d.description,
     notes: d.notes ?? null,
@@ -125,7 +125,7 @@ export async function updateEarningAction(input: unknown): Promise<UpdateEarning
       {
         platform: rest.platform,
         amountCents: rest.amountCents,
-        currency: rest.currency ?? "AUD",
+        currency: rest.currency,
         date: rest.date,
         description: rest.description,
         notes: rest.notes ?? null,
@@ -305,6 +305,7 @@ export type DrivePageData =
       platformFilter: string | null;
       search: string;
       period: Period;
+      defaultCurrency: string;
       summary: DriveSummary;
       /** Per-week earnings + distance (Wave 2) - used by the weekly sparkline. */
       weekly: WeeklyDrivePoint[];
@@ -401,6 +402,7 @@ export async function loadDrivePage(params?: {
     platformFilter: platform ?? null,
     search,
     period,
+    defaultCurrency: workspace.defaultCurrency,
     summary,
     weekly: summary.weekly,
     mileageRateCentsPerKm: settings.mileageRateCentsPerKm,
@@ -408,16 +410,23 @@ export async function loadDrivePage(params?: {
 }
 
 export type DriveEditData =
-  { installed: true; earning: EarningRow | null; canManage: boolean } | { installed: false };
+  | { installed: true; earning: EarningRow | null; defaultCurrency: string; canManage: boolean }
+  | { installed: false };
 
 export async function loadEarningForEdit(earningId: string): Promise<DriveEditData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "drive"))) return { installed: false };
-  const [earning, canManage] = await Promise.all([
+  const [earning, workspace, canManage] = await Promise.all([
     getEarning(ctx.workspaceId, branded<"DriveEarningId">(earningId)),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:drive").ok),
   ]);
-  return { installed: true, earning, canManage };
+  return {
+    installed: true,
+    earning,
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
+    canManage,
+  };
 }
 
 export type DriveTripEditData =

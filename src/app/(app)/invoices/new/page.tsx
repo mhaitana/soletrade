@@ -24,6 +24,7 @@ export default async function NewInvoicePage() {
         mode="create"
         customers={data.customers}
         workspacePaymentMethods={data.workspacePaymentMethods}
+        defaultCurrency={data.defaultCurrency}
       />
     </div>
   );

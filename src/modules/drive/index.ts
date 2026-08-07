@@ -3,6 +3,7 @@ import { getDataClient } from "@/server/db/client";
 import { parsePgTimestamp, pgQuote, unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
+import { getWorkspace } from "@/platform/workspaces";
 import { isDrivePlatform } from "@/shared/constants/drive-platforms";
 import type { VehicleExpenseType } from "@/server/db/enums";
 import {
@@ -189,6 +190,8 @@ export async function createEarning(
   if (input.amountCents <= 0) throw new Error("Amount must be greater than 0.");
   assertPlatform(input.platform);
 
+  const workspace = await getWorkspace(workspaceId);
+  const currency = input.currency ?? workspace?.defaultCurrency ?? "AUD";
   const supabase = getDataClient();
   const rows = await unwrap(
     supabase
@@ -197,7 +200,7 @@ export async function createEarning(
         workspace_id: workspaceId,
         platform: input.platform,
         amount_cents: input.amountCents,
-        currency: input.currency ?? "AUD",
+        currency,
         date: input.date.toISOString(),
         description: input.description.trim(),
         notes: input.notes ?? null,
@@ -217,7 +220,7 @@ export async function createEarning(
     metadata: {
       platform: input.platform,
       amountCents: input.amountCents,
-      currency: input.currency ?? "AUD",
+      currency,
       date: input.date,
       description: input.description.trim(),
     },
@@ -405,7 +408,10 @@ export async function createTrip(
   if (input.distanceMeters <= 0) throw new Error("Distance must be greater than 0.");
   assertPlatform(input.platform);
 
-  const settings = await getDriveSettings(workspaceId);
+  const [settings, workspace] = await Promise.all([
+    getDriveSettings(workspaceId),
+    getWorkspace(workspaceId),
+  ]);
   const amountCents = mileageAmountCents(input.distanceMeters, settings.mileageRateCentsPerKm);
 
   const supabase = getDataClient();
@@ -438,7 +444,7 @@ export async function createTrip(
       distanceMeters: input.distanceMeters,
       date: input.date,
       amountCents,
-      currency: "AUD",
+      currency: workspace?.defaultCurrency ?? "AUD",
     },
   });
   await writeAudit({
@@ -492,7 +498,10 @@ export async function updateTrip(
 
   // Recompute the deduction with the current workspace mileage rate so the Books mirror
   // stays in step with the Drive page's summary-time calc.
-  const settings = await getDriveSettings(workspaceId);
+  const [settings, workspace] = await Promise.all([
+    getDriveSettings(workspaceId),
+    getWorkspace(workspaceId),
+  ]);
   const amountCents = mileageAmountCents(row.distance_meters, settings.mileageRateCentsPerKm);
   await publishEvent({
     type: "MileageUpdated",
@@ -506,7 +515,7 @@ export async function updateTrip(
       distanceMeters: row.distance_meters,
       date: parsePgTimestamp(row.date),
       amountCents,
-      currency: "AUD",
+      currency: workspace?.defaultCurrency ?? "AUD",
     },
   });
   await writeAudit({
@@ -906,6 +915,8 @@ export async function createExpense(
   if (input.amountCents <= 0) throw new Error("Amount must be greater than 0.");
   await assertVehicleInWorkspace(workspaceId, input.vehicleId);
 
+  const workspace = await getWorkspace(workspaceId);
+  const currency = input.currency ?? workspace?.defaultCurrency ?? "AUD";
   const supabase = getDataClient();
   const rows = await unwrap(
     supabase
@@ -915,7 +926,7 @@ export async function createExpense(
         vehicle_id: input.vehicleId,
         type: input.type,
         amount_cents: input.amountCents,
-        currency: input.currency ?? "AUD",
+        currency,
         date: input.date.toISOString(),
         description: input.description.trim(),
         odometer_km: input.odometerKm ?? null,
@@ -939,7 +950,7 @@ export async function createExpense(
       vehicleId: input.vehicleId,
       type: input.type,
       amountCents: input.amountCents,
-      currency: input.currency ?? "AUD",
+      currency,
       date: input.date,
       description: input.description.trim(),
     },
@@ -1207,11 +1218,12 @@ export async function replayDriveEventsForBooks(
   workspaceId: WorkspaceId,
   actorId?: UserId,
 ): Promise<void> {
-  const [earnings, expenses, trips, settings] = await Promise.all([
+  const [earnings, expenses, trips, settings, workspace] = await Promise.all([
     listEarnings(workspaceId, { limit: 2000 }),
     listExpenses(workspaceId, { limit: 2000 }),
     listTrips(workspaceId, { limit: 2000 }),
     getDriveSettings(workspaceId),
+    getWorkspace(workspaceId),
   ]);
 
   for (const e of earnings) {
@@ -1261,7 +1273,7 @@ export async function replayDriveEventsForBooks(
         distanceMeters: t.distanceMeters,
         date: t.date,
         amountCents: mileageAmountCents(t.distanceMeters, settings.mileageRateCentsPerKm),
-        currency: "AUD",
+        currency: workspace?.defaultCurrency ?? "AUD",
       },
     });
   }

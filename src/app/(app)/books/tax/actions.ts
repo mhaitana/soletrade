@@ -29,6 +29,7 @@ export type TaxPageData =
       gstSummary: GstSummary;
       lodgedPeriods: TaxPeriodRow[];
       canManage: boolean;
+      currency: string;
       currentQuarter: { fiscalYear: number; quarter: number; label: string };
     }
   | { installed: false };
@@ -65,6 +66,7 @@ export async function loadTaxPage(): Promise<TaxPageData> {
     gstSummary,
     lodgedPeriods,
     canManage,
+    currency: workspace.defaultCurrency,
     currentQuarter: currentQuarter(now, fyStartMonth),
   };
 }

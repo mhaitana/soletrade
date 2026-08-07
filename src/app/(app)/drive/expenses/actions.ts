@@ -20,6 +20,7 @@ import {
 } from "@/modules/drive";
 import type { VehicleExpenseType } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
+import { getWorkspace } from "@/platform/workspaces";
 
 const forbid = (msg = "You don't have permission to manage drive.") => ({
   ok: false as const,
@@ -70,7 +71,7 @@ export async function createExpenseAction(input: unknown): Promise<CreateExpense
     vehicleId: branded<"VehicleId">(d.vehicleId),
     type: d.type,
     amountCents: d.amountCents,
-    currency: d.currency ?? "AUD",
+    currency: d.currency,
     date: d.date,
     description: d.description,
     odometerKm: d.odometerKm ?? null,
@@ -125,7 +126,7 @@ export async function updateExpenseAction(input: unknown): Promise<UpdateExpense
   const patch: ExpensePatch = {
     type: rest.type,
     amountCents: rest.amountCents,
-    currency: rest.currency ?? "AUD",
+    currency: rest.currency,
     date: rest.date,
     description: rest.description,
     odometerKm: rest.odometerKm ?? null,
@@ -182,6 +183,7 @@ export type ExpensesPageData =
       installed: true;
       expenses: ExpenseWithVehicle[];
       vehicles: VehicleRow[];
+      defaultCurrency: string;
       canManage: boolean;
       vehicleFilter: string | null;
     }
@@ -192,12 +194,13 @@ export async function loadExpensesPage(params?: { vehicleId?: string }): Promise
   if (!(await isModuleEnabled(ctx.workspaceId, "drive"))) return { installed: false };
 
   const vehicleId = params?.vehicleId;
-  const [vehicles, expenses, canManage] = await Promise.all([
+  const [vehicles, expenses, workspace, canManage] = await Promise.all([
     listVehicles(ctx.workspaceId),
     listExpenses(ctx.workspaceId, {
       vehicleId: vehicleId ? branded<"VehicleId">(vehicleId) : undefined,
       limit: 200,
     }),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:drive").ok),
   ]);
 
@@ -211,6 +214,7 @@ export async function loadExpensesPage(params?: { vehicleId?: string }): Promise
     installed: true,
     expenses: expensesWithVehicle,
     vehicles,
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
     canManage,
     vehicleFilter: vehicleId ?? null,
   };
@@ -221,6 +225,7 @@ export type ExpenseEditData =
       installed: true;
       expense: ExpenseRow | null;
       vehicles: VehicleRow[];
+      defaultCurrency: string;
       canManage: boolean;
     }
   | { installed: false };
@@ -228,10 +233,17 @@ export type ExpenseEditData =
 export async function loadExpenseForEdit(expenseId: string): Promise<ExpenseEditData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "drive"))) return { installed: false };
-  const [expense, vehicles, canManage] = await Promise.all([
+  const [expense, vehicles, workspace, canManage] = await Promise.all([
     getExpense(ctx.workspaceId, branded<"DriveExpenseId">(expenseId)),
     listVehicles(ctx.workspaceId),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:drive").ok),
   ]);
-  return { installed: true, expense, vehicles, canManage };
+  return {
+    installed: true,
+    expense,
+    vehicles,
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
+    canManage,
+  };
 }

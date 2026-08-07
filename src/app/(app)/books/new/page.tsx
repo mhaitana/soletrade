@@ -20,7 +20,7 @@ export default async function NewTransactionPage() {
         <h1 className="text-2xl font-semibold tracking-tight">New transaction</h1>
         <p className="text-sm text-muted-foreground">Record income or an expense.</p>
       </div>
-      <BookForm mode="create" customers={data.customers} />
+      <BookForm mode="create" customers={data.customers} defaultCurrency={data.defaultCurrency} />
     </div>
   );
 }

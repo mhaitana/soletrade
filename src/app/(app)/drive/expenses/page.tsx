@@ -77,6 +77,7 @@ export default async function ExpensesPage({
                   mode="create"
                   vehicles={data.vehicles}
                   defaultVehicleId={data.vehicleFilter}
+                  defaultCurrency={data.defaultCurrency}
                 />
               )}
             </CardContent>

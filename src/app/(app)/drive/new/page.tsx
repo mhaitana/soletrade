@@ -48,7 +48,11 @@ export default async function NewDriveEntryPage({
         </Button>
       </div>
 
-      {type === "trip" ? <DriveTripForm mode="create" /> : <DriveEarningForm mode="create" />}
+      {type === "trip" ? (
+        <DriveTripForm mode="create" />
+      ) : (
+        <DriveEarningForm mode="create" defaultCurrency={data.defaultCurrency} />
+      )}
     </div>
   );
 }

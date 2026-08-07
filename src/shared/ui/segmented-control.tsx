@@ -39,7 +39,7 @@ export function SegmentedControl({
       role="group"
       aria-label={label}
       className={cn(
-        "inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5",
+        "inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5 max-md:max-w-full max-md:flex-nowrap max-md:overflow-x-auto max-md:overscroll-x-contain max-md:snap-x",
         className,
       )}
     >
@@ -48,7 +48,7 @@ export function SegmentedControl({
           key={item.key}
           href={item.href}
           aria-current={item.active ? "page" : undefined}
-          className="rounded-md outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          className="shrink-0 snap-start rounded-md outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40"
         >
           <span
             className={cn(

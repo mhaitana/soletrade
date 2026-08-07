@@ -58,6 +58,19 @@ export const ACTIVITY_LABELS: Record<string, ActivityLabel> = {
   CreditIssued: { label: "issued platform credit", tone: "positive" },
   RefundIssued: { label: "issued a refund", tone: "warning" },
   CreditExpired: { label: "expired platform credit", tone: "warning" },
+  // Legacy dot-delimited event names used by early seed data and existing workspaces.
+  "workspace.create": { label: "created the workspace", tone: "positive" },
+  "customer.created": { label: "added a customer", tone: "positive" },
+  "module.enabled": { label: "enabled a module", tone: "info" },
+  "invoice.created": { label: "created an invoice", tone: "positive" },
+  "invoice.sent": { label: "sent an invoice", tone: "info" },
+  "invoice.paid": { label: "paid an invoice", tone: "positive" },
+  "quote.accepted": { label: "accepted a quote", tone: "positive" },
+  "quote.converted": { label: "converted a quote to an invoice", tone: "positive" },
+  "transaction.created": { label: "recorded a transaction", tone: "positive" },
+  "drive.earnings.logged": { label: "logged drive earnings", tone: "info" },
+  "member.invited": { label: "invited a member", tone: "info" },
+  "credit.issued": { label: "issued platform credit", tone: "positive" },
 };
 
 const FALLBACK_TONE: ActivityTone = "neutral";
@@ -65,6 +78,7 @@ const FALLBACK_TONE: ActivityTone = "neutral";
 /** Humanise a CamelCase event type as a fallback label, e.g. "FooBarBaz" → "foo bar baz". */
 function humaniseType(type: string): string {
   const spaced = type
+    .replace(/[._-]+/g, " ")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
   return spaced.toLowerCase();

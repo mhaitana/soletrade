@@ -5,6 +5,7 @@ import { getDataClient } from "@/server/db/client";
 import { parsePgTimestamp, unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import type { Json } from "@/server/db/types";
 import { getFile, downloadFileBytes } from "@/platform/files";
+import { getWorkspace } from "@/platform/workspaces";
 import { getAIModel, isMockProvider } from "@/platform/ai/provider";
 import { consumeCredit } from "@/platform/billing/credits";
 import { publishEvent } from "@/server/events";
@@ -56,32 +57,35 @@ export interface ExtractedReceiptData {
 }
 
 /** Zod schema the model is forced into via `generateObject` (structured output). */
-const ReceiptExtractionSchema = z.object({
-  merchant: z.string(),
-  date: z.string(),
-  totalCents: z.number().int(),
-  taxCents: z.number().int().default(0),
-  currency: z.string().default("AUD"),
-  category: z.string(),
-  lineItems: z
-    .array(
-      z.object({
-        description: z.string(),
-        quantity: z.number().default(1),
-        unitPriceCents: z.number().int(),
-        amountCents: z.number().int(),
-      }),
-    )
-    .default([]),
-  confidence: z.number().min(0).max(1),
-});
+function receiptExtractionSchema(defaultCurrency: string) {
+  return z.object({
+    merchant: z.string(),
+    date: z.string(),
+    totalCents: z.number().int(),
+    taxCents: z.number().int().default(0),
+    currency: z.string().length(3).default(defaultCurrency),
+    category: z.string(),
+    lineItems: z
+      .array(
+        z.object({
+          description: z.string(),
+          quantity: z.number().default(1),
+          unitPriceCents: z.number().int(),
+          amountCents: z.number().int(),
+        }),
+      )
+      .default([]),
+    confidence: z.number().min(0).max(1),
+  });
+}
 
-const EXTRACTION_PROMPT = `You are a receipt extraction assistant for a small-business accounting tool.
+function extractionPrompt(defaultCurrency: string): string {
+  return `You are a receipt extraction assistant for a small-business accounting tool.
 Analyse the attached receipt image or PDF and extract its details as JSON.
 
 - totalCents: the grand total the customer paid, in integer cents (e.g. $12.99 → 1299).
 - taxCents: the GST/tax portion of the total, in integer cents (0 if none shown).
-- currency: ISO 4-letter code if shown, else "AUD".
+- currency: ISO 4217 3-letter code if shown, else "${defaultCurrency}".
 - category: the single best-fit expense category slug from this list ONLY:
     rent, utilities, supplies, travel, wages, software_expense, vehicle_expense, other_expense
 - date: the receipt date as an ISO "YYYY-MM-DD" string; if only partial/ambiguous, use the most likely date.
@@ -89,16 +93,17 @@ Analyse the attached receipt image or PDF and extract its details as JSON.
 - confidence: your confidence in the extraction, 0.0 to 1.0 (low for blurry/ambiguous receipts).
 
 Return ONLY the JSON object matching the schema.`;
+}
 
 /** Canned extraction for the mock provider (no API key needed - dev/test path). */
-function mockExtractedData(now: Date): ExtractedReceiptData {
+function mockExtractedData(now: Date, currency: string): ExtractedReceiptData {
   const iso = now.toISOString().slice(0, 10);
   return {
     merchant: "Mock Merchant",
     date: iso,
     totalCents: 1099,
     taxCents: 100,
-    currency: "AUD",
+    currency,
     category: "supplies",
     lineItems: [{ description: "Mock item", quantity: 1, unitPriceCents: 999, amountCents: 999 }],
     confidence: 0.95,
@@ -185,8 +190,12 @@ export async function extractReceipt(
   fileId: FileId,
   actorId: UserId,
 ): Promise<ReceiptExtractionId> {
-  const file = await getFile(workspaceId, fileId);
+  const [file, workspace] = await Promise.all([
+    getFile(workspaceId, fileId),
+    getWorkspace(workspaceId),
+  ]);
   if (!file) throw new Error("Receipt file not found in this workspace.");
+  const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
 
   const costCents = env.RECEIPT_EXTRACTION_COST_CENTS;
   if (costCents > 0) {
@@ -210,18 +219,18 @@ export async function extractReceipt(
 
   try {
     if (isMockProvider()) {
-      extracted = mockExtractedData(new Date());
+      extracted = mockExtractedData(new Date(), defaultCurrency);
     } else {
       const { bytes } = await downloadFileBytes(file.storagePath);
       const { object } = await generateObject({
         model: getAIModel(),
-        schema: ReceiptExtractionSchema,
+        schema: receiptExtractionSchema(defaultCurrency),
         messages: [
           {
             role: "user",
             content: [
               { type: "file", data: bytes, mediaType: file.mimeType, filename: file.fileName },
-              { type: "text", text: EXTRACTION_PROMPT },
+              { type: "text", text: extractionPrompt(defaultCurrency) },
             ],
           },
         ],

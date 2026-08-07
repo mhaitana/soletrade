@@ -165,7 +165,7 @@ export default async function BooksPage({
         ) : null}
       </form>
 
-      <BooksSummary summary={data.summary} currency="AUD" period={data.period} />
+      <BooksSummary summary={data.summary} currency={data.currency} period={data.period} />
 
       {data.transactions.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">

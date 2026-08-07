@@ -1,4 +1,5 @@
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
+import { SUPPORTED_CURRENCIES } from "@/shared/constants/currencies";
 
 /**
  * Pricing engine (brief §10 - anchor app + add-on stack discount). Pure: no
@@ -154,7 +155,9 @@ export function formatCents(cents: number, currency: string = PRICING_CATALOG.cu
   const abs = Math.abs(cents);
   const whole = Math.floor(abs / 100);
   const fraction = abs % 100;
-  return `${sign}${currency === "AUD" ? "$" : ""}${whole}.${fraction.toString().padStart(2, "0")}`;
+  const symbol = SUPPORTED_CURRENCIES.find((item) => item.code === currency)?.symbol;
+  const prefix = symbol ?? `${currency} `;
+  return `${sign}${prefix}${whole.toLocaleString("en-AU")}.${fraction.toString().padStart(2, "0")}`;
 }
 
 /**

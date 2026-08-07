@@ -30,6 +30,7 @@ const getCustomerMock = vi.fn();
 const getCustomerByEmailMock = vi.fn();
 const updateCustomerMock = vi.fn();
 const writeAuditMock = vi.fn();
+const getWorkspaceMock = vi.fn();
 // Invoice/quote action mocks.
 const sendInvoiceMock = vi.fn();
 const voidInvoiceMock = vi.fn();
@@ -89,6 +90,9 @@ vi.mock("@/platform/activity", () => ({
 vi.mock("@/platform/audit", () => ({
   writeAudit: (...a: unknown[]) => writeAuditMock(...a),
 }));
+vi.mock("@/platform/workspaces", () => ({
+  getWorkspace: (...a: unknown[]) => getWorkspaceMock(...a),
+}));
 
 const ALL_MODULES: ModuleKey[] = ["invoices", "books", "drive", "quotes"];
 
@@ -114,6 +118,7 @@ async function run(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getWorkspaceMock.mockResolvedValue({ defaultCurrency: "AUD" });
 });
 
 describe("buildAssistantTools - gating", () => {
@@ -300,10 +305,13 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     const tools = buildAssistantTools(ctx("readonly"), ["invoices", "books"]);
     const overview = (await run(tools.getWorkspaceOverview)) as {
       installedModules: string[];
+      currency: string;
       kpis: Record<string, number | null>;
       recentActivity: { type: string; createdAt: string | null }[] | null;
     };
     expect(overview.installedModules).toEqual(["invoices", "books"]);
+    expect(overview.currency).toBe("AUD");
+    expect(getWorkspaceMock).toHaveBeenCalledWith(expect.anything());
     expect(overview.kpis.cashCents).toBe(7500);
     expect(overview.kpis.outstandingCents).toBe(5000);
     expect(overview.kpis.overdueInvoiceCount).toBe(2);
@@ -313,6 +321,18 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     expect(overview.recentActivity).toHaveLength(1);
     expect(overview.recentActivity![0]!.type).toBe("invoice.sent");
     expect(overview.recentActivity![0]!.createdAt).toBe("2026-01-02T00:00:00.000Z");
+  });
+
+  it("getWorkspaceOverview reports the workspace currency", async () => {
+    getWorkspaceMock.mockResolvedValue({ defaultCurrency: "NZD" });
+    listActivityMock.mockResolvedValue({ items: [], nextCursor: null });
+
+    const { buildAssistantTools } = await import("./tools");
+    const overview = (await run(buildAssistantTools(ctx("readonly"), []).getWorkspaceOverview)) as {
+      currency: string;
+    };
+
+    expect(overview.currency).toBe("NZD");
   });
 
   it("getWorkspaceOverview drops the activity slice when the role lacks view:activity", async () => {

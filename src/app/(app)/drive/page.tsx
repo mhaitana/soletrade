@@ -232,7 +232,7 @@ export default async function DrivePage({
         ) : null}
       </form>
 
-      <DriveSummary summary={data.summary} currency="AUD" period={data.period} />
+      <DriveSummary summary={data.summary} currency={data.defaultCurrency} period={data.period} />
 
       {data.canManage ? <SwipeQuickLog /> : null}
 

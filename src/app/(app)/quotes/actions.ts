@@ -25,6 +25,7 @@ import {
 import { createInvoice, getInvoice } from "@/modules/invoices";
 import type { QuoteStatus } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
+import { getWorkspace } from "@/platform/workspaces";
 
 const forbid = (msg = "You don't have permission to manage quotes.") => ({
   ok: false as const,
@@ -71,7 +72,7 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
   }
 
   const ctx = await requireWorkspaceContext();
-  if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
+  if (!(await authorizeOrAudit(ctx, "create:quote")).ok) return forbid();
 
   // Every quote must be linked to an emailable customer (no walk-in) - the email is used
   // to send the quote. The picker disables no-email customers; the server enforces too.
@@ -106,7 +107,7 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
         customerId: branded<"CustomerId">(parsed.data.customerId),
         issueDate: parsed.data.issueDate,
         validUntil: parsed.data.validUntil ?? null,
-        currency: parsed.data.currency ?? "AUD",
+        currency: parsed.data.currency,
         taxRate: parsed.data.taxRate,
         pricesIncludeTax: parsed.data.pricesIncludeTax,
         notes: parsed.data.notes ?? null,
@@ -186,7 +187,7 @@ export async function updateQuoteAction(input: unknown): Promise<UpdateQuoteResu
         customerId: branded<"CustomerId">(rest.customerId),
         issueDate: rest.issueDate,
         validUntil: rest.validUntil ?? null,
-        currency: rest.currency ?? "AUD",
+        currency: rest.currency,
         taxRate: rest.taxRate,
         pricesIncludeTax: rest.pricesIncludeTax,
         notes: rest.notes ?? null,
@@ -376,6 +377,7 @@ export type QuoteEditData =
       installed: true;
       quote: QuoteWithItems | null;
       customers: CustomerRow[];
+      defaultCurrency: string;
       canManage: boolean;
     }
   | { installed: false };
@@ -384,23 +386,37 @@ export async function loadQuoteForEdit(quoteId: string): Promise<QuoteEditData> 
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "quotes"))) return { installed: false };
 
-  const [quote, customers, canManage] = await Promise.all([
+  const [quote, customers, workspace, canManage] = await Promise.all([
     getQuote(ctx.workspaceId, branded<"QuoteId">(quoteId)),
     listCustomers(ctx.workspaceId),
+    getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:quote").ok),
   ]);
-  return { installed: true, quote, customers, canManage };
+  return {
+    installed: true,
+    quote,
+    customers,
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
+    canManage,
+  };
 }
 
 /** Customer list for the new-quote form (module-gated). */
 export async function loadCustomersForQuote(): Promise<
-  { installed: true; customers: CustomerRow[]; canManage: boolean } | { installed: false }
+  | { installed: true; customers: CustomerRow[]; defaultCurrency: string; canManage: boolean }
+  | { installed: false }
 > {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "quotes"))) return { installed: false };
-  const [customers, canManage] = await Promise.all([
+  const [customers, workspace, canManage] = await Promise.all([
     listCustomers(ctx.workspaceId),
-    Promise.resolve(authorize(ctx.role, "manage:quote").ok),
+    getWorkspace(ctx.workspaceId),
+    Promise.resolve(authorize(ctx.role, "create:quote").ok),
   ]);
-  return { installed: true, customers, canManage };
+  return {
+    installed: true,
+    customers,
+    defaultCurrency: workspace?.defaultCurrency ?? "AUD",
+    canManage,
+  };
 }

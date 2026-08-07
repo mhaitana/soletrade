@@ -8,6 +8,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { computeLineItemTotals } from "@/shared/utils/totals";
+import { formatCents } from "@/platform/billing/pricing";
 import {
   createQuoteAction,
   updateQuoteAction,
@@ -58,10 +59,12 @@ export function QuoteForm({
   mode,
   quote,
   customers,
+  defaultCurrency,
 }: {
   mode: "create" | "edit";
   quote?: QuoteWithItems;
   customers: PickerCustomer[];
+  defaultCurrency: string;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -180,7 +183,7 @@ export function QuoteForm({
       customerId,
       issueDate: new Date(issueDate),
       validUntil: validUntil ? new Date(validUntil) : null,
-      currency: "AUD" as string,
+      currency: quote?.currency ?? defaultCurrency,
       taxRate: Number(taxRate) || 0,
       pricesIncludeTax,
       notes: notes || null,
@@ -338,7 +341,7 @@ export function QuoteForm({
                 min={0}
                 step="0.01"
                 inputMode="decimal"
-                placeholder="Unit $"
+                placeholder={`Unit ${quote?.currency ?? defaultCurrency}`}
                 value={it.unitPriceDollars}
                 onChange={(e) => updateItem(it.key, { unitPriceDollars: e.target.value })}
                 className="tabular-nums"
@@ -451,17 +454,23 @@ export function QuoteForm({
           <span className="text-muted-foreground">
             {pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
           </span>
-          <span className="tabular-nums">${(totals.subtotalCents / 100).toFixed(2)}</span>
+          <span className="tabular-nums">
+            {formatCents(totals.subtotalCents, quote?.currency ?? defaultCurrency)}
+          </span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
             Tax ({Number(taxRate) || 0}%{pricesIncludeTax ? ", included" : ""})
           </span>
-          <span className="tabular-nums">${(totals.taxCents / 100).toFixed(2)}</span>
+          <span className="tabular-nums">
+            {formatCents(totals.taxCents, quote?.currency ?? defaultCurrency)}
+          </span>
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-base font-medium">
           <span>Total</span>
-          <span className="tabular-nums">${(totals.totalCents / 100).toFixed(2)}</span>
+          <span className="tabular-nums">
+            {formatCents(totals.totalCents, quote?.currency ?? defaultCurrency)}
+          </span>
         </div>
       </div>
 

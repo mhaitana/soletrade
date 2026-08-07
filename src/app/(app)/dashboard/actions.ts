@@ -6,6 +6,7 @@ import { getInstalledModules } from "@/platform/module-installations";
 import { formatCents } from "@/platform/billing/pricing";
 import { formatKm } from "@/modules/drive/calc";
 import { listActivity, type ActivityPage } from "@/platform/activity";
+import { authorize } from "@/platform/permissions";
 import { periodRange, previousPeriodRange, parsePeriod, type Period } from "@/shared/utils/periods";
 import { percentDelta, type Delta } from "@/shared/utils/delta";
 import type { SparklinePoint } from "@/shared/components/sparkline";
@@ -15,6 +16,7 @@ import { listInvoices, summarizeInvoices } from "@/modules/invoices";
 import { listTransactions, summarizeTransactions } from "@/modules/books";
 import { listEarnings, listTrips, summarizeDrive } from "@/modules/drive";
 import { listQuotes, summarizeQuotes } from "@/modules/quotes";
+import { listExtractions } from "@/modules/books/receipt-extraction";
 
 /**
  * Cross-module dashboard loader (Phase 9). This is the **composition root** - it MAY import all
@@ -31,15 +33,13 @@ import { listQuotes, summarizeQuotes } from "@/modules/quotes";
  * so deltas are `null`. Current-state snapshots (outstanding invoices, overdue/draft counts,
  * pending-conversion quote value) have no delta - they're "right now".
  *
- * **KPI deltas** are computed only for the two period-bound headline KPIs (Books net = "Cash
- * position", Invoices paid = "Revenue this period"); the other two KPIs (Outstanding, Pending
- * quotes) are snapshots. Drive has no headline KPI in the 4-card row (per the spec), so its
+ * **KPI deltas** are computed only for the two period-bound headline KPIs (Books net = "Net
+ * cash flow", Invoices paid = "Revenue this period"); the other two KPIs (Outstanding, Ready
+ * to invoice) are snapshots. Drive has no headline KPI in the 4-card row (per the spec), so its
  * previous period isn't fetched - its summary card shows current-period metrics + sparkline.
  */
 
 const DASHBOARD_DEFAULT_PERIOD: Period = "month";
-const CURRENCY = "AUD";
-
 // --- Card data shapes (serializable - returned from the server action) ------
 
 export interface KpiCardData {
@@ -68,11 +68,24 @@ export interface ModuleCardData {
   sparkline: { points: SparklinePoint[]; ariaLabel: string } | null;
 }
 
+export interface AttentionItemData {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  actionLabel: string;
+  tone: "danger" | "warning" | "info" | "neutral";
+  icon: "invoice" | "quote" | "receipt" | "draft";
+}
+
 export interface DashboardData {
   period: Period;
+  workspaceName: string;
+  currency: string;
   installedModules: ModuleKey[];
   kpis: KpiCardData[];
   moduleCards: ModuleCardData[];
+  attentionItems: AttentionItemData[];
   activity: ActivityPage;
   /** True when zero modules are installed - the page renders the onboarding stub instead. */
   onboarding: boolean;
@@ -87,10 +100,12 @@ async function invoicesCards(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
   previousRange: { start: Date; end: Date } | null,
+  currency: string,
 ): Promise<{
   outstanding: KpiCardData;
   revenue: KpiCardData;
   card: ModuleCardData;
+  signals: { overdueCount: number; overdueCents: number; draftCount: number };
 }> {
   // listInvoices is capped at 200 and has no date-range filter - fetch once, bucket by date in
   // the pure aggregator (mirrors Books/Drive's "fetch rows + pure calc" pattern).
@@ -108,7 +123,7 @@ async function invoicesCards(
   const outstanding: KpiCardData = {
     id: "outstanding",
     label: "Outstanding invoices",
-    value: cur.outstandingCents > 0 ? formatCents(cur.outstandingCents, CURRENCY) : null,
+    value: cur.outstandingCents > 0 ? formatCents(cur.outstandingCents, currency) : null,
     delta: null, // snapshot - no delta
     href: "/invoices",
     emptyLabel: "No outstanding invoices",
@@ -116,7 +131,7 @@ async function invoicesCards(
   const revenue: KpiCardData = {
     id: "revenue",
     label: "Revenue this period",
-    value: cur.paidCents > 0 ? formatCents(cur.paidCents, CURRENCY) : null,
+    value: cur.paidCents > 0 ? formatCents(cur.paidCents, currency) : null,
     delta: prev ? percentDelta(cur.paidCents, prev.paidCents) : null,
     href: "/invoices",
     emptyLabel: "No paid invoices yet",
@@ -126,7 +141,7 @@ async function invoicesCards(
     href: "/invoices",
     name: MODULES.invoices.name,
     metrics: [
-      { label: "Outstanding", value: formatCents(cur.outstandingCents, CURRENCY) },
+      { label: "Outstanding", value: formatCents(cur.outstandingCents, currency) },
       { label: "Overdue", value: String(cur.overdueCount) },
       { label: "Drafts", value: String(cur.draftCount) },
     ],
@@ -137,18 +152,31 @@ async function invoicesCards(
             points: cur.monthly.map((m) => ({
               month: m.month,
               value: m.paidCents,
-              label: formatCents(m.paidCents, CURRENCY),
+              label: formatCents(m.paidCents, currency),
             })),
           }
         : null,
   };
-  return { outstanding, revenue, card };
+  return {
+    outstanding,
+    revenue,
+    card,
+    signals: {
+      overdueCount: cur.overdueCount,
+      overdueCents: rows.reduce(
+        (total, invoice) => total + (invoice.status === "overdue" ? invoice.totalCents : 0),
+        0,
+      ),
+      draftCount: cur.draftCount,
+    },
+  };
 }
 
 async function booksCards(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
   previousRange: { start: Date; end: Date } | null,
+  currency: string,
 ): Promise<{ cash: KpiCardData; card: ModuleCardData }> {
   // listTransactions accepts dateFrom/dateTo (cap 2000) - fetch current + previous separately.
   const [curRows, prevRows] = await Promise.all([
@@ -171,14 +199,15 @@ async function booksCards(
       amountCents: t.amountCents,
       date: t.date,
       category: t.category,
+      gstCents: t.gstCents,
     }));
   const cur = summarizeTransactions(toInput(curRows));
   const prev = previousRange ? summarizeTransactions(toInput(prevRows)) : null;
 
   const cash: KpiCardData = {
     id: "cash",
-    label: "Cash position",
-    value: cur.netCents !== 0 || cur.count > 0 ? formatCents(cur.netCents, CURRENCY) : null,
+    label: "Net cash flow",
+    value: cur.netCents !== 0 || cur.count > 0 ? formatCents(cur.netCents, currency) : null,
     delta: prev ? percentDelta(cur.netCents, prev.netCents) : null,
     href: "/books",
     emptyLabel: "No transactions yet",
@@ -188,9 +217,9 @@ async function booksCards(
     href: "/books",
     name: MODULES.books.name,
     metrics: [
-      { label: "Income", value: formatCents(cur.incomeCents, CURRENCY) },
-      { label: "Expense", value: formatCents(cur.expenseCents, CURRENCY) },
-      { label: "Net", value: formatCents(cur.netCents, CURRENCY) },
+      { label: "Income", value: formatCents(cur.incomeCents, currency) },
+      { label: "Expense", value: formatCents(cur.expenseCents, currency) },
+      { label: "Net", value: formatCents(cur.netCents, currency) },
     ],
     sparkline:
       cur.monthly.length > 0
@@ -199,7 +228,7 @@ async function booksCards(
             points: cur.monthly.map((m) => ({
               month: m.month,
               value: m.netCents,
-              label: formatCents(m.netCents, CURRENCY),
+              label: formatCents(m.netCents, currency),
             })),
           }
         : null,
@@ -211,6 +240,7 @@ async function driveCard(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
   booksEnabled: boolean,
+  currency: string,
 ): Promise<{ card: ModuleCardData }> {
   // Drive has no headline KPI in the 4-card row, so no previous-period fetch - current period
   // only (earnings + trips in parallel).
@@ -245,7 +275,7 @@ async function driveCard(
           { label: "Trips", value: String(cur.tripsCount) },
         ]
       : [
-          { label: "Earnings", value: formatCents(cur.totalEarningsCents, CURRENCY) },
+          { label: "Earnings", value: formatCents(cur.totalEarningsCents, currency) },
           { label: "Mileage", value: formatKm(cur.totalDistanceMeters) },
           { label: "Trips", value: String(cur.tripsCount) },
         ],
@@ -259,7 +289,7 @@ async function driveCard(
                 : {
                     month: m.month,
                     value: m.earningsCents,
-                    label: formatCents(m.earningsCents, CURRENCY),
+                    label: formatCents(m.earningsCents, currency),
                   },
             ),
           }
@@ -271,7 +301,12 @@ async function driveCard(
 async function quotesCards(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
-): Promise<{ pending: KpiCardData; card: ModuleCardData }> {
+  currency: string,
+): Promise<{
+  pending: KpiCardData;
+  card: ModuleCardData;
+  signals: { acceptedCount: number; acceptedValueCents: number };
+}> {
   // listQuotes is capped at 200, no date-range filter - fetch once, bucket by date. The Pending
   // KPI is a snapshot (accepted-but-not-converted value), so no previous-period fetch.
   const rows = await listQuotes(workspaceId, { limit: 200 });
@@ -285,23 +320,24 @@ async function quotesCards(
     issueDate: r.issueDate,
   }));
   const cur = summarizeQuotes(toInput, currentRange);
+  const readyCount = rows.filter((quote) => quote.status === "accepted").length;
 
   const pending: KpiCardData = {
     id: "pending-quotes",
-    label: "Pending quotes",
-    value: cur.acceptedValueCents > 0 ? formatCents(cur.acceptedValueCents, CURRENCY) : null,
+    label: "Ready to invoice",
+    value: cur.acceptedValueCents > 0 ? formatCents(cur.acceptedValueCents, currency) : null,
     delta: null, // snapshot - accepted-but-not-converted value, no delta
     href: "/quotes",
-    emptyLabel: "No accepted quotes pending",
+    emptyLabel: "No accepted quotes waiting",
   };
   const card: ModuleCardData = {
     key: "quotes",
     href: "/quotes",
     name: MODULES.quotes.name,
     metrics: [
-      { label: "Pending", value: formatCents(cur.acceptedValueCents, CURRENCY) },
+      { label: "Ready", value: formatCents(cur.acceptedValueCents, currency) },
+      { label: "Waiting", value: String(readyCount) },
       { label: "Sent", value: String(cur.sentCount) },
-      { label: "Accepted", value: String(cur.acceptedCount) },
     ],
     sparkline:
       cur.monthly.length > 0
@@ -310,12 +346,19 @@ async function quotesCards(
             points: cur.monthly.map((m) => ({
               month: m.month,
               value: m.acceptedCents,
-              label: formatCents(m.acceptedCents, CURRENCY),
+              label: formatCents(m.acceptedCents, currency),
             })),
           }
         : null,
   };
-  return { pending, card };
+  return {
+    pending,
+    card,
+    signals: {
+      acceptedCount: readyCount,
+      acceptedValueCents: cur.acceptedValueCents,
+    },
+  };
 }
 
 // --- Loader -----------------------------------------------------------------
@@ -332,17 +375,21 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
     getInstalledModules(ctx.workspaceId),
   ]);
   const fyStartMonth = workspace?.fyStartMonth ?? 7;
+  const currency = workspace?.defaultCurrency ?? "AUD";
   const currentRange = periodRange(period, undefined, fyStartMonth);
   const previousRange = previousPeriodRange(period, undefined, fyStartMonth);
   const has = (k: ModuleKey) => installed.includes(k);
 
   // Fetch only installed modules; each runs its own parallel fetches internally. All four
   // run concurrently here alongside the activity feed.
-  const [invoices, books, drive, quotes, activity] = await Promise.all([
-    has("invoices") ? invoicesCards(ctx.workspaceId, currentRange, previousRange) : null,
-    has("books") ? booksCards(ctx.workspaceId, currentRange, previousRange) : null,
-    has("drive") ? driveCard(ctx.workspaceId, currentRange, has("books")) : null,
-    has("quotes") ? quotesCards(ctx.workspaceId, currentRange) : null,
+  const [invoices, books, drive, quotes, pendingReceipts, activity] = await Promise.all([
+    has("invoices") ? invoicesCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
+    has("books") ? booksCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
+    has("drive") ? driveCard(ctx.workspaceId, currentRange, has("books"), currency) : null,
+    has("quotes") ? quotesCards(ctx.workspaceId, currentRange, currency) : null,
+    has("books") && authorize(ctx.role, "manage:books").ok
+      ? listExtractions(ctx.workspaceId, { status: "pending", limit: 100 })
+      : Promise.resolve([]),
     listActivity(ctx.workspaceId, { limit: 5 }),
   ]);
 
@@ -357,12 +404,12 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
   });
 
   const kpis: KpiCardData[] = [
-    books ? books.cash : enableCard("cash", "Cash position", "Enable Books"),
+    books ? books.cash : enableCard("cash", "Net cash flow", "Enable Books"),
     invoices
       ? invoices.outstanding
       : enableCard("outstanding", "Outstanding invoices", "Enable Invoices"),
     invoices ? invoices.revenue : enableCard("revenue", "Revenue this period", "Enable Invoices"),
-    quotes ? quotes.pending : enableCard("pending-quotes", "Pending quotes", "Enable Quotes"),
+    quotes ? quotes.pending : enableCard("pending-quotes", "Ready to invoice", "Enable Quotes"),
   ];
 
   // Per-enabled-module summary cards (in the canonical MODULE_KEYS order).
@@ -372,11 +419,60 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
   if (drive) moduleCards.push(drive.card);
   if (quotes) moduleCards.push(quotes.card);
 
+  const attentionItems: AttentionItemData[] = [];
+  if (invoices?.signals.overdueCount) {
+    attentionItems.push({
+      id: "overdue-invoices",
+      title: `${invoices.signals.overdueCount} overdue ${invoices.signals.overdueCount === 1 ? "invoice" : "invoices"}`,
+      detail: `${formatCents(invoices.signals.overdueCents, currency)} is past due and may need a follow-up.`,
+      href: "/invoices?status=overdue",
+      actionLabel: "Review overdue",
+      tone: "danger",
+      icon: "invoice",
+    });
+  }
+  if (quotes?.signals.acceptedCount) {
+    attentionItems.push({
+      id: "accepted-quotes",
+      title: `${quotes.signals.acceptedCount} accepted ${quotes.signals.acceptedCount === 1 ? "quote is" : "quotes are"} ready to invoice`,
+      detail: `${formatCents(quotes.signals.acceptedValueCents, currency)} of approved work is waiting to be converted.`,
+      href: "/quotes?status=accepted",
+      actionLabel: "Create invoices",
+      tone: "info",
+      icon: "quote",
+    });
+  }
+  if (pendingReceipts.length > 0) {
+    attentionItems.push({
+      id: "pending-receipts",
+      title: `${pendingReceipts.length} ${pendingReceipts.length === 1 ? "receipt needs" : "receipts need"} review`,
+      detail: "Confirm the extracted details before adding them to your books.",
+      href: "/books/receipts?status=pending",
+      actionLabel: "Review receipts",
+      tone: "warning",
+      icon: "receipt",
+    });
+  }
+  if (invoices?.signals.draftCount) {
+    attentionItems.push({
+      id: "draft-invoices",
+      title: `${invoices.signals.draftCount} draft ${invoices.signals.draftCount === 1 ? "invoice" : "invoices"}`,
+      detail: "Finish or remove drafts so your invoice list reflects active work.",
+      href: "/invoices?status=draft",
+      actionLabel: "Finish drafts",
+      tone: "neutral",
+      icon: "draft",
+    });
+  }
+
   return {
     period,
+    workspaceName: workspace?.name ?? "Your business",
+    currency,
     installedModules: installed,
     kpis,
     moduleCards,
+    attentionItems,
     activity,
     onboarding: installed.length === 0,
   };

@@ -28,7 +28,7 @@ export function ModuleSummaryCard({ card }: { card: ModuleCardData }) {
         {card.sparkline ? (
           <Sparkline points={card.sparkline.points} ariaLabel={card.sparkline.ariaLabel} />
         ) : (
-          <p className="text-xs text-muted-foreground">No data this period.</p>
+          <p className="text-xs text-muted-foreground">No completed activity this period.</p>
         )}
         <dl className="grid grid-cols-3 gap-2">
           {card.metrics.map((m) => (

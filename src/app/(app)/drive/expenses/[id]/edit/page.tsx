@@ -35,7 +35,12 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
         <h1 className="text-2xl font-semibold tracking-tight">Edit expense</h1>
         <p className="text-sm text-muted-foreground">Update the details of this vehicle expense.</p>
       </div>
-      <ExpenseForm mode="edit" expense={data.expense} vehicles={data.vehicles} />
+      <ExpenseForm
+        mode="edit"
+        expense={data.expense}
+        vehicles={data.vehicles}
+        defaultCurrency={data.defaultCurrency}
+      />
       <div className="border-t border-border pt-4">
         <ExpenseDeleteButton id={data.expense.id} />
       </div>

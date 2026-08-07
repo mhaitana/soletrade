@@ -62,28 +62,29 @@ export function KpiCard({
 }) {
   const empty = kpi.value === null;
   return (
-    <Card>
-      <CardContent className="space-y-2 p-5">
-        <p className="text-sm font-medium text-muted-foreground">{kpi.label}</p>
-        {empty ? (
-          <div className="space-y-1">
-            <p className="text-2xl font-semibold tracking-tight text-muted-foreground">-</p>
-            <Link
-              href={kpi.href}
-              className="inline-block text-xs font-medium text-brand-blue hover:underline"
-            >
-              {kpi.emptyLabel} →
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <p className="text-2xl font-semibold tracking-tight font-mono tabular-nums">
-              {kpi.value}
-            </p>
-            {kpi.delta ? <DeltaBadge delta={kpi.delta} periodNoun={periodNoun} /> : null}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <Link
+      href={kpi.href}
+      aria-label={`${kpi.label}: ${kpi.value ?? kpi.emptyLabel}`}
+      className="block rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+    >
+      <Card className="h-full transition-colors hover:bg-muted/40">
+        <CardContent className="space-y-2 p-5">
+          <p className="text-sm font-medium text-muted-foreground">{kpi.label}</p>
+          {empty ? (
+            <div className="space-y-1">
+              <p className="text-2xl font-semibold tracking-tight text-muted-foreground">-</p>
+              <p className="text-xs font-medium text-brand-blue">{kpi.emptyLabel} →</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <p className="text-2xl font-semibold tracking-tight font-mono tabular-nums">
+                {kpi.value}
+              </p>
+              {kpi.delta ? <DeltaBadge delta={kpi.delta} periodNoun={periodNoun} /> : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </Link>
   );
 }

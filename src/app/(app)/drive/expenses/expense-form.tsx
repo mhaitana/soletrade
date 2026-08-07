@@ -43,11 +43,13 @@ export function ExpenseForm({
   expense,
   vehicles,
   defaultVehicleId,
+  defaultCurrency,
 }: {
   mode: "create" | "edit";
   expense?: ExpenseRow;
   vehicles: VehicleRow[];
   defaultVehicleId?: string | null;
+  defaultCurrency: string;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -82,7 +84,7 @@ export function ExpenseForm({
       vehicleId,
       type,
       amountCents: dollarsToCents(amountDollars),
-      currency: "AUD" as string,
+      currency: expense?.currency ?? defaultCurrency,
       date: new Date(date),
       description: description.trim(),
       odometerKm: odometerKm ? Number(odometerKm) : null,
@@ -153,7 +155,7 @@ export function ExpenseForm({
           {fieldErr("type") ? <p className="text-sm text-destructive">{fieldErr("type")}</p> : null}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="amountDollars">Amount</Label>
+          <Label htmlFor="amountDollars">Amount ({expense?.currency ?? defaultCurrency})</Label>
           <Input
             id="amountDollars"
             name="amountDollars"

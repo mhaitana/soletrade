@@ -30,6 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }))}
       activeWorkspaceId={ctx.workspaceId}
       installedModules={installedModules as ModuleKey[]}
+      role={ctx.role}
       userEmail={ctx.user.email}
       notificationCount={notificationCount}
     >

@@ -34,7 +34,7 @@ export default async function EditEarningPage({ params }: { params: Promise<{ id
         <h1 className="text-2xl font-semibold tracking-tight">Edit earning</h1>
         <p className="text-sm text-muted-foreground">Update the details of this earning.</p>
       </div>
-      <DriveEarningForm mode="edit" earning={data.earning} />
+      <DriveEarningForm mode="edit" earning={data.earning} defaultCurrency={data.defaultCurrency} />
       <div className="border-t border-border pt-4">
         <DriveDeleteButton kind="earning" id={data.earning.id} />
       </div>

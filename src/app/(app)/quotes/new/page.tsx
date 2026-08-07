@@ -22,7 +22,7 @@ export default async function NewQuotePage() {
           Drafts can be edited until they are sent to the customer.
         </p>
       </div>
-      <QuoteForm mode="create" customers={data.customers} />
+      <QuoteForm mode="create" customers={data.customers} defaultCurrency={data.defaultCurrency} />
     </div>
   );
 }

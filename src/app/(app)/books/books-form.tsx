@@ -53,10 +53,12 @@ export function BookForm({
   mode,
   tx,
   customers,
+  defaultCurrency,
 }: {
   mode: "create" | "edit";
   tx?: TransactionRow;
   customers: CustomerRow[];
+  defaultCurrency: string;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -107,7 +109,7 @@ export function BookForm({
     const input = {
       type,
       amountCents: dollarsToCents(amountDollars),
-      currency: "AUD" as string,
+      currency: tx?.currency ?? defaultCurrency,
       date: new Date(date),
       description: description.trim(),
       category,
@@ -151,7 +153,7 @@ export function BookForm({
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="amountDollars">Amount</Label>
+          <Label htmlFor="amountDollars">Amount ({tx?.currency ?? defaultCurrency})</Label>
           <Input
             id="amountDollars"
             name="amountDollars"

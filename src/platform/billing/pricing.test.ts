@@ -161,6 +161,7 @@ describe("pricing engine - anchor/add-on model", () => {
   describe("formatCents", () => {
     it("formats whole + fractional cents with a dollar sign", () => {
       expect(formatCents(2250)).toBe("$22.50");
+      expect(formatCents(2_145_000)).toBe("$21,450.00");
       expect(formatCents(900)).toBe("$9.00");
       expect(formatCents(350)).toBe("$3.50");
       expect(formatCents(0)).toBe("$0.00");
@@ -168,6 +169,12 @@ describe("pricing engine - anchor/add-on model", () => {
     it("prefixes a minus for negative amounts", () => {
       expect(formatCents(-350)).toBe("-$3.50");
       expect(formatCents(-5)).toBe("-$0.05");
+    });
+    it("uses the symbol for the selected workspace currency", () => {
+      expect(formatCents(2250, "EUR")).toBe("€22.50");
+      expect(formatCents(2250, "GBP")).toBe("£22.50");
+      expect(formatCents(2250, "NZD")).toBe("$22.50");
+      expect(formatCents(2250, "JPY")).toBe("JPY 22.50");
     });
   });
 });
