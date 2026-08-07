@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 /**
  * Email-link / OAuth callback. Supabase redirects here with a `code` (PKCE) or a
  * `next` path. We exchange the code for a session, mirror the auth user into
- * public.users, then redirect to a safe `next` or /onboarding.
+ * public.users, then redirect to a safe `next` or /dashboard. The app layout's
+ * workspace guard sends genuinely new users with no memberships to /onboarding.
  *
  * This route lives under `src/app/auth/` (NOT the `(auth)` route group), so it
  * gets no layout - correct for a pure redirect endpoint.
@@ -51,5 +52,5 @@ export async function GET(request: Request): Promise<Response> {
     redirect("/admin");
   }
 
-  redirect("/onboarding");
+  redirect("/dashboard");
 }

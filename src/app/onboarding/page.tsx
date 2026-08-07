@@ -18,10 +18,11 @@ export default async function OnboardingPage() {
   if (adminCtx && adminCtx.roles.includes("super_admin")) {
     redirect("/admin");
   }
-  // Brand-new users land here with zero workspaces (via /auth/callback +
-  // requireWorkspaceContext); existing users arrive via the WorkspaceSwitcher's
-  // "Create workspace" link to add another. We no longer redirect the latter -
-  // the page branches its copy instead so both audiences are served.
+  // Brand-new users land here with zero workspaces (via /auth/callback →
+  // /dashboard → requireWorkspaceContext); existing users arrive via the
+  // WorkspaceSwitcher's "Create workspace" link to add another. We no longer
+  // redirect the latter - the page branches its copy instead so both audiences
+  // are served.
   const workspaces = await listUserWorkspaces(user.id);
   const hasWorkspace = workspaces.length > 0;
 
