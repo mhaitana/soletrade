@@ -82,8 +82,8 @@ export async function createExpenseAction(input: unknown): Promise<CreateExpense
   try {
     const id = await createExpense(ctx.workspaceId, expenseInput, ctx.user.id);
     revalidatePath("/drive/expenses");
-    // Expenses auto-record a Books "vehicle_expense" transaction via the event bus
-    // (registerBooksIntegration). Invalidate /books + /dashboard so soft-nav shows it.
+    // The database transaction has already synchronized the Books mirror; invalidate the
+    // cross-module views so soft navigation shows it immediately.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true, expenseId: id };

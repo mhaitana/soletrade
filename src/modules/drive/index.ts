@@ -953,6 +953,7 @@ export async function createExpense(
       currency,
       date: input.date,
       description: input.description.trim(),
+      receiptFileId: input.receiptFileId ?? null,
     },
   });
   await writeAudit({
@@ -1003,7 +1004,7 @@ export async function updateExpense(
       .update(set)
       .eq("id", expenseId)
       .eq("workspace_id", workspaceId)
-      .select("id, vehicle_id, type, amount_cents, currency, date, description"),
+      .select("id, vehicle_id, type, amount_cents, currency, date, description, receipt_file_id"),
   );
   const row = rows[0];
   if (!row) throw new Error("Vehicle expense not found.");
@@ -1021,6 +1022,7 @@ export async function updateExpense(
       currency: row.currency,
       date: parsePgTimestamp(row.date),
       description: row.description,
+      receiptFileId: row.receipt_file_id,
     },
   });
   await writeAudit({
@@ -1207,12 +1209,9 @@ export async function upsertDriveSettings(
 
 /**
  * Re-publish `DriveEarningsLogged` / `VehicleExpenseLogged` / `MileageLogged` for every
- * existing Drive row in the workspace. The Books subscribers' check-then-insert makes this
- * idempotent - already-mirrored rows are skipped, missing ones are created. Used when Books
- * is enabled for a workspace that already has Drive entries (the create-time subscribers
- * no-op'd while Books was disabled). Orchestrated from `src/instrumentation.ts` on the
- * `ModuleEnabled` event so the Books module never imports Drive directly (cross-module
- * coupling goes via the bus).
+ * existing Drive row in the workspace. This remains idempotent for manual repair and rollout
+ * compatibility. Normal create/update/delete sync and Books-enable backfill now run atomically in
+ * Postgres, so application startup no longer orchestrates this replay.
  */
 export async function replayDriveEventsForBooks(
   workspaceId: WorkspaceId,
@@ -1257,6 +1256,7 @@ export async function replayDriveEventsForBooks(
         currency: x.currency,
         date: x.date,
         description: x.description,
+        receiptFileId: x.receiptFileId,
       },
     });
   }

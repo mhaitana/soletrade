@@ -377,5 +377,11 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     expect(await findTransactionIdBySource(ws2!, { sourceEarningId: earningId })).toBeNull();
     // No source keys supplied → null.
     expect(await findTransactionIdBySource(ws1!, {})).toBeNull();
+
+    await expect(updateTransaction(ws1!, id, { amountCents: 99000 }, actor)).rejects.toThrow(
+      "Drive",
+    );
+    await expect(deleteTransaction(ws1!, id, actor)).rejects.toThrow("Drive");
+    expect((await getTransaction(ws1!, id))!.amountCents).toBe(15000);
   });
 });

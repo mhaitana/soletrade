@@ -18,9 +18,9 @@ test.describe("dashboard smoke", () => {
 
     // Four headline KPI cards are rendered.
     await expect(ownerPage.getByText("Outstanding invoices").first()).toBeVisible();
-    await expect(ownerPage.getByText("Revenue this period").first()).toBeVisible();
-    await expect(ownerPage.getByText("Cash position").first()).toBeVisible();
-    await expect(ownerPage.getByText("Pending quotes").first()).toBeVisible();
+    await expect(ownerPage.getByText("Total income").first()).toBeVisible();
+    await expect(ownerPage.getByText("Net cash flow").first()).toBeVisible();
+    await expect(ownerPage.getByText("Ready to invoice").first()).toBeVisible();
 
     await switchWorkspace(ownerPage, ACTIVE_WORKSPACE);
     const switcher = ownerPage.getByRole("button", { name: /switch workspace/i });

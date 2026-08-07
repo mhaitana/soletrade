@@ -17,6 +17,7 @@ import { listTransactions, summarizeTransactions } from "@/modules/books";
 import { listEarnings, listTrips, summarizeDrive } from "@/modules/drive";
 import { listQuotes, summarizeQuotes } from "@/modules/quotes";
 import { listExtractions } from "@/modules/books/receipt-extraction";
+import { consolidateBusinessIncome, type PeriodIncome } from "./business-overview";
 
 /**
  * Cross-module dashboard loader (Phase 9). This is the **composition root** - it MAY import all
@@ -33,10 +34,10 @@ import { listExtractions } from "@/modules/books/receipt-extraction";
  * so deltas are `null`. Current-state snapshots (outstanding invoices, overdue/draft counts,
  * pending-conversion quote value) have no delta - they're "right now".
  *
- * **KPI deltas** are computed only for the two period-bound headline KPIs (Books net = "Net
- * cash flow", Invoices paid = "Revenue this period"); the other two KPIs (Outstanding, Ready
- * to invoice) are snapshots. Drive has no headline KPI in the 4-card row (per the spec), so its
- * previous period isn't fetched - its summary card shows current-period metrics + sparkline.
+ * **KPI deltas** are computed for Books net and business-wide total income. Books is the
+ * canonical income source when installed because it contains the Invoice/Drive mirrors; without
+ * Books, paid invoices and Drive earnings are combined. Outstanding and Ready to invoice remain
+ * current-state snapshots.
  */
 
 const DASHBOARD_DEFAULT_PERIOD: Period = "month";
@@ -103,7 +104,7 @@ async function invoicesCards(
   currency: string,
 ): Promise<{
   outstanding: KpiCardData;
-  revenue: KpiCardData;
+  income: PeriodIncome;
   card: ModuleCardData;
   signals: { overdueCount: number; overdueCents: number; draftCount: number };
 }> {
@@ -128,14 +129,6 @@ async function invoicesCards(
     href: "/invoices",
     emptyLabel: "No outstanding invoices",
   };
-  const revenue: KpiCardData = {
-    id: "revenue",
-    label: "Revenue this period",
-    value: cur.paidCents > 0 ? formatCents(cur.paidCents, currency) : null,
-    delta: prev ? percentDelta(cur.paidCents, prev.paidCents) : null,
-    href: "/invoices",
-    emptyLabel: "No paid invoices yet",
-  };
   const card: ModuleCardData = {
     key: "invoices",
     href: "/invoices",
@@ -159,7 +152,7 @@ async function invoicesCards(
   };
   return {
     outstanding,
-    revenue,
+    income: { currentCents: cur.paidCents, previousCents: prev?.paidCents ?? null },
     card,
     signals: {
       overdueCount: cur.overdueCount,
@@ -177,7 +170,7 @@ async function booksCards(
   currentRange: { start: Date | null; end: Date },
   previousRange: { start: Date; end: Date } | null,
   currency: string,
-): Promise<{ cash: KpiCardData; card: ModuleCardData }> {
+): Promise<{ cash: KpiCardData; income: PeriodIncome; card: ModuleCardData }> {
   // listTransactions accepts dateFrom/dateTo (cap 2000) - fetch current + previous separately.
   const [curRows, prevRows] = await Promise.all([
     listTransactions(workspaceId, {
@@ -233,18 +226,20 @@ async function booksCards(
           }
         : null,
   };
-  return { cash, card };
+  return {
+    cash,
+    income: { currentCents: cur.incomeCents, previousCents: prev?.incomeCents ?? null },
+    card,
+  };
 }
 
 async function driveCard(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
-  booksEnabled: boolean,
+  previousRange: { start: Date; end: Date } | null,
   currency: string,
-): Promise<{ card: ModuleCardData }> {
-  // Drive has no headline KPI in the 4-card row, so no previous-period fetch - current period
-  // only (earnings + trips in parallel).
-  const [earn, trips] = await Promise.all([
+): Promise<{ income: PeriodIncome; card: ModuleCardData }> {
+  const [earn, trips, previousEarnings] = await Promise.all([
     listEarnings(workspaceId, {
       dateFrom: currentRange.start ?? undefined,
       dateTo: currentRange.end,
@@ -255,47 +250,49 @@ async function driveCard(
       dateTo: currentRange.end,
       limit: 2000,
     }),
+    previousRange
+      ? listEarnings(workspaceId, {
+          dateFrom: previousRange.start,
+          dateTo: previousRange.end,
+          limit: 2000,
+        })
+      : Promise.resolve([]),
   ]);
   const cur = summarizeDrive(
     earn.map((e) => ({ amountCents: e.amountCents, date: e.date, platform: e.platform })),
     trips.map((t) => ({ distanceMeters: t.distanceMeters, date: t.date, platform: t.platform })),
   );
 
-  // When Books is installed it is the single source of truth for dollar earnings/expenses -
-  // the mirrored gig income already appears in the Books card. So the Drive card shows only
-  // operational (non-dollar) metrics: distance + trips, with a distance trend. Drive-only
-  // workspaces (no Books) still see dollar earnings here, since there's no Books to defer to.
   const card: ModuleCardData = {
     key: "drive",
     href: "/drive",
     name: MODULES.drive.name,
-    metrics: booksEnabled
-      ? [
-          { label: "Mileage", value: formatKm(cur.totalDistanceMeters) },
-          { label: "Trips", value: String(cur.tripsCount) },
-        ]
-      : [
-          { label: "Earnings", value: formatCents(cur.totalEarningsCents, currency) },
-          { label: "Mileage", value: formatKm(cur.totalDistanceMeters) },
-          { label: "Trips", value: String(cur.tripsCount) },
-        ],
+    metrics: [
+      { label: "Earnings", value: formatCents(cur.totalEarningsCents, currency) },
+      { label: "Mileage", value: formatKm(cur.totalDistanceMeters) },
+      { label: "Trips", value: String(cur.tripsCount) },
+    ],
     sparkline:
       cur.monthly.length > 0
         ? {
-            ariaLabel: booksEnabled ? "Monthly distance trend" : "Monthly gig earnings trend",
-            points: cur.monthly.map((m) =>
-              booksEnabled
-                ? { month: m.month, value: m.distanceMeters, label: formatKm(m.distanceMeters) }
-                : {
-                    month: m.month,
-                    value: m.earningsCents,
-                    label: formatCents(m.earningsCents, currency),
-                  },
-            ),
+            ariaLabel: "Monthly gig earnings trend",
+            points: cur.monthly.map((m) => ({
+              month: m.month,
+              value: m.earningsCents,
+              label: formatCents(m.earningsCents, currency),
+            })),
           }
         : null,
   };
-  return { card };
+  return {
+    income: {
+      currentCents: cur.totalEarningsCents,
+      previousCents: previousRange
+        ? previousEarnings.reduce((sum, earning) => sum + earning.amountCents, 0)
+        : null,
+    },
+    card,
+  };
 }
 
 async function quotesCards(
@@ -385,7 +382,7 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
   const [invoices, books, drive, quotes, pendingReceipts, activity] = await Promise.all([
     has("invoices") ? invoicesCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("books") ? booksCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
-    has("drive") ? driveCard(ctx.workspaceId, currentRange, has("books"), currency) : null,
+    has("drive") ? driveCard(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("quotes") ? quotesCards(ctx.workspaceId, currentRange, currency) : null,
     has("books") && authorize(ctx.role, "manage:books").ok
       ? listExtractions(ctx.workspaceId, { status: "pending", limit: 100 })
@@ -403,12 +400,39 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
     emptyLabel: enableLabel,
   });
 
+  const totalIncome = consolidateBusinessIncome({
+    books: books?.income,
+    invoices: invoices?.income,
+    drive: drive?.income,
+  });
+  const incomeHref = books
+    ? "/books"
+    : invoices
+      ? "/invoices"
+      : drive
+        ? "/drive"
+        : "/settings/modules";
+  const incomeKpi: KpiCardData = totalIncome.source
+    ? {
+        id: "income",
+        label: "Total income",
+        value:
+          totalIncome.currentCents > 0 ? formatCents(totalIncome.currentCents, currency) : null,
+        delta:
+          totalIncome.previousCents !== null
+            ? percentDelta(totalIncome.currentCents, totalIncome.previousCents)
+            : null,
+        href: incomeHref,
+        emptyLabel: "No income recorded yet",
+      }
+    : enableCard("income", "Total income", "Enable Books, Invoices, or Drive");
+
   const kpis: KpiCardData[] = [
     books ? books.cash : enableCard("cash", "Net cash flow", "Enable Books"),
     invoices
       ? invoices.outstanding
       : enableCard("outstanding", "Outstanding invoices", "Enable Invoices"),
-    invoices ? invoices.revenue : enableCard("revenue", "Revenue this period", "Enable Invoices"),
+    incomeKpi,
     quotes ? quotes.pending : enableCard("pending-quotes", "Ready to invoice", "Enable Quotes"),
   ];
 

@@ -48,6 +48,11 @@ export default async function TransactionDetailPage({
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{tx.description}</h1>
             <Badge variant={badge.variant}>{badge.label}</Badge>
+            {data.source ? (
+              <Badge asChild variant="outline">
+                <Link href={data.source.href}>Synced from {data.source.label}</Link>
+              </Badge>
+            ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
             {tx.customerName ? (
@@ -61,6 +66,19 @@ export default async function TransactionDetailPage({
         </div>
         {data.canManage ? <BookDetailActions txId={tx.id} /> : null}
       </div>
+
+      {data.source ? (
+        <div className="rounded-md border border-brand-blue/20 bg-brand-blue/5 p-4 text-sm">
+          This entry stays in sync with its {data.source.label.toLowerCase()}. To change it, edit
+          the record in {data.source.module === "invoices" ? "Invoices" : "Drive"}.
+          <Link
+            href={data.source.href}
+            className="ml-1 font-medium text-brand-blue hover:underline"
+          >
+            Open source
+          </Link>
+        </div>
+      ) : null}
 
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>

@@ -3,7 +3,7 @@
  * unit-testable in isolation, mirroring `@/modules/books/calc.ts` + `@/modules/drive/calc.ts`
  * purity. The cross-module dashboard loader fetches a workspace's invoices (capped at 200 by
  * `listInvoices`) and runs `summarizeInvoices` for the current + previous period to produce
- * the dashboard's "Outstanding / Revenue this period / overdue / draft" KPIs + a paid-by-month
+ * the dashboard's outstanding/overdue/draft metrics and business-income input + a paid-by-month
  * sparkline.
  *
  * Money is integer cents throughout.
@@ -14,7 +14,7 @@
  * `sentCount`, and `monthly` are **period-bound** - a row counts if its relevant event date
  * (`paidAt` for paid, `sentAt` for sent) falls in `[range.start, range.end]`. `range.start ==
  * null` means no lower bound (the "all" period). The loader runs this twice (current + previous
- * range) for the Revenue delta; the snapshots come from the current call only.
+ * range) for the income delta; the snapshots come from the current call only.
  */
 
 import type { InvoiceStatus } from "@/server/db/enums";

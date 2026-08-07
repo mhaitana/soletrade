@@ -112,6 +112,74 @@ export interface TransactionRow {
   updatedAt: Date;
 }
 
+export interface TransactionSource {
+  module: "invoices" | "drive";
+  label: string;
+  href: string;
+}
+
+/**
+ * Describe the canonical source of a mirrored transaction. Source-linked rows are read-only
+ * in Books: changing the invoice or Drive record updates the mirror atomically.
+ */
+export function transactionSource(
+  transaction: Pick<
+    TransactionRow,
+    "sourceInvoiceId" | "sourceEarningId" | "sourceExpenseId" | "sourceTripId"
+  >,
+): TransactionSource | null {
+  if (transaction.sourceInvoiceId) {
+    return {
+      module: "invoices",
+      label: "Invoice",
+      href: `/invoices/${transaction.sourceInvoiceId}`,
+    };
+  }
+  if (transaction.sourceEarningId) {
+    return { module: "drive", label: "Drive earning", href: "/drive" };
+  }
+  if (transaction.sourceExpenseId) {
+    return { module: "drive", label: "Drive expense", href: "/drive/expenses" };
+  }
+  if (transaction.sourceTripId) {
+    return { module: "drive", label: "Drive mileage", href: "/drive" };
+  }
+  return null;
+}
+
+type SourceSyncOptions = { allowSourceSync?: boolean };
+
+async function assertTransactionIsEditable(
+  workspaceId: WorkspaceId,
+  txId: BookTransactionId,
+  opts?: SourceSyncOptions,
+  missingIsNoOp = false,
+): Promise<boolean> {
+  const supabase = getDataClient();
+  const row = await unwrapMaybe(
+    supabase
+      .from("book_transactions")
+      .select("source_invoice_id, source_earning_id, source_expense_id, source_trip_id")
+      .eq("id", txId)
+      .eq("workspace_id", workspaceId)
+      .limit(1)
+      .maybeSingle(),
+  );
+  if (!row) {
+    if (missingIsNoOp) return false;
+    throw new Error("Transaction not found.");
+  }
+  if (
+    !opts?.allowSourceSync &&
+    (row.source_invoice_id || row.source_earning_id || row.source_expense_id || row.source_trip_id)
+  ) {
+    throw new Error(
+      "This transaction is synced from another module. Edit the invoice or Drive record instead.",
+    );
+  }
+  return true;
+}
+
 /**
  * Columns selected from `book_transactions`, with the `customers` parent embedded via a
  * LEFT join (`!left`) so transactions with no customer still return with `customers: null`
@@ -293,7 +361,9 @@ export async function updateTransaction(
   txId: BookTransactionId,
   patch: TransactionPatch,
   actorId?: UserId,
+  opts?: SourceSyncOptions,
 ): Promise<void> {
+  await assertTransactionIsEditable(workspaceId, txId, opts);
   if (patch.type !== undefined && patch.category !== undefined) {
     assertCategoryForType(patch.type, patch.category);
   } else if (patch.type !== undefined) {
@@ -383,7 +453,9 @@ export async function deleteTransaction(
   workspaceId: WorkspaceId,
   txId: BookTransactionId,
   actorId?: UserId,
+  opts?: SourceSyncOptions,
 ): Promise<boolean> {
+  if (!(await assertTransactionIsEditable(workspaceId, txId, opts, true))) return false;
   const supabase = getDataClient();
   const rows = await unwrap(
     supabase

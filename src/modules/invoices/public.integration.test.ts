@@ -8,6 +8,7 @@ import {
   createInvoice,
   getInvoice,
   getInvoiceByPublicToken,
+  markInvoicePaid,
   markInvoicePaidByStripe,
   markInvoiceViewed,
   markOverdueInvoices,
@@ -231,6 +232,23 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
     expect(after!.status).toBe("paid");
     // token + public view still resolve after the overdue→paid transition
     expect(await getInvoiceByPublicToken(token)).not.toBeNull();
+  });
+
+  it("manually marks a viewed invoice as paid", async () => {
+    const { id, token } = await createSentInvoice();
+    await markInvoiceViewed(token);
+
+    expect(await markInvoicePaid(ws!, id, actor)).toBe(true);
+    expect((await getInvoice(ws!, id))!.status).toBe("paid");
+  });
+
+  it("manually marks an overdue invoice as paid", async () => {
+    const { id } = await createSentInvoice({ dueDate: new Date("2020-01-01") });
+    await markOverdueInvoices(new Date("2026-06-01"));
+    expect((await getInvoice(ws!, id))!.status).toBe("overdue");
+
+    expect(await markInvoicePaid(ws!, id, actor)).toBe(true);
+    expect((await getInvoice(ws!, id))!.status).toBe("paid");
   });
 
   it("markOverdueInvoices leaves a not-yet-due sent invoice alone", async () => {

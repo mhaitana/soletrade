@@ -136,7 +136,7 @@ export default async function DashboardPage({
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">{data.workspaceName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Money, work, and follow-ups - {period === "all" ? "all time" : `this ${period}`}.
+            Income, cash, work, and follow-ups - {period === "all" ? "all time" : `this ${period}`}.
           </p>
         </div>
         {/* Period selector - SegmentedControl; active period highlighted. */}

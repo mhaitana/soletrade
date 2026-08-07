@@ -55,6 +55,8 @@ export async function upsertDriveSettingsAction(
     );
     revalidatePath("/drive/settings");
     revalidatePath("/drive");
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return {

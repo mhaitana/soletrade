@@ -15,15 +15,16 @@ import {
   type DriveEarningId,
   type DriveExpenseId,
   type DriveTripId,
+  type FileId,
   type InvoiceId,
   type UserId,
   type WorkspaceId,
 } from "@/shared/types/ids";
 
 /**
- * Books cross-module integration. Subscribes to cross-module events on the bus and
- * auto-records a Books transaction for each - modules communicate via the event bus, never
- * direct imports (brief §9). This module imports `@/modules/books` (its own module),
+ * Legacy Books event compatibility integration. When explicitly registered it subscribes to
+ * cross-module events and repairs the matching Books transaction without direct module imports.
+ * This module imports `@/modules/books` (its own module),
  * `@/platform/*`, `@/server/*`, and `@/shared/*` only. It does **NOT** import `@/modules/invoices`
  * or `@/modules/drive` - the entire contract arrives via `event.metadata` + `event.entityId`.
  *
@@ -43,16 +44,14 @@ import {
  *    for the computed deduction (distance × workspace mileage rate), linked via `sourceTripId`.
  *    **`MileageUpdated`** / **`MileageDeleted`** reconcile the mirror.
  *
- * Wired once at startup from `src/instrumentation.ts` (fire-and-forget, like
- * `registerNotifications`). Best-effort: the event bus isolates a failing handler from the
- * publisher, and each create/update/delete is wrapped so a thrown error logs + swallows (a
- * failed auto-record must not break the source flow - invoice payment or Drive mutation).
+ * Legacy compatibility bridge for workers/tests that explicitly register it. Production
+ * financial mirroring is now handled transactionally by database triggers, so a process restart
+ * cannot lose an invoice payment or Drive mutation. Handlers remain idempotent during rollout.
  *
  * Module gate: if Books isn't installed for the workspace, every event is a no-op (no orphan
- * rows in a module that isn't there). Entries logged while Books is disabled are backfilled
- * when Books is later enabled - `replayDriveEventsForBooks` (in `@/modules/drive`) re-publishes
- * the `*Logged` events for existing Drive rows, wired from `src/instrumentation.ts` on
- * `ModuleEnabled`.
+ * rows in a module that isn't there). The database reconciliation trigger backfills Invoice and
+ * Drive history when Books is enabled; `replayDriveEventsForBooks` remains as a safe manual
+ * compatibility repair.
  */
 
 /** Defensive parse of the `InvoicePaid` event metadata (the Books-side contract). */
@@ -60,14 +59,17 @@ function readInvoicePaidMeta(event: BusEvent): {
   invoiceId: InvoiceId;
   number: string;
   totalCents: number;
+  taxCents: number;
   currency: string;
   customerId: CustomerId | null;
+  paidAt: Date;
 } | null {
   const m = event.metadata;
   const entityId = typeof event.entityId === "string" ? event.entityId : null;
   if (!m || !entityId) return null;
   const number = typeof m.number === "string" ? m.number : null;
   const totalCents = typeof m.totalCents === "number" && m.totalCents > 0 ? m.totalCents : null;
+  const taxCents = typeof m.taxCents === "number" && m.taxCents >= 0 ? m.taxCents : 0;
   const currency = typeof m.currency === "string" && m.currency.length === 3 ? m.currency : null;
   if (!number || totalCents === null || !currency) return null;
   const customerId = typeof m.customerId === "string" ? branded<"CustomerId">(m.customerId) : null;
@@ -75,8 +77,10 @@ function readInvoicePaidMeta(event: BusEvent): {
     invoiceId: branded<"InvoiceId">(entityId),
     number,
     totalCents,
+    taxCents,
     currency,
     customerId,
+    paidAt: m.paidAt instanceof Date ? m.paidAt : new Date(),
   };
 }
 
@@ -110,8 +114,9 @@ async function onInvoicePaid(event: BusEvent): Promise<void> {
       {
         type: "income",
         amountCents: meta.totalCents,
+        gstCents: meta.taxCents,
         currency: meta.currency,
-        date: new Date(),
+        date: meta.paidAt,
         description: `Invoice ${meta.number}`,
         category: "invoice",
         customerId,
@@ -204,6 +209,7 @@ function readVehicleExpenseMeta(event: BusEvent): {
   currency: string;
   date: Date;
   description: string;
+  receiptFileId: FileId | null;
 } | null {
   const m = event.metadata;
   const entityId = typeof event.entityId === "string" ? event.entityId : null;
@@ -219,6 +225,7 @@ function readVehicleExpenseMeta(event: BusEvent): {
     currency,
     date,
     description,
+    receiptFileId: typeof m.receiptFileId === "string" ? branded<"FileId">(m.receiptFileId) : null,
   };
 }
 
@@ -253,6 +260,7 @@ async function onVehicleExpenseLogged(event: BusEvent): Promise<void> {
         customerId: null,
         notes: "Auto-recorded from drive vehicle expense.",
         sourceExpenseId: meta.expenseId,
+        receiptFileId: meta.receiptFileId,
       },
       event.actorUserId as UserId | undefined,
     );
@@ -296,6 +304,7 @@ async function onDriveEarningUpdated(event: BusEvent): Promise<void> {
         description: `Drive earnings · ${platformLabel(meta.platform) ?? meta.platform}`,
       },
       event.actorUserId as UserId | undefined,
+      { allowSourceSync: true },
     );
   } catch (err) {
     console.error("[books] sync from drive earning update failed:", meta.earningId, err);
@@ -314,7 +323,9 @@ async function onDriveEarningDeleted(event: BusEvent): Promise<void> {
   });
   if (!txId) return;
   try {
-    await deleteTransaction(workspaceId, txId, event.actorUserId as UserId | undefined);
+    await deleteTransaction(workspaceId, txId, event.actorUserId as UserId | undefined, {
+      allowSourceSync: true,
+    });
   } catch (err) {
     console.error("[books] sync from drive earning delete failed:", id, err);
   }
@@ -341,8 +352,10 @@ async function onVehicleExpenseUpdated(event: BusEvent): Promise<void> {
         currency: meta.currency,
         date: meta.date,
         description: meta.description || "Vehicle expense",
+        receiptFileId: meta.receiptFileId,
       },
       event.actorUserId as UserId | undefined,
+      { allowSourceSync: true },
     );
   } catch (err) {
     console.error("[books] sync from drive expense update failed:", meta.expenseId, err);
@@ -361,7 +374,9 @@ async function onVehicleExpenseDeleted(event: BusEvent): Promise<void> {
   });
   if (!txId) return;
   try {
-    await deleteTransaction(workspaceId, txId, event.actorUserId as UserId | undefined);
+    await deleteTransaction(workspaceId, txId, event.actorUserId as UserId | undefined, {
+      allowSourceSync: true,
+    });
   } catch (err) {
     console.error("[books] sync from drive expense delete failed:", id, err);
   }
@@ -456,6 +471,7 @@ async function onMileageUpdated(event: BusEvent): Promise<void> {
         description: `Drive mileage · ${platformLabel(meta.platform) ?? meta.platform}`,
       },
       event.actorUserId as UserId | undefined,
+      { allowSourceSync: true },
     );
   } catch (err) {
     console.error("[books] sync from drive mileage update failed:", meta.tripId, err);
@@ -474,7 +490,9 @@ async function onMileageDeleted(event: BusEvent): Promise<void> {
   });
   if (!txId) return;
   try {
-    await deleteTransaction(workspaceId, txId, event.actorUserId as UserId | undefined);
+    await deleteTransaction(workspaceId, txId, event.actorUserId as UserId | undefined, {
+      allowSourceSync: true,
+    });
   } catch (err) {
     console.error("[books] sync from drive mileage delete failed:", id, err);
   }

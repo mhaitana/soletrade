@@ -586,13 +586,13 @@ async function transition(
 async function fetchInvoiceEmailContext(
   workspaceId: WorkspaceId,
   invoiceId: InvoiceId,
-): Promise<InvoiceEmailMeta | null> {
+): Promise<(InvoiceEmailMeta & { taxCents: number; paidAt: Date | null }) | null> {
   const supabase = getDataClient();
   const row = await unwrapMaybe(
     supabase
       .from("invoices")
       .select(
-        "number, total_cents, currency, public_token, due_date, customer_id, customers!left ( email, name )",
+        "number, total_cents, tax_cents, currency, public_token, due_date, paid_at, customer_id, customers!left ( email, name )",
       )
       .eq("id", invoiceId)
       .eq("workspace_id", workspaceId)
@@ -603,9 +603,11 @@ async function fetchInvoiceEmailContext(
   return {
     number: row.number,
     totalCents: row.total_cents,
+    taxCents: row.tax_cents,
     currency: row.currency,
     publicToken: row.public_token,
     dueDate: row.due_date ? parsePgTimestamp(row.due_date) : null,
+    paidAt: row.paid_at ? parsePgTimestamp(row.paid_at) : null,
     customerId: row.customer_id ? branded<"CustomerId">(row.customer_id) : null,
     customerEmail: row.customers?.email ?? null,
     customerName: row.customers?.name ?? null,
@@ -650,17 +652,19 @@ export async function sendInvoice(
 }
 
 /**
- * Mark a sent invoice paid (manual / offline payment - no Stripe in 5a): `sent → paid`,
- * sets `paidAt`. Returns false if it wasn't sent (or not found) - idempotent via the
- * atomic `transition`. 5b augments this with the Stripe webhook path (idempotent on
- * payment intent id).
+ * Mark an outstanding invoice paid (manual / offline payment):
+ * `sent|viewed|overdue → paid`, sets `paidAt`. Returns false if it is not outstanding (or
+ * not found) - idempotent via the atomic `transition`. This intentionally matches the states
+ * offered by the invoice detail UI and the Stripe payment path.
  */
 export async function markInvoicePaid(
   workspaceId: WorkspaceId,
   invoiceId: InvoiceId,
   actorId: UserId,
 ): Promise<boolean> {
-  const result = await transition(workspaceId, invoiceId, "paid", ["sent"], { paidAt: new Date() });
+  const result = await transition(workspaceId, invoiceId, "paid", ["sent", "viewed", "overdue"], {
+    paidAt: new Date(),
+  });
   if (!result) return false;
   const ctx = await fetchInvoiceEmailContext(workspaceId, invoiceId);
   await publishEvent({
@@ -682,14 +686,20 @@ export async function markInvoicePaid(
   return true;
 }
 
-/** Void a draft or sent invoice: `draft|sent → void`. Returns false if not in an allowed
- *  state or not found - idempotent via the atomic `transition`. */
+/** Void an unpaid invoice: `draft|sent|viewed|overdue → void`. Returns false if not in an
+ * allowed state or not found - idempotent via the atomic `transition`. */
 export async function voidInvoice(
   workspaceId: WorkspaceId,
   invoiceId: InvoiceId,
   actorId: UserId,
 ): Promise<boolean> {
-  const result = await transition(workspaceId, invoiceId, "void", ["draft", "sent"], {});
+  const result = await transition(
+    workspaceId,
+    invoiceId,
+    "void",
+    ["draft", "sent", "viewed", "overdue"],
+    {},
+  );
   if (!result) return false;
   await publishEvent({
     type: "InvoiceVoided",

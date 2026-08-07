@@ -19,6 +19,7 @@ const summarizeQuotesMock = vi.fn();
 const listTransactionsMock = vi.fn();
 const summarizeTransactionsMock = vi.fn();
 const listEarningsMock = vi.fn();
+const summarizeDriveMock = vi.fn();
 const listCustomersMock = vi.fn();
 const listActivityMock = vi.fn();
 // Write-tool mocks (Phase 11d).
@@ -72,6 +73,7 @@ vi.mock("@/modules/books", () => ({
 }));
 vi.mock("@/modules/drive", () => ({
   listEarnings: (...a: unknown[]) => listEarningsMock(...a),
+  summarizeDrive: (...a: unknown[]) => summarizeDriveMock(...a),
   createEarning: (...a: unknown[]) => createEarningMock(...a),
   createTrip: (...a: unknown[]) => createTripMock(...a),
   createExpense: (...a: unknown[]) => createExpenseMock(...a),
@@ -315,6 +317,7 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     expect(overview.kpis.cashCents).toBe(7500);
     expect(overview.kpis.outstandingCents).toBe(5000);
     expect(overview.kpis.overdueInvoiceCount).toBe(2);
+    expect(overview.kpis.incomeCents).toBe(10000);
     expect(overview.kpis.revenueCents).toBe(3000);
     // Quotes module not installed → pendingQuotesCents is null (not a fabricated 0).
     expect(overview.kpis.pendingQuotesCents).toBeNull();

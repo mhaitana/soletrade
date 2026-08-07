@@ -129,11 +129,13 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
     expect(row!.type).toBe("income");
     expect(row!.category).toBe("invoice");
     expect(row!.amountCents).toBe(inv!.totalCents);
+    expect(row!.gstCents).toBe(inv!.taxCents);
     expect(row!.currency).toBe(inv!.currency);
     expect(row!.customerId).toBe(ws1Customer);
     expect(row!.sourceInvoiceId).toBe(invoiceId);
     expect(row!.description).toBe(`Invoice ${inv!.number}`);
     expect(row!.notes).toBe(`Auto-recorded from invoice ${inv!.number}.`);
+    expect(row!.date.toISOString()).toBe(inv!.paidAt!.toISOString());
   });
 
   it("is idempotent - a replayed InvoicePaid does not duplicate the income row", async () => {
@@ -170,7 +172,7 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
     const lineItems = [{ description: "Job", quantity: 1, unitPriceCents: 8000 }];
     const invoiceId = await createInvoice(
       ws2!,
-      { issueDate: new Date("2026-07-02"), taxRate: 0, lineItems },
+      { issueDate: new Date("2026-07-02"), taxRate: 10, lineItems },
       actor,
     );
     createdInvoiceIds.push(invoiceId);
@@ -179,6 +181,19 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
 
     const count = await countIncomeForInvoice(ws2!, invoiceId);
     expect(count).toBe(0);
+  });
+
+  it("backfills paid invoice income when Books is enabled later", async () => {
+    const invoiceId = createdInvoiceIds.at(-1)!;
+    const inv = await getInvoice(ws2!, invoiceId);
+
+    await enableModule(ws2!, "books", actor);
+
+    const row = await getIncomeForInvoice(ws2!, invoiceId);
+    expect(row).not.toBeNull();
+    expect(row!.amountCents).toBe(inv!.totalCents);
+    expect(row!.gstCents).toBe(inv!.taxCents);
+    expect(row!.date.toISOString()).toBe(inv!.paidAt!.toISOString());
   });
 
   it("records income unlinked when the invoice's customer was deleted", async () => {

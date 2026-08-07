@@ -13,9 +13,11 @@ import {
   deleteTransaction,
   getTransaction,
   listTransactions,
+  transactionSource,
   updateTransaction,
   type TransactionInput,
   type TransactionRow,
+  type TransactionSource,
 } from "@/modules/books";
 import { summarizeTransactions, type TransactionSummary } from "@/modules/books/calc";
 import { type Period, parsePeriod, periodRange } from "@/shared/utils/periods";
@@ -255,18 +257,29 @@ export async function loadBooksPage(params?: {
 }
 
 export type BookDetailData =
-  | { installed: true; transaction: TransactionRow | null; canManage: boolean }
+  | {
+      installed: true;
+      transaction: TransactionRow | null;
+      source: TransactionSource | null;
+      canManage: boolean;
+    }
   | { installed: false };
 
 export async function loadTransaction(transactionId: string): Promise<BookDetailData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
 
-  const [transaction, canManage] = await Promise.all([
+  const [transaction, hasManagePermission] = await Promise.all([
     getTransaction(ctx.workspaceId, branded<"BookTransactionId">(transactionId)),
     Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
-  return { installed: true, transaction, canManage };
+  const source = transaction ? transactionSource(transaction) : null;
+  return {
+    installed: true,
+    transaction,
+    source,
+    canManage: hasManagePermission && !source,
+  };
 }
 
 export type BookEditData =
@@ -275,6 +288,7 @@ export type BookEditData =
       transaction: TransactionRow | null;
       customers: CustomerRow[];
       defaultCurrency: string;
+      source: TransactionSource | null;
       canManage: boolean;
     }
   | { installed: false };
@@ -283,18 +297,20 @@ export async function loadTransactionForEdit(transactionId: string): Promise<Boo
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
 
-  const [transaction, customers, workspace, canManage] = await Promise.all([
+  const [transaction, customers, workspace, hasManagePermission] = await Promise.all([
     getTransaction(ctx.workspaceId, branded<"BookTransactionId">(transactionId)),
     listCustomers(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
+  const source = transaction ? transactionSource(transaction) : null;
   return {
     installed: true,
     transaction,
     customers,
     defaultCurrency: workspace?.defaultCurrency ?? "AUD",
-    canManage,
+    source,
+    canManage: hasManagePermission && !source,
   };
 }
 

@@ -78,9 +78,8 @@ export async function createEarningAction(input: unknown): Promise<CreateEarning
   try {
     const id = await createEarning(ctx.workspaceId, earningInput, ctx.user.id);
     revalidatePath("/drive");
-    // Earnings auto-record a Books "gig" income transaction via the event bus
-    // (registerBooksIntegration). The bus fully awaits its handlers, so the row exists
-    // by the time we return - invalidate /books + /dashboard so soft-nav shows it.
+    // The database transaction has already synchronized the Books mirror; invalidate the
+    // cross-module views so soft navigation shows it immediately.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true, earningId: id };
@@ -183,8 +182,7 @@ export async function createTripAction(input: unknown): Promise<CreateTripResult
   try {
     const id = await createTrip(ctx.workspaceId, tripInput, ctx.user.id);
     revalidatePath("/drive");
-    // Mileage auto-records a Books "mileage" expense via the event bus; invalidate
-    // /books + /dashboard so soft-nav shows it (the bus awaits its handlers first).
+    // The database transaction has already synchronized the Books mileage mirror.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true, tripId: id };
@@ -235,7 +233,7 @@ export async function updateTripAction(input: unknown): Promise<UpdateTripResult
       ctx.user.id,
     );
     revalidatePath("/drive");
-    // The mirrored Books mileage row is reconciled via the bus - invalidate /books + /dashboard.
+    // The database trigger reconciles the mirrored Books mileage row atomically.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true };
@@ -279,7 +277,7 @@ export async function deleteTripAction(input: unknown): Promise<DriveActionResul
   try {
     await deleteTrip(ctx.workspaceId, branded<"DriveTripId">(parsed.data.tripId), ctx.user.id);
     revalidatePath("/drive");
-    // The mirrored Books mileage row is removed via the bus - invalidate /books + /dashboard.
+    // The database trigger removes the mirrored Books mileage row atomically.
     revalidatePath("/books");
     revalidatePath("/dashboard");
     return { ok: true };

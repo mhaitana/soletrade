@@ -197,9 +197,15 @@ export async function sendInvoiceAction(input: unknown): Promise<InvoiceActionRe
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
-    await sendInvoice(ctx.workspaceId, branded<"InvoiceId">(parsed.data.invoiceId), ctx.user.id);
+    const sent = await sendInvoice(
+      ctx.workspaceId,
+      branded<"InvoiceId">(parsed.data.invoiceId),
+      ctx.user.id,
+    );
+    if (!sent) return { ok: false, error: "Only a draft invoice can be sent." };
     revalidatePath("/invoices");
     revalidatePath(`/invoices/${parsed.data.invoiceId}`);
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to send invoice." };
@@ -212,13 +218,18 @@ export async function markInvoicePaidAction(input: unknown): Promise<InvoiceActi
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
-    await markInvoicePaid(
+    const paid = await markInvoicePaid(
       ctx.workspaceId,
       branded<"InvoiceId">(parsed.data.invoiceId),
       ctx.user.id,
     );
+    if (!paid) {
+      return { ok: false, error: "Only an outstanding invoice can be marked paid." };
+    }
     revalidatePath("/invoices");
     revalidatePath(`/invoices/${parsed.data.invoiceId}`);
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return {
@@ -234,9 +245,15 @@ export async function voidInvoiceAction(input: unknown): Promise<InvoiceActionRe
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
-    await voidInvoice(ctx.workspaceId, branded<"InvoiceId">(parsed.data.invoiceId), ctx.user.id);
+    const voided = await voidInvoice(
+      ctx.workspaceId,
+      branded<"InvoiceId">(parsed.data.invoiceId),
+      ctx.user.id,
+    );
+    if (!voided) return { ok: false, error: "Only an unpaid invoice can be voided." };
     revalidatePath("/invoices");
     revalidatePath(`/invoices/${parsed.data.invoiceId}`);
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to void invoice." };
@@ -249,8 +266,14 @@ export async function deleteInvoiceAction(input: unknown): Promise<InvoiceAction
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:invoice")).ok) return forbid();
   try {
-    await deleteInvoice(ctx.workspaceId, branded<"InvoiceId">(parsed.data.invoiceId), ctx.user.id);
+    const deleted = await deleteInvoice(
+      ctx.workspaceId,
+      branded<"InvoiceId">(parsed.data.invoiceId),
+      ctx.user.id,
+    );
+    if (!deleted) return { ok: false, error: "Only a draft invoice can be deleted." };
     revalidatePath("/invoices");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to delete invoice." };

@@ -44,7 +44,9 @@ import {
   createTrip,
   listEarnings,
   listVehicles,
+  summarizeDrive,
 } from "@/modules/drive";
+import { consolidateBusinessIncome } from "@/app/(app)/dashboard/business-overview";
 import { categoriesForType } from "@/shared/constants/books-categories";
 import { DRIVE_PLATFORMS, isDrivePlatform } from "@/shared/constants/drive-platforms";
 import type { ModuleKey } from "@/shared/constants/modules";
@@ -149,6 +151,7 @@ export interface WorkspaceOverview {
     cashCents: number | null;
     outstandingCents: number | null;
     overdueInvoiceCount: number | null;
+    incomeCents: number | null;
     revenueCents: number | null;
     pendingQuotesCents: number | null;
   };
@@ -177,27 +180,46 @@ export async function computeWorkspaceOverview(
   const hasModule = (key: ModuleKey) => installedModules.includes(key);
   const range = periodRange("month");
 
-  const [workspace, booksRows, invoiceRows, quoteRows, activityPage] = await Promise.all([
-    getWorkspace(workspaceId),
-    hasModule("books") && can("view:books")
-      ? listTransactions(workspaceId, {
-          dateFrom: range.start ?? undefined,
-          dateTo: range.end,
-          limit: 2000,
-        })
-      : Promise.resolve(null),
-    hasModule("invoices") && can("view:invoice")
-      ? listInvoices(workspaceId, { limit: 200 })
-      : Promise.resolve(null),
-    hasModule("quotes") && can("view:quote")
-      ? listQuotes(workspaceId, { limit: 200 })
-      : Promise.resolve(null),
-    can("view:activity") ? listActivity(workspaceId, { limit: 5 }) : Promise.resolve(null),
-  ]);
+  const [workspace, booksRows, invoiceRows, driveRows, quoteRows, activityPage] = await Promise.all(
+    [
+      getWorkspace(workspaceId),
+      hasModule("books") && can("view:books")
+        ? listTransactions(workspaceId, {
+            dateFrom: range.start ?? undefined,
+            dateTo: range.end,
+            limit: 2000,
+          })
+        : Promise.resolve(null),
+      hasModule("invoices") && can("view:invoice")
+        ? listInvoices(workspaceId, { limit: 200 })
+        : Promise.resolve(null),
+      hasModule("drive") && can("view:drive")
+        ? listEarnings(workspaceId, {
+            dateFrom: range.start ?? undefined,
+            dateTo: range.end,
+            limit: 2000,
+          })
+        : Promise.resolve(null),
+      hasModule("quotes") && can("view:quote")
+        ? listQuotes(workspaceId, { limit: 200 })
+        : Promise.resolve(null),
+      can("view:activity") ? listActivity(workspaceId, { limit: 5 }) : Promise.resolve(null),
+    ],
+  );
 
   const booksSummary = booksRows ? summarizeTransactions(booksRows) : null;
   const invoiceSummary = invoiceRows ? summarizeInvoices(invoiceRows, range) : null;
+  const driveSummary = driveRows ? summarizeDrive(driveRows, []) : null;
   const quoteSummary = quoteRows ? summarizeQuotes(quoteRows, range) : null;
+  const totalIncome = consolidateBusinessIncome({
+    books: booksSummary ? { currentCents: booksSummary.incomeCents, previousCents: null } : null,
+    invoices: invoiceSummary
+      ? { currentCents: invoiceSummary.paidCents, previousCents: null }
+      : null,
+    drive: driveSummary
+      ? { currentCents: driveSummary.totalEarningsCents, previousCents: null }
+      : null,
+  });
 
   return {
     installedModules,
@@ -206,6 +228,7 @@ export async function computeWorkspaceOverview(
       cashCents: booksSummary?.netCents ?? null,
       outstandingCents: invoiceSummary?.outstandingCents ?? null,
       overdueInvoiceCount: invoiceSummary?.overdueCount ?? null,
+      incomeCents: totalIncome.source ? totalIncome.currentCents : null,
       revenueCents: invoiceSummary?.paidCents ?? null,
       pendingQuotesCents: quoteSummary?.acceptedValueCents ?? null,
     },
@@ -248,7 +271,7 @@ export function buildAssistantTools(
   // 1. Workspace overview - always offered; returns nulls for uninstalled modules.
   tools.getWorkspaceOverview = tool({
     description:
-      "Get a high-level overview of the workspace: installed modules, current-month net cash flow (Books income minus expenses), outstanding invoices, revenue this month, accepted quotes ready to invoice, and the 5 most recent activity events. Call this first when the user asks a broad question like 'how's my business doing'.",
+      "Get a high-level overview of the workspace: installed modules, current-month total income across Books/Invoices/Drive without double-counting, net cash flow, outstanding invoices, accepted quotes ready to invoice, and the 5 most recent activity events. Call this first when the user asks a broad question like 'how's my business doing'.",
     inputSchema: z.object({}),
     execute: async () => computeWorkspaceOverview(ctx, installedModules),
   });
@@ -1333,7 +1356,7 @@ export async function buildMockAssistantReply(
     `- Installed modules: ${data.installedModules.length ? data.installedModules.join(", ") : "none yet"}`,
     `- Net cash flow: ${fmt(data.kpis.cashCents)}`,
     `- Outstanding invoices: ${fmt(data.kpis.outstandingCents)}${data.kpis.overdueInvoiceCount ? ` (${data.kpis.overdueInvoiceCount} overdue)` : ""}`,
-    `- Revenue this month: ${fmt(data.kpis.revenueCents)}`,
+    `- Total income this month: ${fmt(data.kpis.incomeCents)}`,
     `- Ready to invoice (accepted quotes): ${fmt(data.kpis.pendingQuotesCents)}`,
   ];
   if (data.recentActivity && data.recentActivity.length > 0) {

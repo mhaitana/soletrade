@@ -6,6 +6,7 @@ import {
   branded,
   type DriveExpenseId,
   type DriveTripId,
+  type FileId,
   type VehicleId,
   type WorkspaceId,
 } from "@/shared/types/ids";
@@ -20,6 +21,7 @@ import {
   deleteExpense,
   deleteTrip,
   replayDriveEventsForBooks,
+  upsertDriveSettings,
   updateExpense,
   updateTrip,
 } from "./index";
@@ -44,6 +46,7 @@ interface BookTxRow {
   customerId: string | null;
   sourceExpenseId: string | null;
   sourceTripId: string | null;
+  receiptFileId: string | null;
   date: Date;
   description: string;
   notes: string | null;
@@ -59,6 +62,7 @@ function mapBookTx(r: Record<string, unknown>): BookTxRow {
     customerId: (r.customer_id as string | null) ?? null,
     sourceExpenseId: (r.source_expense_id as string | null) ?? null,
     sourceTripId: (r.source_trip_id as string | null) ?? null,
+    receiptFileId: (r.receipt_file_id as string | null) ?? null,
     date: parsePgTimestamp(r.date as string),
     description: r.description as string,
     notes: (r.notes as string | null) ?? null,
@@ -139,6 +143,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
   }
 
   it("records a Books vehicle_expense when a Drive vehicle expense is logged (happy path)", async () => {
+    const receiptFileId = branded<"FileId">("00000000-0000-9000-8000-0000000000d2") as FileId;
     const expenseId = await createExpense(
       ws1!,
       {
@@ -148,6 +153,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
         currency: "AUD",
         date: new Date("2026-07-03"),
         description: "Fill up - 40L unleaded",
+        receiptFileId,
       },
       actor,
     );
@@ -164,6 +170,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     expect(row!.date.toISOString()).toBe(new Date("2026-07-03").toISOString());
     expect(row!.description).toBe("Fill up - 40L unleaded");
     expect(row!.notes).toBe("Auto-recorded from drive vehicle expense.");
+    expect(row!.receiptFileId).toBe(receiptFileId);
   });
 
   it("is idempotent - a replayed VehicleExpenseLogged does not duplicate the expense row", async () => {
@@ -366,6 +373,29 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     expect(row!.sourceTripId).toBe(tripId);
   });
 
+  it("recalculates existing mileage rows when the workspace rate changes", async () => {
+    const tripId = await createTrip(
+      ws1!,
+      {
+        platform: "uber",
+        distanceMeters: 10000,
+        date: new Date("2026-07-10"),
+        purpose: "Rate test",
+      },
+      actor,
+    );
+    expect((await getMileageForTrip(ws1!, tripId))!.amountCents).toBe(850);
+
+    await upsertDriveSettings(ws1!, { mileageRateCentsPerKm: 100 }, actor);
+    expect((await getMileageForTrip(ws1!, tripId))!.amountCents).toBe(1000);
+
+    await upsertDriveSettings(ws1!, { mileageRateCentsPerKm: 0 }, actor);
+    expect(await getMileageForTrip(ws1!, tripId)).toBeNull();
+
+    await upsertDriveSettings(ws1!, { mileageRateCentsPerKm: 85 }, actor);
+    expect((await getMileageForTrip(ws1!, tripId))!.amountCents).toBe(850);
+  });
+
   it("deletes the mirrored Books mileage row when a trip is deleted", async () => {
     const tripId = await createTrip(
       ws1!,
@@ -426,10 +456,8 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     // Nothing mirrored yet - Books isn't installed on ws2.
     expect(await countExpenseForDriveExpense(ws2!, expenseId)).toBe(0);
 
-    // Enable Books, then replay the Drive events (the instrumentation.ts ModuleEnabled glue
-    // calls this; here we invoke it directly to test the backfill mechanism).
+    // Enabling Books durably reconciles all existing Drive rows in the database.
     await enableModule(ws2!, "books", actor);
-    await replayDriveEventsForBooks(ws2!, actor);
 
     // All three entry types now have mirrored Books rows.
     const incomeRow = await unwrapMaybe(
@@ -448,7 +476,7 @@ describe.skipIf(!HAS_DB)("books VehicleExpenseLogged integration (requires DATAB
     expect((await getExpenseForDriveExpense(ws2!, expenseId))!.amountCents).toBe(7700);
     expect((await getMileageForTrip(ws2!, tripId))!.amountCents).toBe(2550);
 
-    // Replaying again is idempotent - no duplicate rows.
+    // The legacy event replay remains idempotent during the migration window.
     await replayDriveEventsForBooks(ws2!, actor);
     expect(await countExpenseForDriveExpense(ws2!, expenseId)).toBe(1);
     expect(await countMileageForTrip(ws2!, tripId)).toBe(1);

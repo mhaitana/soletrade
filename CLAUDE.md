@@ -50,11 +50,12 @@ modules never import each other:
 - `WorkspaceCreated` → `ensureSubscription` (free tier; idempotent, self-heals).
 - `InvoiceSent/Overdue/Paid`, `QuoteSent/Accepted/Declined`, refund/void/view
   → notifications (email via Resend + in-app bell) via `registerNotifications`.
-- `InvoicePaid` → Books income; `DriveEarningsLogged`/`MileageLogged`/`VehicleExpenseLogged`
-  → Books income/expense; `ModuleEnabled(books)` → `replayDriveEventsForBooks` backfill.
+- Paid invoices and Drive earnings/mileage/vehicle expenses → Books are durable database
+  triggers with reconciliation on `ModuleEnabled(books)`; the event bus is not used as a
+  financial consistency boundary.
 
-When adding a cross-module reaction, subscribe it in `instrumentation.ts`, not in
-the module.
+When adding a non-transactional cross-module reaction, subscribe it in `instrumentation.ts`,
+not in the module. Financial mirrors must be atomic and idempotent at the database boundary.
 
 ## Stack
 - Next.js 16 (App Router) · React 19 · TypeScript strict (+ `noUncheckedIndexedAccess`)

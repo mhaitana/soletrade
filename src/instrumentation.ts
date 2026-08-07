@@ -4,8 +4,6 @@ import { unwrapVoid } from "@/server/db/helpers";
 import type { Json } from "@/server/db/types";
 import { ensureSubscription } from "@/platform/billing";
 import { registerNotifications } from "@/platform/notifications";
-import { registerBooksIntegration } from "@/modules/books/integration";
-import { replayDriveEventsForBooks } from "@/modules/drive";
 
 /**
  * Server bootstrap. Runs once on startup. Wires the event bus persister so
@@ -46,19 +44,8 @@ export async function register(): Promise<void> {
   // Fire-and-forget - `registerNotifications` just attaches handlers; no await needed.
   registerNotifications();
 
-  // Phase 6c: subscribe the Books InvoicePaid → income recorder (cross-module, via the bus).
-  // Fire-and-forget - `registerBooksIntegration` just attaches the handler; no await needed.
-  registerBooksIntegration();
-
-  // Wave 5: backfill Books when it's enabled for a workspace that already has Drive entries.
-  // Earnings/expenses/trips logged while Books was disabled were never mirrored; re-publishing
-  // their `*Logged` events lets the idempotent Books subscribers create the missing rows now.
-  // Orchestrated here (composition layer) so the Books module never imports Drive directly.
-  onEvent("ModuleEnabled", (event) => {
-    if (!event.workspaceId) return;
-    if (event.metadata?.moduleKey !== "books") return;
-    replayDriveEventsForBooks(event.workspaceId, event.actorUserId).catch((err) => {
-      console.error("[books] drive backfill failed for", event.workspaceId, err);
-    });
-  });
+  // Financial ledger mirrors are deliberately not attached to this process-local bus. Paid
+  // invoices and Drive rows sync to Books through transactional database triggers, including
+  // historical reconciliation when Books is enabled. The bus remains the right boundary for
+  // non-transactional side effects such as notifications and the activity feed.
 }
