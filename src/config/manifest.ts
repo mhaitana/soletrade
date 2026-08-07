@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
 import { brand } from "@/config/brand";
-import { urls } from "@/config/urls";
 
 /**
  * PWA web app manifest data. Sourced from central brand config so the product name
@@ -19,7 +18,7 @@ export function getManifest(): MetadataRoute.Manifest {
     name: brand.productName,
     short_name: brand.shortProductName,
     description: brand.tagline,
-    start_url: urls.app,
+    start_url: "/dashboard",
     display: "standalone",
     scope: "/",
     orientation: "portrait",

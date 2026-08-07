@@ -28,6 +28,10 @@ describe("web app manifest", () => {
     expect(m.display).toBe("standalone");
   });
 
+  it("opens the dashboard when launched as an installed app", () => {
+    expect(m.start_url).toBe("/dashboard");
+  });
+
   it("has a root scope and english language", () => {
     expect(m.scope).toBe("/");
     expect(m.lang).toBe("en");
