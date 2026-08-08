@@ -2807,6 +2807,43 @@ export type Database = {
         Args: { p_name: string; p_owner_user_id: string; p_slug: string };
         Returns: string;
       };
+      get_book_summary: {
+        Args: {
+          p_date_from?: string;
+          p_date_to?: string;
+          p_type?: Database["public"]["Enums"]["book_type"];
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
+      get_drive_summary: {
+        Args: {
+          p_date_from?: string;
+          p_date_to?: string;
+          p_mileage_rate_cents_per_km?: number;
+          p_platform?: string;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
+      get_invoice_dashboard_summary: {
+        Args: {
+          p_current_from?: string;
+          p_current_to?: string;
+          p_previous_from?: string;
+          p_previous_to?: string;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
+      get_quote_dashboard_summary: {
+        Args: {
+          p_current_from?: string;
+          p_current_to?: string;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
       is_conversation_owner: {
         Args: { p_conversation_id: string; p_user_id: string };
         Returns: boolean;

@@ -1,12 +1,14 @@
 import "server-only";
+import { z } from "zod";
 import { getDataClient } from "@/server/db/client";
-import { parsePgTimestamp, pgQuote, unwrap, unwrapMaybe } from "@/server/db/helpers";
+import { parsePgTimestamp, pgQuote, rpc, unwrap, unwrapMaybe } from "@/server/db/helpers";
 import { getCustomer } from "@/platform/customers";
 import { getWorkspace } from "@/platform/workspaces";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { isBookCategory } from "@/shared/constants/books-categories";
 import type { BookType } from "@/server/db/enums";
+import type { TransactionSummary as TransactionSummaryResult } from "./calc";
 import {
   branded,
   type BookTransactionId,
@@ -503,9 +505,8 @@ export async function listTransactions(
   },
 ): Promise<TransactionRow[]> {
   const supabase = getDataClient();
-  // Default 100 (the page list view); clamped to 2000 so the summary loader can fetch a full
-  // period. A workspace with >2000 transactions in a period gets an approximate summary -
-  // DB-side aggregation is a later optimization.
+  // Default 100 for page lists. The higher ceiling remains for exports, assistant context,
+  // reconciliation, and reports; interactive summaries use `getBookSummary` and are uncapped.
   const limit = Math.min(opts?.limit ?? 100, 2000);
   let query = supabase
     .from("book_transactions")
@@ -551,6 +552,47 @@ export async function listTransactions(
       .limit(limit),
   );
   return rows.map((r) => toTransactionRow(r as TransactionRaw));
+}
+
+const transactionSummarySchema = z.object({
+  incomeCents: z.number(),
+  expenseCents: z.number(),
+  netCents: z.number(),
+  gstCollectedCents: z.number(),
+  gstPaidCents: z.number(),
+  netGstCents: z.number(),
+  count: z.number(),
+  byCategory: z.array(
+    z.object({
+      type: z.enum(["income", "expense"]),
+      category: z.string(),
+      amountCents: z.number(),
+      count: z.number(),
+    }),
+  ),
+  monthly: z.array(
+    z.object({
+      month: z.string(),
+      incomeCents: z.number(),
+      expenseCents: z.number(),
+      netCents: z.number(),
+    }),
+  ),
+});
+
+/** Aggregate the full filtered transaction set in Postgres and return only the summary. */
+export async function getBookSummary(
+  workspaceId: WorkspaceId,
+  opts?: { type?: BookType; dateFrom?: Date; dateTo?: Date },
+): Promise<TransactionSummaryResult> {
+  const { data, error } = await rpc(getDataClient(), "get_book_summary", {
+    p_workspace_id: workspaceId,
+    p_type: opts?.type ?? null,
+    p_date_from: opts?.dateFrom?.toISOString() ?? null,
+    p_date_to: opts?.dateTo?.toISOString() ?? null,
+  });
+  if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  return transactionSummarySchema.parse(data);
 }
 
 /**

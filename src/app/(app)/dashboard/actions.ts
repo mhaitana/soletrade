@@ -12,17 +12,17 @@ import { percentDelta, type Delta } from "@/shared/utils/delta";
 import type { SparklinePoint } from "@/shared/components/sparkline";
 import { MODULES, type ModuleKey } from "@/shared/constants/modules";
 import type { WorkspaceId } from "@/shared/types/ids";
-import { listInvoices, summarizeInvoices } from "@/modules/invoices";
-import { listTransactions, summarizeTransactions } from "@/modules/books";
-import { listEarnings, listTrips, summarizeDrive } from "@/modules/drive";
-import { listQuotes, summarizeQuotes } from "@/modules/quotes";
+import { getInvoiceDashboardSummary } from "@/modules/invoices";
+import { getBookSummary } from "@/modules/books";
+import { getDriveSummary } from "@/modules/drive";
+import { getQuoteDashboardSummary } from "@/modules/quotes";
 import { listExtractions } from "@/modules/books/receipt-extraction";
 import { consolidateBusinessIncome, type PeriodIncome } from "./business-overview";
 
 /**
  * Cross-module dashboard loader (Phase 9). This is the **composition root** - it MAY import all
  * four module services (the services stay decoupled; no module→module import). It fans out to
- * each installed module's service + pure aggregator in parallel, for the current AND previous
+ * each installed module's compact database aggregate in parallel for the current AND previous
  * period, then shapes the results into the dashboard's KPI cards + per-module summary cards +
  * recent activity.
  *
@@ -94,8 +94,8 @@ export interface DashboardData {
 
 // --- Per-module fetch + aggregate -------------------------------------------
 // Each helper takes the session-resolved workspaceId (never a client value) and the current +
-// previous ranges, fetches only the rows it needs, runs the pure aggregator, and shapes the
-// card data. They run concurrently via Promise.all in the loader.
+// previous ranges, requests compact aggregates, and shapes the card data. They run concurrently
+// via Promise.all in the loader.
 
 async function invoicesCards(
   workspaceId: WorkspaceId,
@@ -108,18 +108,7 @@ async function invoicesCards(
   card: ModuleCardData;
   signals: { overdueCount: number; overdueCents: number; draftCount: number };
 }> {
-  // listInvoices is capped at 200 and has no date-range filter - fetch once, bucket by date in
-  // the pure aggregator (mirrors Books/Drive's "fetch rows + pure calc" pattern).
-  const rows = await listInvoices(workspaceId, { limit: 200 });
-  const toInput = rows.map((r) => ({
-    status: r.status,
-    totalCents: r.totalCents,
-    sentAt: r.sentAt,
-    paidAt: r.paidAt,
-    issueDate: r.issueDate,
-  }));
-  const cur = summarizeInvoices(toInput, currentRange);
-  const prev = previousRange ? summarizeInvoices(toInput, previousRange) : null;
+  const cur = await getInvoiceDashboardSummary(workspaceId, currentRange, previousRange);
 
   const outstanding: KpiCardData = {
     id: "outstanding",
@@ -152,14 +141,11 @@ async function invoicesCards(
   };
   return {
     outstanding,
-    income: { currentCents: cur.paidCents, previousCents: prev?.paidCents ?? null },
+    income: { currentCents: cur.paidCents, previousCents: cur.previousPaidCents },
     card,
     signals: {
       overdueCount: cur.overdueCount,
-      overdueCents: rows.reduce(
-        (total, invoice) => total + (invoice.status === "overdue" ? invoice.totalCents : 0),
-        0,
-      ),
+      overdueCents: cur.overdueCents,
       draftCount: cur.draftCount,
     },
   };
@@ -171,31 +157,18 @@ async function booksCards(
   previousRange: { start: Date; end: Date } | null,
   currency: string,
 ): Promise<{ cash: KpiCardData; income: PeriodIncome; card: ModuleCardData }> {
-  // listTransactions accepts dateFrom/dateTo (cap 2000) - fetch current + previous separately.
-  const [curRows, prevRows] = await Promise.all([
-    listTransactions(workspaceId, {
+  const [cur, prev] = await Promise.all([
+    getBookSummary(workspaceId, {
       dateFrom: currentRange.start ?? undefined,
       dateTo: currentRange.end,
-      limit: 2000,
     }),
     previousRange
-      ? listTransactions(workspaceId, {
+      ? getBookSummary(workspaceId, {
           dateFrom: previousRange.start,
           dateTo: previousRange.end,
-          limit: 2000,
         })
-      : Promise.resolve([]),
+      : Promise.resolve(null),
   ]);
-  const toInput = (rows: typeof curRows) =>
-    rows.map((t) => ({
-      type: t.type,
-      amountCents: t.amountCents,
-      date: t.date,
-      category: t.category,
-      gstCents: t.gstCents,
-    }));
-  const cur = summarizeTransactions(toInput(curRows));
-  const prev = previousRange ? summarizeTransactions(toInput(prevRows)) : null;
 
   const cash: KpiCardData = {
     id: "cash",
@@ -239,29 +212,18 @@ async function driveCard(
   previousRange: { start: Date; end: Date } | null,
   currency: string,
 ): Promise<{ income: PeriodIncome; card: ModuleCardData }> {
-  const [earn, trips, previousEarnings] = await Promise.all([
-    listEarnings(workspaceId, {
+  const [cur, prev] = await Promise.all([
+    getDriveSummary(workspaceId, {
       dateFrom: currentRange.start ?? undefined,
       dateTo: currentRange.end,
-      limit: 2000,
-    }),
-    listTrips(workspaceId, {
-      dateFrom: currentRange.start ?? undefined,
-      dateTo: currentRange.end,
-      limit: 2000,
     }),
     previousRange
-      ? listEarnings(workspaceId, {
+      ? getDriveSummary(workspaceId, {
           dateFrom: previousRange.start,
           dateTo: previousRange.end,
-          limit: 2000,
         })
-      : Promise.resolve([]),
+      : Promise.resolve(null),
   ]);
-  const cur = summarizeDrive(
-    earn.map((e) => ({ amountCents: e.amountCents, date: e.date, platform: e.platform })),
-    trips.map((t) => ({ distanceMeters: t.distanceMeters, date: t.date, platform: t.platform })),
-  );
 
   const card: ModuleCardData = {
     key: "drive",
@@ -287,9 +249,7 @@ async function driveCard(
   return {
     income: {
       currentCents: cur.totalEarningsCents,
-      previousCents: previousRange
-        ? previousEarnings.reduce((sum, earning) => sum + earning.amountCents, 0)
-        : null,
+      previousCents: prev?.totalEarningsCents ?? null,
     },
     card,
   };
@@ -304,20 +264,7 @@ async function quotesCards(
   card: ModuleCardData;
   signals: { acceptedCount: number; acceptedValueCents: number };
 }> {
-  // listQuotes is capped at 200, no date-range filter - fetch once, bucket by date. The Pending
-  // KPI is a snapshot (accepted-but-not-converted value), so no previous-period fetch.
-  const rows = await listQuotes(workspaceId, { limit: 200 });
-  const toInput = rows.map((r) => ({
-    status: r.status,
-    totalCents: r.totalCents,
-    sentAt: r.sentAt,
-    acceptedAt: r.acceptedAt,
-    declinedAt: r.declinedAt,
-    convertedAt: r.convertedAt,
-    issueDate: r.issueDate,
-  }));
-  const cur = summarizeQuotes(toInput, currentRange);
-  const readyCount = rows.filter((quote) => quote.status === "accepted").length;
+  const cur = await getQuoteDashboardSummary(workspaceId, currentRange);
 
   const pending: KpiCardData = {
     id: "pending-quotes",
@@ -333,7 +280,7 @@ async function quotesCards(
     name: MODULES.quotes.name,
     metrics: [
       { label: "Ready", value: formatCents(cur.acceptedValueCents, currency) },
-      { label: "Waiting", value: String(readyCount) },
+      { label: "Waiting", value: String(cur.readyCount) },
       { label: "Sent", value: String(cur.sentCount) },
     ],
     sparkline:
@@ -352,7 +299,7 @@ async function quotesCards(
     pending,
     card,
     signals: {
-      acceptedCount: readyCount,
+      acceptedCount: cur.readyCount,
       acceptedValueCents: cur.acceptedValueCents,
     },
   };

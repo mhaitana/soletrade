@@ -60,14 +60,16 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   });
 
   // Refresh the session (and its cookies, written onto `response` above).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verify the access token from the request cookies. With Supabase's current
+  // asymmetric signing keys this uses WebCrypto + the cached JWKS instead of a
+  // network request to Auth on every navigation (getUser always makes one).
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const isAuthenticated = Boolean(claimsData?.claims.sub);
 
   const { pathname } = request.nextUrl;
 
   // Redirect unauthenticated users hitting a protected route to /login.
-  if (!user && !isPublicPath(pathname)) {
+  if (!isAuthenticated && !isPublicPath(pathname)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
@@ -75,7 +77,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   // Redirect authenticated users away from /login and /signup to /dashboard.
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  if (isAuthenticated && (pathname === "/login" || pathname === "/signup")) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
     dashboardUrl.search = "";

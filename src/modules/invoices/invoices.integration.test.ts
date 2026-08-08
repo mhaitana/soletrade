@@ -6,6 +6,7 @@ import { createCustomer } from "@/platform/customers";
 import {
   createInvoice,
   deleteInvoice,
+  getInvoiceDashboardSummary,
   getInvoice,
   listInvoices,
   markInvoicePaid,
@@ -13,6 +14,7 @@ import {
   updateInvoice,
   voidInvoice,
 } from "./index";
+import { summarizeInvoices } from "./calc";
 import { computeInvoiceTotals } from "./totals";
 
 /**
@@ -267,5 +269,27 @@ describe.skipIf(!HAS_DB)("invoices integration (requires DATABASE_URL)", () => {
 
     const byNumber = await listInvoices(ws1!, { search: "0001" });
     expect(byNumber.length).toBeGreaterThan(0);
+  });
+
+  it("returns uncapped dashboard aggregates from Postgres", async () => {
+    const end = new Date("2030-01-01T00:00:00Z");
+    const rows = await listInvoices(ws1!, { limit: 2000 });
+    const expected = summarizeInvoices(
+      rows.map((row) => ({
+        status: row.status,
+        totalCents: row.totalCents,
+        sentAt: row.sentAt,
+        paidAt: row.paidAt,
+        issueDate: row.issueDate,
+      })),
+      { start: null, end },
+    );
+    const summary = await getInvoiceDashboardSummary(ws1!, { start: null, end }, null);
+
+    expect(summary).toMatchObject(expected);
+    expect(summary.overdueCents).toBe(
+      rows.reduce((sum, row) => sum + (row.status === "overdue" ? row.totalCents : 0), 0),
+    );
+    expect(summary.previousPaidCents).toBeNull();
   });
 });

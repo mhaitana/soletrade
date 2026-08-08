@@ -13,6 +13,7 @@ import {
   createTrip,
   deleteEarning,
   deleteTrip,
+  getDriveSummary,
   getEarning,
   getTrip,
   listEarnings,
@@ -327,6 +328,23 @@ describe.skipIf(!HAS_DB)("drive integration (requires DATABASE_URL)", () => {
     const byPurpose = await listTrips(ws1!, { search: "Airport" });
     expect(byPurpose.length).toBeGreaterThan(0);
     expect(byPurpose.some((t) => t.id === createdTripIds[0])).toBe(true);
+  });
+
+  it("aggregates earnings and trips in Postgres", async () => {
+    const [earnings, trips, summary] = await Promise.all([
+      listEarnings(ws1!, { limit: 2000 }),
+      listTrips(ws1!, { limit: 2000 }),
+      getDriveSummary(ws1!),
+    ]);
+
+    expect(summary.totalEarningsCents).toBe(
+      earnings.reduce((sum, row) => sum + Math.abs(row.amountCents), 0),
+    );
+    expect(summary.totalDistanceMeters).toBe(
+      trips.reduce((sum, row) => sum + Math.abs(row.distanceMeters), 0),
+    );
+    expect(summary.earningsCount).toBe(earnings.length);
+    expect(summary.tripsCount).toBe(trips.length);
   });
 
   it("deletes a trip and fires MileageDeleted", async () => {

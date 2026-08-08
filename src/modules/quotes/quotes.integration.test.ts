@@ -6,7 +6,16 @@ import { branded, type CustomerId, type QuoteId, type WorkspaceId } from "@/shar
 import { createWorkspace } from "@/platform/workspaces";
 import { createCustomer } from "@/platform/customers";
 import { clearEventBus, onEvent } from "@/server/events";
-import { createQuote, deleteQuote, getQuote, listQuotes, updateQuote, sendQuote } from "./index";
+import {
+  createQuote,
+  deleteQuote,
+  getQuote,
+  getQuoteDashboardSummary,
+  listQuotes,
+  updateQuote,
+  sendQuote,
+} from "./index";
+import { summarizeQuotes } from "./calc";
 
 /**
  * Integration tests for the Quotes service against a real Postgres. Run only when
@@ -203,6 +212,27 @@ describe.skipIf(!HAS_DB)("quotes integration (requires DATABASE_URL)", () => {
     const byCustomer = await listQuotes(ws1!, { search: "Acme" });
     expect(byCustomer.length).toBeGreaterThan(0);
     expect(byCustomer.some((q) => q.customerName === "Acme Corp")).toBe(true);
+  });
+
+  it("returns uncapped dashboard aggregates from Postgres", async () => {
+    const end = new Date("2030-01-01T00:00:00Z");
+    const rows = await listQuotes(ws1!, { limit: 2000 });
+    const expected = summarizeQuotes(
+      rows.map((row) => ({
+        status: row.status,
+        totalCents: row.totalCents,
+        sentAt: row.sentAt,
+        acceptedAt: row.acceptedAt,
+        declinedAt: row.declinedAt,
+        convertedAt: row.convertedAt,
+        issueDate: row.issueDate,
+      })),
+      { start: null, end },
+    );
+    const summary = await getQuoteDashboardSummary(ws1!, { start: null, end });
+
+    expect(summary).toMatchObject(expected);
+    expect(summary.readyCount).toBe(rows.filter((row) => row.status === "accepted").length);
   });
 
   it("deletes a draft quote (and refuses non-drafts)", async () => {

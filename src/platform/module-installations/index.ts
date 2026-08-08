@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getDataClient } from "@/server/db/client";
 import { parsePgTimestamp, unwrap, unwrapVoid } from "@/server/db/helpers";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
@@ -25,7 +26,7 @@ export function resolveActiveModules(
 }
 
 /** List active (installed) modules for a workspace. */
-export async function getInstalledModules(workspaceId: WorkspaceId): Promise<ModuleKey[]> {
+async function queryInstalledModules(workspaceId: WorkspaceId): Promise<ModuleKey[]> {
   const supabase = getDataClient();
   const rows = await unwrap(
     supabase
@@ -42,6 +43,8 @@ export async function getInstalledModules(workspaceId: WorkspaceId): Promise<Mod
     })),
   );
 }
+
+export const getInstalledModules = cache(queryInstalledModules);
 
 export async function isModuleEnabled(workspaceId: WorkspaceId, key: ModuleKey): Promise<boolean> {
   const installed = await getInstalledModules(workspaceId);

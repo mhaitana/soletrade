@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getCurrentUser, type SessionUser } from "@/server/auth/session";
 import { getAdminDb } from "./db";
 import type { AdminRole, AdminUser } from "@/platform/admin/types";
@@ -18,7 +19,7 @@ export interface AdminContext {
  * Resolve the internal admin user and roles for the current request session.
  * Returns null if the signed-in user is not an active staff member.
  */
-export async function tryAdminContext(): Promise<AdminContext | null> {
+async function resolveAdminContext(): Promise<AdminContext | null> {
   const sessionUser = await getCurrentUser();
   if (!sessionUser) return null;
 
@@ -64,6 +65,8 @@ export async function tryAdminContext(): Promise<AdminContext | null> {
 
   return { sessionUser, adminUser, roles };
 }
+
+export const tryAdminContext = cache(resolveAdminContext);
 
 /**
  * Require a valid active internal staff account and optionally a specific permission.

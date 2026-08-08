@@ -13,6 +13,7 @@ import {
   createTransaction,
   deleteTransaction,
   findTransactionIdBySource,
+  getBookSummary,
   getTransaction,
   listTransactions,
   updateTransaction,
@@ -291,6 +292,19 @@ describe.skipIf(!HAS_DB)("books integration (requires DATABASE_URL)", () => {
     });
     expect(window.some((t) => t.id === febId)).toBe(false);
     expect(window.some((t) => t.id === aprId)).toBe(true);
+  });
+
+  it("aggregates the complete filtered set in Postgres", async () => {
+    const dateFrom = new Date("2026-02-01T00:00:00Z");
+    const rows = await listTransactions(ws1!, { type: "income", dateFrom, limit: 2000 });
+    const summary = await getBookSummary(ws1!, { type: "income", dateFrom });
+
+    expect(summary.count).toBe(rows.length);
+    expect(summary.incomeCents).toBe(rows.reduce((sum, row) => sum + Math.abs(row.amountCents), 0));
+    expect(summary.expenseCents).toBe(0);
+    expect(summary.monthly.map((point) => point.month)).toEqual(
+      [...new Set(rows.map((row) => row.date.toISOString().slice(0, 7)))].sort(),
+    );
   });
 
   it("deletes a transaction and fires TransactionDeleted", async () => {

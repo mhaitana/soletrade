@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { getDataClient } from "@/server/db/client";
 import { rpc, unwrap, unwrapMaybe } from "@/server/db/helpers";
@@ -121,7 +122,7 @@ export async function createWorkspace(
 }
 
 /** List all workspaces the user is an active member of. */
-export async function listUserWorkspaces(userId: UserId): Promise<WorkspaceMembership[]> {
+async function queryUserWorkspaces(userId: UserId): Promise<WorkspaceMembership[]> {
   const supabase = getDataClient();
   // Query the membership side and embed the parent workspace (many-to-one → a single nested
   // object, not an array). Active memberships are filtered in SQL (`deleted_at IS NULL` on the
@@ -148,8 +149,10 @@ export async function listUserWorkspaces(userId: UserId): Promise<WorkspaceMembe
   });
 }
 
+export const listUserWorkspaces = cache(queryUserWorkspaces);
+
 /** Resolve a single workspace (not soft-deleted). */
-export async function getWorkspace(workspaceId: WorkspaceId): Promise<WorkspaceRow | null> {
+async function queryWorkspace(workspaceId: WorkspaceId): Promise<WorkspaceRow | null> {
   const supabase = getDataClient();
   const row = await unwrapMaybe(
     supabase
@@ -161,6 +164,8 @@ export async function getWorkspace(workspaceId: WorkspaceId): Promise<WorkspaceR
   );
   return row ? toWorkspaceRow(row) : null;
 }
+
+export const getWorkspace = cache(queryWorkspace);
 
 /** Editable workspace fields (Wave 4 - `/settings/general`). The slug stays immutable v1. */
 export interface WorkspaceUpdateInput {

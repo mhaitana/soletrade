@@ -15,7 +15,6 @@ vi.mock("@/server/auth/session", () => ({
 
 vi.mock("@/platform/workspaces", () => ({
   listUserWorkspaces: vi.fn(),
-  getMembershipRole: vi.fn(),
   getActiveWorkspaceId: vi.fn(),
   setActiveWorkspaceId: vi.fn(),
   ACTIVE_WORKSPACE_COOKIE: "soletrade:wid",
@@ -32,7 +31,6 @@ import { requireWorkspaceContext } from "./context";
 import { getCurrentUser } from "@/server/auth/session";
 import {
   getActiveWorkspaceId,
-  getMembershipRole,
   listUserWorkspaces,
   setActiveWorkspaceId,
 } from "@/platform/workspaces";
@@ -40,7 +38,6 @@ import { branded } from "@/shared/types/ids";
 
 const mockGetCurrentUser = vi.mocked(getCurrentUser);
 const mockListUserWorkspaces = vi.mocked(listUserWorkspaces);
-const mockGetMembershipRole = vi.mocked(getMembershipRole);
 const mockGetActiveWorkspaceId = vi.mocked(getActiveWorkspaceId);
 const mockSetActiveWorkspaceId = vi.mocked(setActiveWorkspaceId);
 
@@ -56,7 +53,6 @@ function setupMembership(
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetCurrentUser.mockResolvedValue({ id: UID(), email: "owner@example.com" });
-  mockGetMembershipRole.mockResolvedValue("owner");
   mockSetActiveWorkspaceId.mockResolvedValue(undefined);
 });
 
@@ -65,8 +61,6 @@ describe("requireWorkspaceContext", () => {
     const memberships = setupMembership("admin");
     mockListUserWorkspaces.mockResolvedValue(memberships);
     mockGetActiveWorkspaceId.mockResolvedValue(WID("ws-1"));
-    mockGetMembershipRole.mockResolvedValue("admin");
-
     const ctx = await requireWorkspaceContext();
 
     expect(ctx.user.id).toBe("user-1");
@@ -122,23 +116,12 @@ describe("requireWorkspaceContext", () => {
     expect(mockListUserWorkspaces).not.toHaveBeenCalled();
   });
 
-  it("redirects to /onboarding when membership role is null (revoked mid-session)", async () => {
-    mockListUserWorkspaces.mockResolvedValue(setupMembership());
-    mockGetActiveWorkspaceId.mockResolvedValue(WID("ws-1"));
-    mockGetMembershipRole.mockResolvedValue(null);
-
-    await expect(requireWorkspaceContext()).rejects.toThrow("REDIRECT:/onboarding");
-  });
-
   it("never trusts the client: workspaceId comes from server-resolved membership", async () => {
     const memberships = setupMembership("accountant");
     mockListUserWorkspaces.mockResolvedValue(memberships);
     mockGetActiveWorkspaceId.mockResolvedValue(WID("ws-1"));
-    mockGetMembershipRole.mockResolvedValue("accountant");
-
     const ctx = await requireWorkspaceContext();
-    // The role returned to callers is the DB-resolved role, not a client value.
-    expect(mockGetMembershipRole).toHaveBeenCalledWith(WID("ws-1"), UID());
+    // The role comes from the server-fetched membership row, never client input.
     expect(ctx.role).toBe("accountant");
   });
 });

@@ -12,11 +12,11 @@ import {
   createTrip,
   deleteEarning,
   deleteTrip,
+  getDriveSummary,
   getDriveSettings,
   getEarning,
   getTrip,
   listEarnings,
-  listExpenses,
   listTrips,
   updateEarning,
   updateTrip,
@@ -25,7 +25,7 @@ import {
   type TripInput,
   type TripRow,
 } from "@/modules/drive";
-import { summarizeDrive, type DriveSummary, type WeeklyDrivePoint } from "@/modules/drive/calc";
+import type { DriveSummary, WeeklyDrivePoint } from "@/modules/drive/calc";
 import { type Period, parsePeriod, periodRange } from "@/shared/utils/periods";
 import { isDrivePlatform } from "@/shared/constants/drive-platforms";
 import { branded } from "@/shared/types/ids";
@@ -332,71 +332,60 @@ export async function loadDrivePage(params?: {
   const platform = params?.platform || undefined;
   const range = periodRange(period, undefined, fyStartMonth);
 
-  // 4 fetches: list (capped 100) + summary (capped 2000) per entity type. The summary spans
-  // both earnings + trips, so both summary fetches run regardless of `view`. The inactive
-  // view's 100-list is not rendered but is cheap (mirrors Books' two-fetch pattern doubled).
-  // Wave 2 adds a 5th + 6th fetch: drive settings (mileage rate) + period expenses, so the
-  // summary can compute the mileage deduction, total expenses, and net profit.
-  const [earnings, earningsSummaryRows, trips, tripsSummaryRows, settings, expenseRows, canManage] =
-    await Promise.all([
-      listEarnings(ctx.workspaceId, {
-        platform,
-        search: search || undefined,
-        dateFrom: range.start ?? undefined,
-        dateTo: range.end,
-        limit: 100,
-      }),
-      listEarnings(ctx.workspaceId, {
-        platform,
-        dateFrom: range.start ?? undefined,
-        dateTo: range.end,
-        limit: 2000,
-      }),
-      listTrips(ctx.workspaceId, {
-        platform,
-        search: search || undefined,
-        dateFrom: range.start ?? undefined,
-        dateTo: range.end,
-        limit: 100,
-      }),
-      listTrips(ctx.workspaceId, {
-        platform,
-        dateFrom: range.start ?? undefined,
-        dateTo: range.end,
-        limit: 2000,
-      }),
-      getDriveSettings(ctx.workspaceId),
-      listExpenses(ctx.workspaceId, {
-        dateFrom: range.start ?? undefined,
-        dateTo: range.end,
-        limit: 2000,
-      }),
-      Promise.resolve(authorize(ctx.role, "manage:drive").ok),
-    ]);
+  // Fetch only the visible list. The cross-entity summary is calculated in Postgres and
+  // returned as compact JSON instead of transferring up to 6,000 earnings/trip/expense rows.
+  const earningsPromise =
+    view === "earnings"
+      ? listEarnings(ctx.workspaceId, {
+          platform,
+          search: search || undefined,
+          dateFrom: range.start ?? undefined,
+          dateTo: range.end,
+          limit: 100,
+        })
+      : Promise.resolve<EarningRow[]>([]);
+  const tripsPromise =
+    view === "trips"
+      ? listTrips(ctx.workspaceId, {
+          platform,
+          search: search || undefined,
+          dateFrom: range.start ?? undefined,
+          dateTo: range.end,
+          limit: 100,
+        })
+      : Promise.resolve<TripRow[]>([]);
+  const [earnings, trips, settings, databaseSummary] = await Promise.all([
+    earningsPromise,
+    tripsPromise,
+    getDriveSettings(ctx.workspaceId),
+    getDriveSummary(ctx.workspaceId, {
+      platform,
+      dateFrom: range.start ?? undefined,
+      dateTo: range.end,
+      // Settings are fetched in parallel. Apply the workspace rate below using the summary's
+      // aggregated distance so this call does not introduce another serial round trip.
+      mileageRateCentsPerKm: 0,
+    }),
+  ]);
 
-  const summary = summarizeDrive(
-    earningsSummaryRows.map((e) => ({
-      amountCents: e.amountCents,
-      date: e.date,
-      platform: e.platform,
-    })),
-    tripsSummaryRows.map((t) => ({
-      distanceMeters: t.distanceMeters,
-      date: t.date,
-      platform: t.platform,
-    })),
-    {
-      settings: { mileageRateCentsPerKm: settings.mileageRateCentsPerKm },
-      expenses: expenseRows.map((x) => ({ amountCents: x.amountCents })),
-    },
+  const mileageDeductionCents = Math.round(
+    (databaseSummary.totalDistanceMeters / 1000) * settings.mileageRateCentsPerKm,
   );
+  const summary: DriveSummary = {
+    ...databaseSummary,
+    mileageDeductionCents,
+    profitCents:
+      databaseSummary.totalEarningsCents -
+      databaseSummary.totalExpensesCents -
+      mileageDeductionCents,
+  };
 
   return {
     installed: true,
     view,
     earnings,
     trips,
-    canManage,
+    canManage: authorize(ctx.role, "manage:drive").ok,
     platformFilter: platform ?? null,
     search,
     period,

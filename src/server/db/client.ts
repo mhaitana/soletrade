@@ -8,11 +8,9 @@ import type { Database } from "@/server/db/types";
  * to `src/server/storage/index.ts` (the Storage admin client) and `src/server/email`.
  *
  * Uses the **service-role** key, which bypasses RLS - exactly like the Storage client.
- * There are no RLS policies anywhere in this project; workspace scoping is enforced in
- * **code** (every service filters by `workspaceId` resolved from the session, never
- * from a client-supplied value). The service-role client is the pragmatic match for that
- * model: it keeps the existing app-code scoping unchanged and avoids a parallel RLS
- * migration. RLS hardening is a separate, explicitly out-of-scope follow-up.
+ * Workspace scoping is therefore enforced in **code** for this client (every service filters by
+ * `workspaceId` resolved from the session, never from a client-supplied value). Authenticated
+ * Data API access is separately protected by the project's RLS policies as defense in depth.
  *
  * Throws clearly when not configured (mirrors `getStorageAdminClient` / `getStripe`)
  * because a missing config should fail the request loudly, not silently no-op. The
