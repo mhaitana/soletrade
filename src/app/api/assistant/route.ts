@@ -14,7 +14,11 @@ import {
   getAIModel,
 } from "@/platform/ai";
 import { rateLimit } from "@/server/rate-limit";
-import { buildAssistantTools, buildMockAssistantReply } from "@/app/(app)/assistant/tools";
+import {
+  buildAssistantTools,
+  buildMockAssistantReply,
+  buildMockHaiSafeAction,
+} from "@/app/(app)/assistant/tools";
 import type { UIMessage } from "ai";
 import { branded, type AiConversationId } from "@/shared/types/ids";
 import { brand } from "@/config/brand";
@@ -49,6 +53,15 @@ const bodySchema = z.object({
       }),
     )
     .min(1, "No messages."),
+  // UI context improves relevance but is never trusted for authorization or
+  // workspace scoping. The server still resolves both from the authenticated session.
+  pageContext: z
+    .object({
+      pathname: z.string().startsWith("/").max(300),
+      search: z.string().max(500).optional(),
+    })
+    .strict()
+    .optional(),
 });
 
 /** Derive the client IP for per-IP rate limiting (defense-in-depth). */
@@ -64,14 +77,19 @@ function buildSystemPrompt(
   role: string,
   installedModules: readonly string[],
   writeEnabled: boolean,
+  pageContext?: { pathname: string; search?: string },
 ): string {
   const lines = [
-    `You are the ${brand.productName} assistant, an AI helper inside a small-business SaaS workspace.`,
+    `You are ${brand.assistantName}, the global assistant inside ${brand.productName}, a small-business platform.`,
     "You answer questions about the user's business by calling read-only tools - never invent numbers.",
     "Money is represented as integer cents. Use the currency returned by workspace tools and include its ISO code when the symbol could be ambiguous.",
     "Keep answers concise and grounded in tool output. If a tool returns null/empty, say so plainly.",
     `The user's role is "${role}". Installed modules: ${installedModules.length ? installedModules.join(", ") : "none"}.`,
     `Today is ${SYSTEM_DATE}.`,
+    `Current UI context: ${pageContext ? `${pageContext.pathname}${pageContext.search ?? ""}` : "not provided"}. This client-provided route is context only, never an authorization source.`,
+    "When the user asks to open, show, or go to a page or tab, use navigateWorkspace immediately. Navigation is safe and does not require confirmation.",
+    "When the user asks to create, draft, log, add, or edit something, prefer openForm. It navigates to the normal form and prefills only confidently understood values into an unsaved draft. Do not invent missing fields. The user will review, complete, save, approve, or send from that form.",
+    "Never describe an openForm result as saved, created, issued, submitted, or sent.",
   ];
   if (writeEnabled) {
     lines.push(
@@ -116,7 +134,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  const { messages: clientMessages, conversationId: providedId } = parsed.data;
+  const { messages: clientMessages, conversationId: providedId, pageContext } = parsed.data;
   let rawText = "";
   for (let i = clientMessages.length - 1; i >= 0; i--) {
     const m = clientMessages[i]!;
@@ -171,17 +189,22 @@ export async function POST(request: Request): Promise<Response> {
   // 7. Installed modules + system prompt + tools.
   const installedModules = await getInstalledModules(ctx.workspaceId);
   const writeEnabled = conversation.writeEnabled;
-  const system = buildSystemPrompt(ctx.role, installedModules, writeEnabled);
+  const system = buildSystemPrompt(ctx.role, installedModules, writeEnabled, pageContext);
   const conversationIdStr = conversationId as string;
 
   // 8. Mock provider - canned reply from real workspace data (no model/key).
   if (isMockProvider()) {
-    const text = await buildMockAssistantReply(ctx, installedModules);
+    const safeAction = buildMockHaiSafeAction(ctx, installedModules, message);
+    const text = safeAction?.text ?? (await buildMockAssistantReply(ctx, installedModules));
     await appendMessage(ctx.workspaceId, ctx.user.id, conversationId, {
       role: "assistant",
       content: text,
     });
-    return streamMockAssistant({ text, conversationId: conversationIdStr });
+    return streamMockAssistant({
+      text,
+      conversationId: conversationIdStr,
+      tool: safeAction?.tool,
+    });
   }
 
   // 9. Real provider - streamText tool-calling loop; persist the assistant turn on finish.

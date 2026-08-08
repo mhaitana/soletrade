@@ -116,13 +116,32 @@ export function streamAssistantError(error: unknown, conversationId: string): Re
  * chunk sequence a real stream would (`start` → `text-start` → `text-delta` →
  * `text-end` → `finish`) so the client treats it identically.
  */
-export function streamMockAssistant(opts: { text: string; conversationId: string }): Response {
+export function streamMockAssistant(opts: {
+  text: string;
+  conversationId: string;
+  /** Optional deterministic safe UI tool emitted by the no-key mock provider. */
+  tool?: { name: string; input: unknown; output: unknown };
+}): Response {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
       const msgId = crypto.randomUUID();
       const partId = crypto.randomUUID();
       const write = (part: UIMessageChunk) => writer.write(part);
       write({ type: "start", messageId: msgId });
+      if (opts.tool) {
+        const toolCallId = crypto.randomUUID();
+        write({
+          type: "tool-input-available",
+          toolCallId,
+          toolName: opts.tool.name,
+          input: opts.tool.input,
+        });
+        write({
+          type: "tool-output-available",
+          toolCallId,
+          output: opts.tool.output,
+        });
+      }
       write({ type: "text-start", id: partId });
       write({ type: "text-delta", id: partId, delta: opts.text });
       write({ type: "text-end", id: partId });

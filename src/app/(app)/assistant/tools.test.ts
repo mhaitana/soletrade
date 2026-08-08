@@ -19,6 +19,8 @@ const summarizeQuotesMock = vi.fn();
 const listTransactionsMock = vi.fn();
 const summarizeTransactionsMock = vi.fn();
 const listEarningsMock = vi.fn();
+const listTripsMock = vi.fn();
+const listExpensesMock = vi.fn();
 const summarizeDriveMock = vi.fn();
 const listCustomersMock = vi.fn();
 const listActivityMock = vi.fn();
@@ -73,6 +75,8 @@ vi.mock("@/modules/books", () => ({
 }));
 vi.mock("@/modules/drive", () => ({
   listEarnings: (...a: unknown[]) => listEarningsMock(...a),
+  listTrips: (...a: unknown[]) => listTripsMock(...a),
+  listExpenses: (...a: unknown[]) => listExpensesMock(...a),
   summarizeDrive: (...a: unknown[]) => summarizeDriveMock(...a),
   createEarning: (...a: unknown[]) => createEarningMock(...a),
   createTrip: (...a: unknown[]) => createTripMock(...a),
@@ -134,8 +138,13 @@ describe("buildAssistantTools - gating", () => {
         "listQuotes",
         "listTransactions",
         "listDriveEarnings",
+        "listDriveTrips",
+        "listDriveVehicles",
+        "listDriveExpenses",
         "listCustomers",
         "listRecentActivity",
+        "navigateWorkspace",
+        "openForm",
       ].sort(),
     );
   });
@@ -145,12 +154,21 @@ describe("buildAssistantTools - gating", () => {
     const tools = buildAssistantTools(ctx("readonly"), []);
     // Overview is always offered; customers + activity are platform services (not module-gated).
     expect(Object.keys(tools).sort()).toEqual(
-      ["getWorkspaceOverview", "listCustomers", "listRecentActivity"].sort(),
+      [
+        "getWorkspaceOverview",
+        "listCustomers",
+        "listRecentActivity",
+        "navigateWorkspace",
+        "openForm",
+      ].sort(),
     );
     // The module-gated tools are absent (fail-closed), not merely no-ops.
     expect(tools.listInvoices).toBeUndefined();
     expect(tools.listTransactions).toBeUndefined();
     expect(tools.listDriveEarnings).toBeUndefined();
+    expect(tools.listDriveTrips).toBeUndefined();
+    expect(tools.listDriveVehicles).toBeUndefined();
+    expect(tools.listDriveExpenses).toBeUndefined();
     expect(tools.listQuotes).toBeUndefined();
   });
 
@@ -164,6 +182,9 @@ describe("buildAssistantTools - gating", () => {
     expect(tools.listInvoices).toBeDefined();
     expect(tools.listQuotes).toBeDefined();
     expect(tools.listDriveEarnings).toBeDefined();
+    expect(tools.listDriveTrips).toBeDefined();
+    expect(tools.listDriveVehicles).toBeDefined();
+    expect(tools.listDriveExpenses).toBeDefined();
   });
 
   it("omits listCustomers when the role lacks view:customer", async () => {
@@ -180,6 +201,29 @@ describe("buildAssistantTools - gating", () => {
 });
 
 describe("buildAssistantTools - execute trims + scopes to workspace", () => {
+  it("openForm returns a validated unsaved form directive and enforces permission gates", async () => {
+    const { buildAssistantTools } = await import("./tools");
+    const ownerTools = buildAssistantTools(ctx("owner"), ALL_MODULES);
+    const ownerResult = (await run(ownerTools.openForm, {
+      workflow: "invoice.create",
+      requestSummary: "Draft an invoice for Acme for $250",
+      fields: {
+        customerQuery: "Acme",
+        lineItems: [{ quantity: 1, unitPriceCents: 25_000 }],
+      },
+    })) as { ok: boolean; directive: { href: string } };
+    expect(ownerResult).toMatchObject({ ok: true, directive: { href: "/invoices/new" } });
+
+    const readonlyTools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    const readonlyResult = (await run(readonlyTools.openForm, {
+      workflow: "invoice.create",
+      requestSummary: "Draft an invoice",
+      fields: {},
+    })) as { ok: boolean; error: string };
+    expect(readonlyResult.ok).toBe(false);
+    expect(readonlyResult.error).toMatch(/permission/i);
+  });
+
   it("listInvoices returns trimmed rows with ISO dates and calls the service with the ctx workspaceId", async () => {
     const issue = new Date("2026-01-15T00:00:00.000Z");
     listInvoicesMock.mockResolvedValue([
@@ -205,8 +249,9 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     >[];
     expect(out).toHaveLength(1);
     const row = out[0]!;
-    // Trimmed shape - no id/workspaceId/notes; money as integer cents; dates as ISO strings.
+    // Trimmed shape - scoped id but no workspaceId/notes; money as integer cents; dates as ISO.
     expect(row).toMatchObject({
+      id: "secret-id",
       number: "INV-001",
       status: "overdue",
       totalCents: 12500,
@@ -215,7 +260,6 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
       paidAt: null,
       customerName: "Jane Co",
     });
-    expect(row).not.toHaveProperty("id");
     expect(row).not.toHaveProperty("workspaceId");
     expect(row).not.toHaveProperty("notes");
     // The service was called with the ctx workspaceId, never a client-supplied one.

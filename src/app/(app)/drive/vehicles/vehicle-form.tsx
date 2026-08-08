@@ -13,6 +13,13 @@ import {
   type UpdateVehicleResult,
 } from "./actions";
 import type { VehicleRow } from "@/modules/drive";
+import {
+  HaiPrefillNotice,
+  fieldBoolean,
+  fieldNumber,
+  fieldString,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateVehicleResult | UpdateVehicleResult;
 
@@ -31,6 +38,44 @@ export function VehicleForm({ mode, vehicle }: { mode: "create" | "edit"; vehicl
     vehicle?.odometerKm != null ? String(vehicle.odometerKm) : "",
   );
   const [active, setActive] = useState<boolean>(vehicle?.active ?? true);
+
+  const haiNotice = useHaiFormPrefill(
+    mode === "create" ? "drive.vehicle.create" : "drive.vehicle.edit",
+    (fields) => {
+      const applied: string[] = [];
+      const nextName = fieldString(fields, "name");
+      if (nextName) {
+        setName(nextName);
+        applied.push("vehicle name");
+      }
+      const nextMake = fieldString(fields, "make");
+      if (nextMake !== undefined) {
+        setMake(nextMake);
+        applied.push("make");
+      }
+      const nextModel = fieldString(fields, "model");
+      if (nextModel !== undefined) {
+        setModel(nextModel);
+        applied.push("model");
+      }
+      const nextYear = fieldNumber(fields, "year");
+      if (nextYear !== undefined) {
+        setYear(String(nextYear));
+        applied.push("year");
+      }
+      const nextOdometer = fieldNumber(fields, "odometerKm");
+      if (nextOdometer !== undefined) {
+        setOdometerKm(String(nextOdometer));
+        applied.push("odometer");
+      }
+      const nextActive = fieldBoolean(fields, "active");
+      if (nextActive !== undefined) {
+        setActive(nextActive);
+        applied.push("active status");
+      }
+      return { appliedFields: applied };
+    },
+  );
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -65,6 +110,7 @@ export function VehicleForm({ mode, vehicle }: { mode: "create" | "edit"; vehicl
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="name">Name</Label>

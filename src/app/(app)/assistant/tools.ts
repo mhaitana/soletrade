@@ -43,6 +43,8 @@ import {
   createExpense,
   createTrip,
   listEarnings,
+  listExpenses,
+  listTrips,
   listVehicles,
   summarizeDrive,
 } from "@/modules/drive";
@@ -59,6 +61,19 @@ import {
   type VehicleId,
   type WorkspaceId,
 } from "@/shared/types/ids";
+import {
+  HAI_FORM_TOOL_GUIDE,
+  HAI_FORM_WORKFLOWS,
+  HAI_PAGE_DESTINATION_KEYS,
+  HAI_PAGE_DESTINATIONS,
+  createHaiFormDirective,
+  createHaiNavigationDirective,
+  haiNavigateInputSchema,
+  haiOpenFormInputSchema,
+  parseMockHaiAction,
+  type HaiOpenFormInput,
+  type HaiPageDestination,
+} from "./hai-workflows";
 
 /**
  * Workspace-aware read-only tools for the AI assistant (Phase 10). This is the
@@ -268,6 +283,22 @@ export function buildAssistantTools(
 
   const tools: ToolSet = {};
 
+  // Safe UI tools are always available. They do not write business data: their
+  // validated output tells the client which existing page/form to open. Forms
+  // receive a one-shot, unsaved prefill handoff and retain their normal save/send
+  // actions as the only persistence boundary.
+  tools.navigateWorkspace = tool({
+    description: `Navigate immediately to a workspace page when the user asks to open, show, or go somewhere. This is a safe, read-only UI action. Destinations: ${HAI_PAGE_DESTINATION_KEYS.join(", ")}.`,
+    inputSchema: haiNavigateInputSchema,
+    execute: async ({ destination }) => buildNavigationResult(ctx, installedModules, destination),
+  });
+
+  tools.openForm = tool({
+    description: HAI_FORM_TOOL_GUIDE,
+    inputSchema: haiOpenFormInputSchema,
+    execute: async (input) => buildOpenFormResult(ctx, installedModules, input),
+  });
+
   // 1. Workspace overview - always offered; returns nulls for uninstalled modules.
   tools.getWorkspaceOverview = tool({
     description:
@@ -280,7 +311,7 @@ export function buildAssistantTools(
   if (hasModule("invoices") && can("view:invoice")) {
     tools.listInvoices = tool({
       description:
-        "List invoices for the workspace, newest first. Optional filters: status (draft|sent|viewed|paid|void|overdue), a search term (matches invoice number or customer name/company), and a limit (default 20, max 200). Returns number, status, totalCents, currency, issueDate, paidAt, customerName.",
+        "List invoices for the workspace, newest first. Optional filters: status (draft|sent|viewed|paid|void|overdue), a search term (matches invoice number or customer name/company), and a limit (default 20, max 200). Returns id, number, status, totalCents, currency, issueDate, paidAt, customerName. Use the id with invoice.edit only when the invoice is still editable.",
       inputSchema: z.object({
         status: z
           .enum(["draft", "sent", "viewed", "paid", "void", "overdue"])
@@ -305,6 +336,7 @@ export function buildAssistantTools(
           limit: clampLimit(input.limit, 20, 200),
         });
         return rows.map((r) => ({
+          id: r.id,
           number: r.number,
           status: r.status,
           totalCents: r.totalCents,
@@ -321,7 +353,7 @@ export function buildAssistantTools(
   if (hasModule("quotes") && can("view:quote")) {
     tools.listQuotes = tool({
       description:
-        "List quotes for the workspace, newest first. Optional filters: status (draft|sent|viewed|accepted|declined|expired|converted), a search term (matches quote number or customer name/company), and a limit (default 20, max 200). Returns number, status, totalCents, currency, issueDate, customerName.",
+        "List quotes for the workspace, newest first. Optional filters: status (draft|sent|viewed|accepted|declined|expired|converted), a search term (matches quote number or customer name/company), and a limit (default 20, max 200). Returns id, number, status, totalCents, currency, issueDate, customerName. Use the id with quote.edit only when the quote is still editable.",
       inputSchema: z.object({
         status: z
           .enum(["draft", "sent", "viewed", "accepted", "declined", "expired", "converted"])
@@ -346,6 +378,7 @@ export function buildAssistantTools(
           limit: clampLimit(input.limit, 20, 200),
         });
         return rows.map((r) => ({
+          id: r.id,
           number: r.number,
           status: r.status,
           totalCents: r.totalCents,
@@ -404,7 +437,7 @@ export function buildAssistantTools(
   if (hasModule("drive") && can("view:drive")) {
     tools.listDriveEarnings = tool({
       description:
-        "List Drive gig earnings for the workspace, newest first. Optional filters: a search term (matches platform or description), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns platform, amountCents, currency, date, description.",
+        "List Drive gig earnings for the workspace, newest first. Optional filters: a search term (matches platform or description), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns id, platform, amountCents, currency, date, description. Use the id with drive.earning.edit.",
       inputSchema: z.object({
         search: z.string().optional().describe("Substring match on platform or description."),
         dateFrom: z.string().datetime().optional().describe("Inclusive lower bound (ISO 8601)."),
@@ -425,11 +458,101 @@ export function buildAssistantTools(
           limit: clampLimit(input.limit, 20, 2000),
         });
         return rows.map((r) => ({
+          id: r.id,
           platform: r.platform,
           amountCents: r.amountCents,
           currency: r.currency,
           date: iso(r.date),
           description: r.description,
+        }));
+      },
+    });
+
+    tools.listDriveTrips = tool({
+      description:
+        "List Drive mileage trips for the workspace, newest first. Optional filters: platform, a search term (matches purpose or notes), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns id, platform, distanceKm, date, purpose. Use the id with drive.trip.edit.",
+      inputSchema: z.object({
+        platform: z.string().optional().describe("Filter by platform slug."),
+        search: z.string().optional().describe("Substring match on purpose or notes."),
+        dateFrom: z.string().datetime().optional().describe("Inclusive lower bound (ISO 8601)."),
+        dateTo: z.string().datetime().optional().describe("Inclusive upper bound (ISO 8601)."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(2000)
+          .optional()
+          .describe("Max rows to return (default 20)."),
+      }),
+      execute: async (input) => {
+        const rows = await listTrips(workspaceId, {
+          platform: input.platform,
+          search: input.search,
+          dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
+          dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
+          limit: clampLimit(input.limit, 20, 2000),
+        });
+        return rows.map((r) => ({
+          id: r.id,
+          platform: r.platform,
+          distanceKm: r.distanceMeters / 1000,
+          date: iso(r.date),
+          purpose: r.purpose,
+        }));
+      },
+    });
+
+    tools.listDriveVehicles = tool({
+      description:
+        "List vehicles in the workspace, active first. Returns id, name, make, model, year, odometerKm, and active. Use the id with drive.vehicle.edit, and the name with vehicleQuery or defaultVehicleQuery fields.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await listVehicles(workspaceId);
+        return rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          make: r.make,
+          model: r.model,
+          year: r.year,
+          odometerKm: r.odometerKm,
+          active: r.active,
+        }));
+      },
+    });
+
+    tools.listDriveExpenses = tool({
+      description:
+        "List vehicle expenses for the workspace, newest first. Optional filters: type, search, dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns id, vehicleId, type, amountCents, currency, date, description, and odometerKm. Use the id with drive.expense.edit; call listDriveVehicles when you need a vehicle name.",
+      inputSchema: z.object({
+        type: z.enum(["fuel", "maintenance", "insurance", "registration", "other"]).optional(),
+        search: z.string().optional().describe("Substring match on description or notes."),
+        dateFrom: z.string().datetime().optional().describe("Inclusive lower bound (ISO 8601)."),
+        dateTo: z.string().datetime().optional().describe("Inclusive upper bound (ISO 8601)."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(2000)
+          .optional()
+          .describe("Max rows to return (default 20)."),
+      }),
+      execute: async (input) => {
+        const rows = await listExpenses(workspaceId, {
+          type: input.type,
+          search: input.search,
+          dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
+          dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
+          limit: clampLimit(input.limit, 20, 2000),
+        });
+        return rows.map((r) => ({
+          id: r.id,
+          vehicleId: r.vehicleId,
+          type: r.type,
+          amountCents: r.amountCents,
+          currency: r.currency,
+          date: iso(r.date),
+          description: r.description,
+          odometerKm: r.odometerKm,
         }));
       },
     });
@@ -1369,4 +1492,79 @@ export async function buildMockAssistantReply(
     "\nAsk me to list invoices, quotes, transactions, customers, or recent activity for more detail.",
   );
   return lines.join("\n");
+}
+
+type SafeHaiToolResult =
+  { ok: true; directive: ReturnType<typeof createHaiFormDirective> } | { ok: false; error: string };
+
+type SafeHaiNavigationResult =
+  | { ok: true; directive: ReturnType<typeof createHaiNavigationDirective> }
+  | { ok: false; error: string };
+
+function buildOpenFormResult(
+  ctx: WorkspaceContext,
+  installedModules: readonly ModuleKey[],
+  input: HaiOpenFormInput,
+): SafeHaiToolResult {
+  const meta = HAI_FORM_WORKFLOWS[input.workflow];
+  if (meta.module && !installedModules.includes(meta.module)) {
+    return {
+      ok: false,
+      error: `${meta.label} is unavailable because the ${meta.module} module is not installed. Open Modules to enable it.`,
+    };
+  }
+  if (meta.permission && !authorize(ctx.role, meta.permission).ok) {
+    return { ok: false, error: `You don't have permission to open ${meta.label.toLowerCase()}.` };
+  }
+  return { ok: true, directive: createHaiFormDirective(input) };
+}
+
+function buildNavigationResult(
+  ctx: WorkspaceContext,
+  installedModules: readonly ModuleKey[],
+  destination: HaiPageDestination,
+): SafeHaiNavigationResult {
+  const meta = HAI_PAGE_DESTINATIONS[destination];
+  if (meta.module && !installedModules.includes(meta.module)) {
+    return {
+      ok: false,
+      error: `${meta.label} is unavailable because the ${meta.module} module is not installed. Open Modules to enable it.`,
+    };
+  }
+  if (meta.permission && !authorize(ctx.role, meta.permission).ok) {
+    return { ok: false, error: `You don't have permission to view ${meta.label.toLowerCase()}.` };
+  }
+  return { ok: true, directive: createHaiNavigationDirective(destination) };
+}
+
+export type MockHaiSafeAction = {
+  text: string;
+  tool: { name: "openForm" | "navigateWorkspace"; input: unknown; output: unknown };
+};
+
+/** Execute the conservative no-model fallback through the same gates as real tool calls. */
+export function buildMockHaiSafeAction(
+  ctx: WorkspaceContext,
+  installedModules: readonly ModuleKey[],
+  message: string,
+): MockHaiSafeAction | null {
+  const action = parseMockHaiAction(message);
+  if (!action) return null;
+  if (action.kind === "form") {
+    const parsed = haiOpenFormInputSchema.parse(action.input);
+    const output = buildOpenFormResult(ctx, installedModules, parsed);
+    return {
+      text: output.ok
+        ? `I've opened ${output.directive.label.toLowerCase()} and passed across only the details I could extract confidently. Nothing has been saved or sent.`
+        : output.error,
+      tool: { name: "openForm", input: parsed, output },
+    };
+  }
+  const output = buildNavigationResult(ctx, installedModules, action.destination);
+  return {
+    text: output.ok
+      ? `I've opened ${output.directive.label}. This navigation did not change any business data.`
+      : output.error,
+    tool: { name: "navigateWorkspace", input: { destination: action.destination }, output },
+  };
 }

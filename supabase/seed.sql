@@ -413,6 +413,19 @@ VALUES
 -- 11. Books transactions - income/expense + all 4 cross-module source links
 --     Categories from src/shared/constants/books-categories. Spread Jan–Jul 2026.
 -- ----------------------------------------------------------------------------
+-- Durable source-sync triggers now create mirror rows while the source fixtures
+-- above are inserted. Replace those generated rows with the deterministic seed
+-- fixtures below (stable ids, dates, GST, and receipt links) instead of colliding
+-- with the partial unique source indexes.
+DELETE FROM book_transactions
+WHERE workspace_id = '11111111-1111-4111-8111-111111111010'
+  AND (
+    source_invoice_id IS NOT NULL
+    OR source_earning_id IS NOT NULL
+    OR source_expense_id IS NOT NULL
+    OR source_trip_id IS NOT NULL
+  );
+
 INSERT INTO book_transactions
   (id, workspace_id, type, amount_cents, currency, date, description, category,
    customer_id, notes, gst_cents, source_invoice_id, source_earning_id,

@@ -7,6 +7,13 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { upsertDriveSettingsAction, type UpsertDriveSettingsResult } from "./actions";
 import type { VehicleRow } from "@/modules/drive";
+import {
+  HaiPrefillNotice,
+  fieldNumber,
+  fieldString,
+  resolvePickerId,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 export function DriveSettingsForm({
   mileageRateCentsPerKm,
@@ -24,6 +31,27 @@ export function DriveSettingsForm({
 
   const [rate, setRate] = useState<string>(String(mileageRateCentsPerKm));
   const [vehicleId, setVehicleId] = useState<string>(defaultVehicleId ?? "");
+
+  const haiNotice = useHaiFormPrefill("drive.settings", (fields) => {
+    const applied: string[] = [];
+    const unresolved: string[] = [];
+    const nextRate = fieldNumber(fields, "mileageRateCentsPerKm");
+    if (nextRate !== undefined) {
+      setRate(String(nextRate));
+      applied.push("mileage rate");
+    }
+    const vehicleQuery = fieldString(fields, "defaultVehicleQuery");
+    if (vehicleQuery) {
+      const id = resolvePickerId(vehicleQuery, vehicles);
+      if (id) {
+        setVehicleId(id);
+        applied.push("default vehicle");
+      } else {
+        unresolved.push(`vehicle “${vehicleQuery}” (select a match)`);
+      }
+    }
+    return { appliedFields: applied, unresolvedFields: unresolved };
+  });
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -50,6 +78,7 @@ export function DriveSettingsForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="rate">Mileage rate (cents per km)</Label>

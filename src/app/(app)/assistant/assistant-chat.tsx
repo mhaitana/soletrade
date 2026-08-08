@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Bot, Plus, Send, Square, Trash2, Zap } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { cn } from "@/shared/lib/utils";
 import { brand } from "@/config/brand";
 import { deleteConversationAction, setWriteEnabledAction, type AssistantPageData } from "./actions";
+import { HaiToolPart, useHaiToolNavigation } from "./use-hai-tool-navigation";
 
 /**
  * AI assistant chat client (Phase 10). Uses the AI SDK v5 `useChat` hook with a
@@ -53,6 +54,7 @@ export function AssistantChat({
   activeConversation: AssistantPageData["activeConversation"];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const initialId = activeConversation?.id ?? null;
   const [conversationId, setConversationId] = useState<string | null>(initialId);
   const [input, setInput] = useState("");
@@ -106,6 +108,7 @@ export function AssistantChat({
       router.refresh();
     },
   });
+  useHaiToolNavigation(messages);
 
   const busy = status === "submitted" || status === "streaming";
 
@@ -114,7 +117,15 @@ export function AssistantChat({
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
-    void sendMessage({ text }, { body: { conversationId } });
+    void sendMessage(
+      { text },
+      {
+        body: {
+          conversationId,
+          pageContext: { pathname, search: window.location.search },
+        },
+      },
+    );
   }
 
   async function onDelete(id: string) {
@@ -207,7 +218,7 @@ export function AssistantChat({
         <Card className="flex min-h-[60vh] flex-1 flex-col">
           <header className="flex items-center gap-2 border-b px-4 py-3">
             <Bot className="size-5 text-primary" aria-hidden />
-            <h1 className="text-sm font-semibold">{brand.productName} assistant</h1>
+            <h1 className="text-sm font-semibold">{brand.assistantName} assistant</h1>
             <div className="ml-auto flex items-center gap-1.5">
               <button
                 type="button"
@@ -251,7 +262,17 @@ export function AssistantChat({
                     <button
                       key={p}
                       type="button"
-                      onClick={() => void sendMessage({ text: p }, { body: { conversationId } })}
+                      onClick={() =>
+                        void sendMessage(
+                          { text: p },
+                          {
+                            body: {
+                              conversationId,
+                              pageContext: { pathname, search: window.location.search },
+                            },
+                          },
+                        )
+                      }
                       disabled={busy}
                       className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50 max-md:min-h-11 max-md:px-4 max-md:py-2 max-md:text-sm"
                     >
@@ -268,11 +289,32 @@ export function AssistantChat({
                   <div key={m.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
                     <div
                       className={cn(
-                        "max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm",
-                        isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                        "max-w-[85%] space-y-2 text-sm",
+                        isUser &&
+                          "whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-primary-foreground",
                       )}
                     >
-                      {text || (m.role === "assistant" && busy ? "…" : "")}
+                      {isUser
+                        ? text
+                        : m.parts.map((part, index) => {
+                            if (part.type === "text" && part.text) {
+                              return (
+                                <div
+                                  key={`${m.id}-text-${index}`}
+                                  className="whitespace-pre-wrap rounded-lg bg-muted px-3 py-2 text-foreground"
+                                >
+                                  {part.text}
+                                </div>
+                              );
+                            }
+                            if (isToolUIPart(part)) {
+                              return <HaiToolPart key={part.toolCallId} part={part} />;
+                            }
+                            return null;
+                          })}
+                      {!isUser && !text && busy && !m.parts.some(isToolUIPart) ? (
+                        <div className="rounded-lg bg-muted px-3 py-2 text-foreground">…</div>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -296,7 +338,7 @@ export function AssistantChat({
                   onSubmit(e as unknown as FormEvent);
                 }
               }}
-              placeholder="Ask anything about your workspace…"
+              placeholder={`Ask ${brand.assistantName} about this page or your business…`}
               rows={1}
               disabled={busy}
               aria-label="Message"

@@ -24,6 +24,14 @@ import {
 } from "./actions";
 import { CustomerCreateDialog, type PickerCustomer } from "../customers/customer-create-dialog";
 import type { InvoiceWithItems } from "@/modules/invoices";
+import {
+  HaiPrefillNotice,
+  fieldBoolean,
+  fieldNumber,
+  fieldString,
+  resolvePickerId,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateInvoiceResult | UpdateInvoiceResult;
 
@@ -107,6 +115,72 @@ export function InvoiceForm({
       : [{ key: crypto.randomUUID(), description: "", quantity: "1", unitPriceDollars: "" }],
   );
 
+  const haiNotice = useHaiFormPrefill(
+    mode === "create" ? "invoice.create" : "invoice.edit",
+    (fields) => {
+      const applied: string[] = [];
+      const unresolved: string[] = [];
+      const customerQuery = fieldString(fields, "customerQuery");
+      if (customerQuery) {
+        const id = resolvePickerId(customerQuery, customerList);
+        if (id) {
+          setCustomerId(id);
+          applied.push("customer");
+        } else {
+          unresolved.push(`customer “${customerQuery}” (select a match)`);
+        }
+      }
+      const nextIssueDate = fieldString(fields, "issueDate");
+      if (nextIssueDate) {
+        setIssueDate(nextIssueDate);
+        applied.push("issue date");
+      }
+      const nextDueDate = fieldString(fields, "dueDate");
+      if (nextDueDate) {
+        setDueDate(nextDueDate);
+        applied.push("due date");
+      }
+      const nextTaxRate = fieldNumber(fields, "taxRate");
+      if (nextTaxRate !== undefined) {
+        setTaxRate(String(nextTaxRate));
+        applied.push("tax rate");
+      }
+      const nextPricesIncludeTax = fieldBoolean(fields, "pricesIncludeTax");
+      if (nextPricesIncludeTax !== undefined) {
+        setPricesIncludeTax(nextPricesIncludeTax);
+        applied.push("tax treatment");
+      }
+      const nextNotes = fieldString(fields, "notes");
+      if (nextNotes !== undefined) {
+        setNotes(nextNotes);
+        applied.push("notes");
+      }
+      const nextItems = fields.lineItems;
+      if (Array.isArray(nextItems) && nextItems.length > 0) {
+        setItems(
+          nextItems.map((item) => {
+            const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+            const description = typeof row.description === "string" ? row.description : "";
+            const quantity = typeof row.quantity === "number" ? row.quantity : 1;
+            const unitPriceCents =
+              typeof row.unitPriceCents === "number" ? row.unitPriceCents : undefined;
+            if (!description) unresolved.push("line-item description");
+            if (unitPriceCents === undefined) unresolved.push("line-item amount");
+            return {
+              key: crypto.randomUUID(),
+              description,
+              quantity: String(quantity),
+              unitPriceDollars:
+                unitPriceCents === undefined ? "" : (unitPriceCents / 100).toFixed(2),
+            };
+          }),
+        );
+        applied.push("line items");
+      }
+      return { appliedFields: applied, unresolvedFields: unresolved };
+    },
+  );
+
   // Live totals preview from the current line items + tax rate.
   const totals = computeInvoiceTotals(
     toLineItemInput(items).map((it) => ({
@@ -184,6 +258,7 @@ export function InvoiceForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="customerId">Customer</Label>

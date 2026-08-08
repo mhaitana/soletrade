@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -17,10 +17,17 @@ import {
 } from "@/app/(app)/actions/workspace";
 import { type PaymentMethods } from "@/shared/types/payment-methods";
 import { PaymentMethodsEditor } from "@/shared/components/payment-methods-editor";
+import {
+  HaiPrefillNotice,
+  fieldNumber,
+  fieldString,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 const initialState: UpdateWorkspaceResult = { ok: false, error: "" };
 
 export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageData }) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethods>(
     initial.workspace.paymentMethods ?? [],
   );
@@ -46,6 +53,28 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
 
   const error = !state.ok ? state.error : "";
 
+  const haiNotice = useHaiFormPrefill("settings.general", (fields) => {
+    const applied: string[] = [];
+    const labels: Record<string, string> = {
+      name: "workspace name",
+      defaultCurrency: "default currency",
+      invoicePrefix: "invoice prefix",
+      quotePrefix: "quote prefix",
+      timezone: "timezone",
+      fyStartMonth: "financial-year start",
+    };
+    for (const key of Object.keys(labels)) {
+      const value = key === "fyStartMonth" ? fieldNumber(fields, key) : fieldString(fields, key);
+      if (value === undefined) continue;
+      const control = formRef.current?.elements.namedItem(key);
+      if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) {
+        control.value = String(value);
+        applied.push(labels[key]!);
+      }
+    }
+    return { appliedFields: applied };
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -70,7 +99,8 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={formAction} className="space-y-4">
+          <form ref={formRef} action={formAction} className="space-y-4">
+            <HaiPrefillNotice notice={haiNotice} />
             <div className="space-y-1.5">
               <Label htmlFor="name">Workspace name</Label>
               <Input

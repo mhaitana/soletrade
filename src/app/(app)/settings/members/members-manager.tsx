@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useActionState, useTransition, useState } from "react";
+import { useEffect, useActionState, useRef, useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -24,6 +24,11 @@ import {
   type InviteMemberResult,
   type MembersPageData,
 } from "@/app/(app)/actions/members";
+import {
+  HaiPrefillNotice,
+  fieldString,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 const ROLE_OPTIONS = ["admin", "manager", "accountant", "employee", "readonly"] as const;
 const initialState: InviteMemberResult = { ok: false, error: "" };
@@ -37,6 +42,7 @@ function roleLabel(role: string) {
 
 export function MembersManager({ initial }: { initial: MembersPageData }) {
   const router = useRouter();
+  const inviteFormRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<{ userId: string; label: string } | null>(null);
@@ -105,6 +111,22 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
 
   const inviteError = !inviteState.ok ? inviteState.error : "";
   const inviteFieldErrors = !inviteState.ok ? inviteState.fieldErrors : undefined;
+  const haiNotice = useHaiFormPrefill("settings.member-invite", (fields) => {
+    const applied: string[] = [];
+    const email = fieldString(fields, "email");
+    const role = fieldString(fields, "role");
+    const emailControl = inviteFormRef.current?.elements.namedItem("email");
+    const roleControl = inviteFormRef.current?.elements.namedItem("role");
+    if (email && emailControl instanceof HTMLInputElement) {
+      emailControl.value = email;
+      applied.push("email");
+    }
+    if (role && roleControl instanceof HTMLSelectElement) {
+      roleControl.value = role;
+      applied.push("role");
+    }
+    return { appliedFields: applied };
+  });
 
   return (
     <div className="space-y-8">
@@ -122,7 +144,12 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={inviteAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <HaiPrefillNotice notice={haiNotice} className="mb-4" />
+            <form
+              ref={inviteFormRef}
+              action={inviteAction}
+              className="flex flex-col gap-3 sm:flex-row sm:items-end"
+            >
               <div className="flex-1 space-y-1.5">
                 <Label htmlFor="invite-email">Email</Label>
                 <Input

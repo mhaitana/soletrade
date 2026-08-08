@@ -1,11 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef } from "react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { updateProfileAction, type UpdateProfileResult } from "@/app/(app)/actions/account";
+import {
+  HaiPrefillNotice,
+  fieldString,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 const initialState: UpdateProfileResult = { ok: false, error: "" };
 
@@ -16,6 +21,7 @@ export function AccountForm({
   initialEmail: string;
   initialFullName: string;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction, pending] = useActionState(
     async (_prev: UpdateProfileResult, formData: FormData): Promise<UpdateProfileResult> =>
       updateProfileAction({ fullName: String(formData.get("fullName") ?? "") }),
@@ -24,6 +30,15 @@ export function AccountForm({
 
   const initial = (initialEmail.charAt(0) || "A").toUpperCase();
   const error = !state.ok ? state.error : "";
+  const haiNotice = useHaiFormPrefill("settings.account", (fields) => {
+    const fullName = fieldString(fields, "fullName");
+    const control = formRef.current?.elements.namedItem("fullName");
+    if (fullName && control instanceof HTMLInputElement) {
+      control.value = fullName;
+      return { appliedFields: ["full name"] };
+    }
+    return { appliedFields: [] };
+  });
 
   return (
     <div className="space-y-6">
@@ -48,7 +63,8 @@ export function AccountForm({
             </div>
           </div>
 
-          <form action={formAction} className="space-y-3">
+          <form ref={formRef} action={formAction} className="space-y-3">
+            <HaiPrefillNotice notice={haiNotice} />
             <div className="space-y-1.5">
               <Label htmlFor="fullName">Full name</Label>
               <Input

@@ -4,6 +4,10 @@ import { requireAdminContext } from "@/platform/admin/services/admin-auth";
 import { getActiveSupportAccessSession } from "@/platform/admin/services/admin-support-access";
 import { AdminShell } from "@/platform/admin/components/admin-shell";
 
+// All admin routes are authenticated and read request-scoped session/database data.
+// Never prerender this tree at build time or cache one admin's context for another.
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Soletrade Operations | Internal Admin Area",
   description: "Secure internal operations area for Soletrade Workspace platform administration.",

@@ -18,6 +18,14 @@ import type { CustomerRow } from "@/platform/customers";
 import type { TransactionRow } from "@/modules/books";
 import type { BookType } from "@/server/db/enums";
 import type { FileId } from "@/shared/types/ids";
+import {
+  HaiPrefillNotice,
+  fieldBoolean,
+  fieldNumber,
+  fieldString,
+  resolvePickerId,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateTransactionResult | UpdateTransactionResult;
 
@@ -92,6 +100,74 @@ export function BookForm({
     tx && tx.gstCents > 0 ? (tx.gstCents / 100).toFixed(2) : "",
   );
 
+  const haiNotice = useHaiFormPrefill(
+    mode === "create" ? "books.transaction.create" : "books.transaction.edit",
+    (fields) => {
+      const applied: string[] = [];
+      const unresolved: string[] = [];
+      const requestedType = fieldString(fields, "type");
+      const nextType: BookType =
+        requestedType === "expense" ? "expense" : requestedType === "income" ? "income" : type;
+      if (requestedType === "income" || requestedType === "expense") {
+        setType(nextType);
+        setCategory(categoriesForType(nextType)[0]!.key);
+        applied.push("transaction type");
+      }
+      const amountCents = fieldNumber(fields, "amountCents");
+      if (amountCents !== undefined) {
+        setAmountDollars((amountCents / 100).toFixed(2));
+        applied.push("amount");
+      }
+      const nextDate = fieldString(fields, "date");
+      if (nextDate) {
+        setDate(nextDate);
+        applied.push("date");
+      }
+      const nextDescription = fieldString(fields, "description");
+      if (nextDescription) {
+        setDescription(nextDescription);
+        applied.push("description");
+      }
+      const nextCategory = fieldString(fields, "category");
+      if (nextCategory) {
+        if (categoriesForType(nextType).some((entry) => entry.key === nextCategory)) {
+          setCategory(nextCategory);
+          applied.push("category");
+        } else {
+          unresolved.push(`category “${nextCategory}” (select a match)`);
+        }
+      }
+      const customerQuery = fieldString(fields, "customerQuery");
+      if (customerQuery) {
+        const id = resolvePickerId(customerQuery, customers);
+        if (id) {
+          setCustomerId(id);
+          applied.push("customer");
+        } else {
+          unresolved.push(`customer “${customerQuery}” (select a match)`);
+        }
+      }
+      const nextNotes = fieldString(fields, "notes");
+      if (nextNotes !== undefined) {
+        setNotes(nextNotes);
+        applied.push("notes");
+      }
+      const nextGstIncluded = fieldBoolean(fields, "gstIncluded");
+      const nextGstCents = fieldNumber(fields, "gstCents");
+      if (nextGstIncluded !== undefined) {
+        setGstIncluded(nextGstIncluded);
+        applied.push("GST treatment");
+      }
+      if (nextGstCents !== undefined) {
+        setGstDollars((nextGstCents / 100).toFixed(2));
+        applied.push("GST amount");
+      } else if (nextGstIncluded && amountCents !== undefined) {
+        setGstDollars(computeGstDollars((amountCents / 100).toFixed(2)));
+      }
+      return { appliedFields: applied, unresolvedFields: unresolved };
+    },
+  );
+
   const categories = categoriesForType(type);
 
   function onTypeChange(next: BookType) {
@@ -138,6 +214,7 @@ export function BookForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="type">Type</Label>

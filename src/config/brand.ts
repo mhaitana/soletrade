@@ -29,6 +29,9 @@ export const brand = {
   shortProductName: "Workspace",
   repositoryName: "soletrade",
 
+  /** Global assistant identity used across Core and optional modules. */
+  assistantName: "hAI",
+
   tagline: "One workspace to run your business.",
 
   description:

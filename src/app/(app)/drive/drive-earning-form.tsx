@@ -14,6 +14,12 @@ import {
   type UpdateEarningResult,
 } from "./actions";
 import type { EarningRow } from "@/modules/drive";
+import {
+  HaiPrefillNotice,
+  fieldNumber,
+  fieldString,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateEarningResult | UpdateEarningResult;
 
@@ -51,6 +57,44 @@ export function DriveEarningForm({
   const [description, setDescription] = useState<string>(earning?.description ?? "");
   const [notes, setNotes] = useState<string>(earning?.notes ?? "");
 
+  const haiNotice = useHaiFormPrefill(
+    mode === "create" ? "drive.earning.create" : "drive.earning.edit",
+    (fields) => {
+      const applied: string[] = [];
+      const unresolved: string[] = [];
+      const nextPlatform = fieldString(fields, "platform");
+      if (nextPlatform) {
+        if (DRIVE_PLATFORMS.some((entry) => entry.key === nextPlatform)) {
+          setPlatform(nextPlatform);
+          applied.push("platform");
+        } else {
+          unresolved.push(`platform “${nextPlatform}” (select a match)`);
+        }
+      }
+      const amountCents = fieldNumber(fields, "amountCents");
+      if (amountCents !== undefined) {
+        setAmountDollars((amountCents / 100).toFixed(2));
+        applied.push("amount");
+      }
+      const nextDate = fieldString(fields, "date");
+      if (nextDate) {
+        setDate(nextDate);
+        applied.push("date");
+      }
+      const nextDescription = fieldString(fields, "description");
+      if (nextDescription) {
+        setDescription(nextDescription);
+        applied.push("description");
+      }
+      const nextNotes = fieldString(fields, "notes");
+      if (nextNotes !== undefined) {
+        setNotes(nextNotes);
+        applied.push("notes");
+      }
+      return { appliedFields: applied, unresolvedFields: unresolved };
+    },
+  );
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
@@ -84,6 +128,7 @@ export function DriveEarningForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="platform">Platform</Label>

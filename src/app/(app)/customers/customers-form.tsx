@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useActionState } from "react";
+import { useEffect, useActionState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button";
@@ -13,6 +13,11 @@ import {
   type UpdateCustomerResult,
 } from "./actions";
 import type { CustomerRow } from "@/platform/customers";
+import {
+  HaiPrefillNotice,
+  fieldString,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateCustomerResult | UpdateCustomerResult;
 
@@ -25,6 +30,7 @@ export function CustomerForm({
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [state, action, pending] = useActionState(
     async (_prev: Result | null, formData: FormData): Promise<Result> => {
@@ -50,8 +56,33 @@ export function CustomerForm({
   const error = state && !state.ok ? state.error : "";
   const fieldErrors = state && !state.ok ? state.fieldErrors : undefined;
 
+  const haiNotice = useHaiFormPrefill(
+    mode === "create" ? "customer.create" : "customer.edit",
+    (fields) => {
+      const applied: string[] = [];
+      const labels: Record<string, string> = {
+        name: "customer name",
+        email: "email",
+        phone: "phone",
+        company: "company",
+        notes: "notes",
+      };
+      for (const key of Object.keys(labels)) {
+        const value = fieldString(fields, key);
+        if (value === undefined) continue;
+        const control = formRef.current?.elements.namedItem(key);
+        if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+          control.value = value;
+          applied.push(labels[key]!);
+        }
+      }
+      return { appliedFields: applied };
+    },
+  );
+
   return (
-    <form action={action} className="space-y-4">
+    <form ref={formRef} action={action} className="space-y-4">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="space-y-1.5">
         <Label htmlFor="name">Name</Label>
         <Input

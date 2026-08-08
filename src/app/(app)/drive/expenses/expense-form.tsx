@@ -16,6 +16,13 @@ import { ExpenseReceiptUpload } from "./expense-receipt-upload";
 import type { ExpenseRow, VehicleRow } from "@/modules/drive";
 import type { VehicleExpenseType } from "@/server/db/enums";
 import type { FileId } from "@/shared/types/ids";
+import {
+  HaiPrefillNotice,
+  fieldNumber,
+  fieldString,
+  resolvePickerId,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateExpenseResult | UpdateExpenseResult;
 
@@ -75,6 +82,59 @@ export function ExpenseForm({
   const [notes, setNotes] = useState<string>(expense?.notes ?? "");
   const [receiptFileId, setReceiptFileId] = useState<FileId | null>(expense?.receiptFileId ?? null);
 
+  const haiNotice = useHaiFormPrefill(
+    mode === "create" ? "drive.expense.create" : "drive.expense.edit",
+    (fields) => {
+      const applied: string[] = [];
+      const unresolved: string[] = [];
+      const vehicleQuery = fieldString(fields, "vehicleQuery");
+      if (vehicleQuery) {
+        const id = resolvePickerId(vehicleQuery, vehicles);
+        if (id) {
+          setVehicleId(id);
+          applied.push("vehicle");
+        } else {
+          unresolved.push(`vehicle “${vehicleQuery}” (select a match)`);
+        }
+      }
+      const nextType = fieldString(fields, "type");
+      if (nextType) {
+        if (EXPENSE_TYPES.some((entry) => entry.key === nextType)) {
+          setType(nextType as VehicleExpenseType);
+          applied.push("expense type");
+        } else {
+          unresolved.push(`expense type “${nextType}” (select a match)`);
+        }
+      }
+      const amountCents = fieldNumber(fields, "amountCents");
+      if (amountCents !== undefined) {
+        setAmountDollars((amountCents / 100).toFixed(2));
+        applied.push("amount");
+      }
+      const nextDate = fieldString(fields, "date");
+      if (nextDate) {
+        setDate(nextDate);
+        applied.push("date");
+      }
+      const nextDescription = fieldString(fields, "description");
+      if (nextDescription) {
+        setDescription(nextDescription);
+        applied.push("description");
+      }
+      const nextOdometer = fieldNumber(fields, "odometerKm");
+      if (nextOdometer !== undefined) {
+        setOdometerKm(String(nextOdometer));
+        applied.push("odometer");
+      }
+      const nextNotes = fieldString(fields, "notes");
+      if (nextNotes !== undefined) {
+        setNotes(nextNotes);
+        applied.push("notes");
+      }
+      return { appliedFields: applied, unresolvedFields: unresolved };
+    },
+  );
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
@@ -111,6 +171,7 @@ export function ExpenseForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="vehicleId">Vehicle</Label>

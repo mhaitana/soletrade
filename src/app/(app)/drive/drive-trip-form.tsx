@@ -14,6 +14,12 @@ import {
   type UpdateTripResult,
 } from "./actions";
 import type { TripRow } from "@/modules/drive";
+import {
+  HaiPrefillNotice,
+  fieldNumber,
+  fieldString,
+  useHaiFormPrefill,
+} from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateTripResult | UpdateTripResult;
 
@@ -36,6 +42,44 @@ export function DriveTripForm({ mode, trip }: { mode: "create" | "edit"; trip?: 
   const [date, setDate] = useState<string>(isoDate(trip?.date) || isoDate(new Date()));
   const [purpose, setPurpose] = useState<string>(trip?.purpose ?? "");
   const [notes, setNotes] = useState<string>(trip?.notes ?? "");
+
+  const haiNotice = useHaiFormPrefill(
+    mode === "create" ? "drive.trip.create" : "drive.trip.edit",
+    (fields) => {
+      const applied: string[] = [];
+      const unresolved: string[] = [];
+      const nextPlatform = fieldString(fields, "platform");
+      if (nextPlatform) {
+        if (DRIVE_PLATFORMS.some((entry) => entry.key === nextPlatform)) {
+          setPlatform(nextPlatform);
+          applied.push("platform");
+        } else {
+          unresolved.push(`platform “${nextPlatform}” (select a match)`);
+        }
+      }
+      const nextDistance = fieldNumber(fields, "distanceKm");
+      if (nextDistance !== undefined) {
+        setDistanceKm(String(nextDistance));
+        applied.push("distance");
+      }
+      const nextDate = fieldString(fields, "date");
+      if (nextDate) {
+        setDate(nextDate);
+        applied.push("date");
+      }
+      const nextPurpose = fieldString(fields, "purpose");
+      if (nextPurpose !== undefined) {
+        setPurpose(nextPurpose);
+        applied.push("purpose");
+      }
+      const nextNotes = fieldString(fields, "notes");
+      if (nextNotes !== undefined) {
+        setNotes(nextNotes);
+        applied.push("notes");
+      }
+      return { appliedFields: applied, unresolvedFields: unresolved };
+    },
+  );
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -69,6 +113,7 @@ export function DriveTripForm({ mode, trip }: { mode: "create" | "edit"; trip?: 
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <HaiPrefillNotice notice={haiNotice} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="platform">Platform</Label>

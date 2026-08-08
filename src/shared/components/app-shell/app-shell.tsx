@@ -14,6 +14,7 @@ import {
   Plus,
   Settings,
   ShieldCheck,
+  Sparkles,
   Users,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -30,6 +31,8 @@ import { MODULES, type ModuleKey } from "@/shared/constants/modules";
 import type { LucideIcon } from "lucide-react";
 import type { WorkspaceRole } from "@/server/db/enums";
 import type { WorkspaceId } from "@/shared/types/ids";
+import { brand } from "@/config/brand";
+import { HaiAssistantPanel } from "@/app/(app)/assistant/hai-assistant-panel";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -53,7 +56,7 @@ function isActive(pathname: string, href: string) {
 export function buildNav(installedModules: ModuleKey[]): NavItem[] {
   const platformNav: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/assistant", label: "Assistant", icon: Bot },
+    { href: "/assistant", label: brand.assistantName, icon: Bot },
     ...installedModules.map((key) => ({
       href: MODULES[key].href,
       label: MODULES[key].shortName,
@@ -186,8 +189,10 @@ export function AppShell({
 }: AppShellProps) {
   const items = useMemo(() => buildNav(installedModules), [installedModules]);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [haiOpen, setHaiOpen] = useState(false);
+
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh overflow-x-clip">
       <a
         href="#main-content"
         className="sr-only z-50 rounded-md bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4"
@@ -205,7 +210,12 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="md:pl-64">
+      <div
+        className={cn(
+          "transition-[padding] duration-200 motion-reduce:transition-none md:pl-64",
+          haiOpen && "xl:pr-96",
+        )}
+      >
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex h-16 items-center gap-1.5 border-b border-border bg-background/80 px-4 backdrop-blur min-[360px]:gap-3 md:px-8">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -240,6 +250,19 @@ export function AppShell({
           <SearchTrigger installedModules={installedModules} />
 
           <div className="ml-auto flex items-center gap-0 min-[360px]:gap-1">
+            <Button
+              type="button"
+              variant={haiOpen ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setHaiOpen((current) => !current)}
+              aria-expanded={haiOpen}
+              aria-controls="hai-assistant-panel"
+              className="min-h-11 min-w-11 gap-1.5 px-2.5 text-brand-blue max-[420px]:size-11 max-[420px]:px-0"
+              title={`Open ${brand.assistantName}`}
+            >
+              <Sparkles className="size-4" aria-hidden />
+              <span className="max-[420px]:sr-only">{brand.assistantName}</span>
+            </Button>
             <NotificationBell initialUnreadCount={notificationCount} />
             <ThemeToggle />
             <AccountMenu userEmail={userEmail} />
@@ -252,6 +275,9 @@ export function AppShell({
       </div>
 
       <BottomNav items={items} />
+      <div id="hai-assistant-panel">
+        <HaiAssistantPanel open={haiOpen} onOpenChange={setHaiOpen} />
+      </div>
     </div>
   );
 }
