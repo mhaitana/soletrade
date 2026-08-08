@@ -17,14 +17,14 @@ import type { ModuleCardData } from "./actions";
 export function ModuleSummaryCard({ card }: { card: ModuleCardData }) {
   const Icon = MODULES[card.key].icon;
   return (
-    <Card className="flex flex-col">
-      <CardHeader>
+    <Card className="flex flex-col max-sm:gap-4 max-sm:py-4">
+      <CardHeader className="max-sm:px-4">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Icon className="size-5 text-primary" aria-hidden />
           <span className="font-medium">{card.name}</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4">
+      <CardContent className="flex flex-1 flex-col gap-4 max-sm:gap-3 max-sm:px-4">
         {card.sparkline ? (
           <Sparkline points={card.sparkline.points} ariaLabel={card.sparkline.ariaLabel} />
         ) : (

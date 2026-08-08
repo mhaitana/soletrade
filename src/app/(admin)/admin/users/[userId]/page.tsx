@@ -92,7 +92,7 @@ export default async function AdminUserDetailPage({
               <button
                 type="button"
                 disabled
-                className="w-full cursor-not-allowed rounded-md border border-border bg-muted/40 px-3 py-2 text-left font-medium text-muted-foreground/60"
+                className="min-h-11 w-full cursor-not-allowed rounded-md border border-border bg-muted/40 px-3 py-2 text-left font-medium text-muted-foreground/60 md:min-h-0"
                 title="Not yet implemented — requires its own RBAC + audit path."
               >
                 Revoke User Sessions

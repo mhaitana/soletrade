@@ -191,7 +191,7 @@ export function AssistantChat({
                     onClick={() => void onDelete(c.id as string)}
                     disabled={pendingDelete === (c.id as string)}
                     aria-label={`Delete conversation ${c.title}`}
-                    className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-rose-600 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
+                    className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-rose-600 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50 max-lg:size-11 max-lg:p-0 max-lg:opacity-100"
                   >
                     <Trash2 className="size-3.5" aria-hidden />
                   </button>
@@ -253,7 +253,7 @@ export function AssistantChat({
                       type="button"
                       onClick={() => void sendMessage({ text: p }, { body: { conversationId } })}
                       disabled={busy}
-                      className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50 max-md:min-h-10 max-md:px-4 max-md:py-2 max-md:text-sm"
+                      className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50 max-md:min-h-11 max-md:px-4 max-md:py-2 max-md:text-sm"
                     >
                       {p}
                     </button>

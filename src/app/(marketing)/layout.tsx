@@ -9,13 +9,18 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
-        <Logo />
+        <div className="hidden min-[360px]:block">
+          <Logo />
+        </div>
+        <div className="min-[360px]:hidden">
+          <Logo variant="mark" />
+        </div>
         <nav className="flex items-center gap-2">
           <ThemeToggle />
           <Button asChild variant="ghost" size="sm">
             <Link href="/pricing">Pricing</Link>
           </Button>
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
             <Link href="/login">Sign in</Link>
           </Button>
           <Button asChild size="sm">

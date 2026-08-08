@@ -207,7 +207,7 @@ export function AppShell({
 
       <div className="md:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-1.5 border-b border-border bg-background/80 px-4 backdrop-blur min-[360px]:gap-3 md:px-8">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
@@ -239,7 +239,7 @@ export function AppShell({
 
           <SearchTrigger installedModules={installedModules} />
 
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-0 min-[360px]:gap-1">
             <NotificationBell initialUnreadCount={notificationCount} />
             <ThemeToggle />
             <AccountMenu userEmail={userEmail} />

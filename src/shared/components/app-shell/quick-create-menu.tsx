@@ -70,10 +70,10 @@ export function QuickCreateMenu({
         <Button
           type="button"
           aria-label="Create new"
-          className="gap-2 px-3 max-sm:size-11 max-sm:px-0"
+          className="gap-2 px-3 max-md:size-11 max-md:px-0 md:max-xl:size-9 md:max-xl:px-0"
         >
           <Plus className="size-4" aria-hidden />
-          <span className="max-sm:sr-only">New</span>
+          <span className="max-xl:sr-only">New</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">

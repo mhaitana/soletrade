@@ -3,6 +3,7 @@ import { Check, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { FilterMenu } from "@/shared/ui/responsive-filter";
 import { SegmentedControl } from "@/shared/ui/segmented-control";
 import { PERIODS, parsePeriod, type Period } from "@/shared/utils/periods";
 import { MODULES, MODULE_KEYS } from "@/shared/constants/modules";
@@ -42,6 +43,12 @@ export default async function DashboardPage({
   const period: Period = rawPeriod ? parsePeriod(rawPeriod) : "month";
   const data = await loadDashboardPage({ period });
   const periodNoun: string = period === "all" ? "" : PERIOD_NOUN[period];
+  const periodItems = PERIODS.map((option) => ({
+    key: option.key,
+    label: option.label,
+    href: `/dashboard?period=${option.key}`,
+    active: option.key === period,
+  }));
 
   // --- Onboarding branch: zero modules installed → keep the starter checklist + enable cards.
   if (data.onboarding) {
@@ -128,32 +135,33 @@ export default async function DashboardPage({
 
   // --- Real dashboard: period selector + KPI row + per-module summary cards + activity.
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Business overview
-          </p>
+    <div className="space-y-6 md:space-y-8">
+      <div className="space-y-3 sm:flex sm:items-start sm:justify-between sm:gap-4 sm:space-y-0">
+        <div className="min-w-0">
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Business overview
+            </p>
+            <div className="shrink-0 sm:hidden">
+              <FilterMenu items={periodItems} label="Dashboard period" align="end" />
+            </div>
+          </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">{data.workspaceName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Income, cash, work, and follow-ups - {period === "all" ? "all time" : `this ${period}`}.
           </p>
         </div>
-        {/* Period selector - SegmentedControl; active period highlighted. */}
-        <SegmentedControl
-          label="Dashboard period"
-          items={PERIODS.map((p) => ({
-            key: p.key,
-            label: p.label,
-            href: `/dashboard?period=${p.key}`,
-            active: p.key === period,
-          }))}
-        />
+        <div className="hidden shrink-0 sm:block xl:hidden">
+          <FilterMenu items={periodItems} label="Dashboard period" align="end" />
+        </div>
+        <div className="hidden shrink-0 xl:block">
+          <SegmentedControl label="Dashboard period" items={periodItems} />
+        </div>
       </div>
 
       {/* KPI row */}
       <section aria-label="Key metrics">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {data.kpis.map((kpi) => (
             <KpiCard key={kpi.id} kpi={kpi} periodNoun={periodNoun} />
           ))}

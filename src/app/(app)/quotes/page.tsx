@@ -8,6 +8,7 @@ import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
 import { loadQuotesPage } from "./actions";
 import type { QuoteStatus } from "@/server/db/enums";
+import { ResponsiveFilter } from "@/shared/ui/responsive-filter";
 
 export const metadata = { title: "Quotes" };
 
@@ -60,6 +61,18 @@ export default async function QuotesPage({
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="quotes" />;
 
+  const statusFilterItems = STATUS_FILTERS.map((filter) => ({
+    key: filter.key,
+    label: filter.label,
+    active: (filter.key === "all" && !status) || filter.key === status,
+    href:
+      filter.key === "all"
+        ? data.search
+          ? `/quotes?search=${encodeURIComponent(data.search)}`
+          : "/quotes"
+        : `/quotes?status=${filter.key}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`,
+  }));
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -79,46 +92,26 @@ export default async function QuotesPage({
         ) : null}
       </div>
 
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="Filter quotes by status"
-      >
-        {STATUS_FILTERS.map((f) => {
-          const active = (f.key === "all" && !status) || f.key === status;
-          const href =
-            f.key === "all"
-              ? data.search
-                ? `/quotes?search=${encodeURIComponent(data.search)}`
-                : "/quotes"
-              : `/quotes?status=${f.key}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`;
-          return (
-            <Button
-              key={f.key}
-              asChild
-              variant={active ? "default" : "outline"}
-              size="sm"
-              aria-current={active ? "page" : undefined}
-            >
-              <Link href={href}>{f.label}</Link>
-            </Button>
-          );
-        })}
-      </div>
+      <ResponsiveFilter label="Filter quotes by status" items={statusFilterItems} />
 
-      <form action="/quotes" method="get" className="flex flex-wrap gap-2" role="search">
+      <form
+        action="/quotes"
+        method="get"
+        className="flex flex-wrap items-center gap-2"
+        role="search"
+      >
         {status ? <input type="hidden" name="status" value={status} /> : null}
         <Input
           type="search"
           name="search"
           defaultValue={data.search}
           placeholder="Search by quote number or customer"
-          className="max-w-sm"
+          className="min-w-0 flex-1 sm:max-w-sm"
           aria-label="Search quotes"
         />
         <Button type="submit" variant="outline">
           <Search className="size-4" aria-hidden />
-          Search
+          <span className="max-sm:sr-only">Search</span>
         </Button>
         {data.search || status ? (
           <Button asChild variant="ghost">

@@ -67,17 +67,23 @@ export function KpiCard({
       aria-label={`${kpi.label}: ${kpi.value ?? kpi.emptyLabel}`}
       className="block rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
     >
-      <Card className="h-full transition-colors hover:bg-muted/40">
-        <CardContent className="space-y-2 p-5">
-          <p className="text-sm font-medium text-muted-foreground">{kpi.label}</p>
+      <Card className="h-full transition-colors hover:bg-muted/40 max-sm:gap-0 max-sm:py-0">
+        <CardContent className="space-y-2 p-5 max-sm:flex max-sm:min-h-28 max-sm:flex-col max-sm:justify-between max-sm:p-4">
+          <p className="text-sm font-medium text-muted-foreground max-sm:text-xs max-sm:leading-4">
+            {kpi.label}
+          </p>
           {empty ? (
             <div className="space-y-1">
-              <p className="text-2xl font-semibold tracking-tight text-muted-foreground">-</p>
-              <p className="text-xs font-medium text-brand-blue">{kpi.emptyLabel} →</p>
+              <p className="text-2xl font-semibold tracking-tight text-muted-foreground max-sm:text-xl">
+                -
+              </p>
+              <p className="text-xs font-medium leading-4 text-brand-blue max-sm:text-[0.6875rem]">
+                {kpi.emptyLabel} →
+              </p>
             </div>
           ) : (
             <div className="space-y-1">
-              <p className="text-2xl font-semibold tracking-tight font-mono tabular-nums">
+              <p className="font-mono text-2xl font-semibold leading-tight tracking-tight tabular-nums max-sm:text-[clamp(1.125rem,5vw,1.5rem)]">
                 {kpi.value}
               </p>
               {kpi.delta ? <DeltaBadge delta={kpi.delta} periodNoun={periodNoun} /> : null}

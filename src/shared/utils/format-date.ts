@@ -4,11 +4,15 @@
  * `server-only`, no DB - so it's unit-testable and importable from server components.
  *
  * Renders `null` as an em dash (matching the established convention for "no date" in this
- * codebase). Uses the host locale via `toLocaleDateString` with a `year, month, day` format.
+ * codebase). Uses a fixed display locale so server and client renders stay identical.
  */
 export function formatDate(d: Date | null): string {
   if (!d) return "-";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-AU", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /**
@@ -21,15 +25,15 @@ export function formatWeekLabel(withinWeek: Date): string {
   d.setUTCHours(0, 0, 0, 0);
   const day = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
   d.setUTCDate(d.getUTCDate() - day); // roll back to this week's Monday
-  return `Week of ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  return `Week of ${d.toLocaleDateString("en-AU", { month: "short", day: "numeric" })}`;
 }
 
 /**
  * Format a date's month + year as a "July 2026" label (Wave 3 - customer timeline month
- * separators). Pure. Uses the host locale via `toLocaleDateString`.
+ * separators). Pure. Uses the fixed app display locale.
  */
 export function formatMonthYear(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
 }
 
 /**
@@ -46,13 +50,17 @@ export function formatMonthYear(d: Date): string {
 export function formatDateInTz(d: Date | null, timezone: string): string {
   if (!d) return "-";
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat("en-AU", {
       year: "numeric",
       month: "short",
       day: "numeric",
       timeZone: timezone,
     }).format(d);
   } catch {
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return d.toLocaleDateString("en-AU", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   }
 }

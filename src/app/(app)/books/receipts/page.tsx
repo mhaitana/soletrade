@@ -7,6 +7,7 @@ import { formatCents } from "@/platform/billing/pricing";
 import { categoryLabel } from "@/shared/constants/books-categories";
 import { loadReceiptsPage } from "./actions";
 import { ReceiptReviewCard } from "./receipt-review-card";
+import { ResponsiveFilter } from "@/shared/ui/responsive-filter";
 
 export const metadata = { title: "Receipts" };
 export const dynamic = "force-dynamic";
@@ -66,6 +67,13 @@ export default async function ReceiptsPage({
     );
   }
 
+  const statusFilterItems = STATUS_FILTERS.map((filter) => ({
+    key: filter.key,
+    label: filter.label,
+    href: hrefWith({ status: filter.key }),
+    active: (filter.key === "all" && !data.statusFilter) || filter.key === data.statusFilter,
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -75,26 +83,7 @@ export default async function ReceiptsPage({
         </p>
       </div>
 
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="Filter extractions by status"
-      >
-        {STATUS_FILTERS.map((f) => {
-          const active = (f.key === "all" && !data.statusFilter) || f.key === data.statusFilter;
-          return (
-            <Button
-              key={f.key}
-              asChild
-              variant={active ? "default" : "outline"}
-              size="sm"
-              aria-current={active ? "page" : undefined}
-            >
-              <Link href={hrefWith({ status: f.key })}>{f.label}</Link>
-            </Button>
-          );
-        })}
-      </div>
+      <ResponsiveFilter label="Filter extractions by status" items={statusFilterItems} />
 
       {data.extractions.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">

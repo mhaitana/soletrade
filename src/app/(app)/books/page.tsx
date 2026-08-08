@@ -3,6 +3,7 @@ import { Download, FileText, Plus, Search } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
+import { ResponsiveFilter } from "@/shared/ui/responsive-filter";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
@@ -63,6 +64,18 @@ export default async function BooksPage({
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="books" />;
 
   const current = { type: data.typeFilter, search: data.search, period: data.period };
+  const periodFilterItems = PERIODS.map((option) => ({
+    key: option.key,
+    label: option.label,
+    href: hrefWith({ period: option.key }, current),
+    active: option.key === data.period,
+  }));
+  const typeFilterItems = TYPE_FILTERS.map((option) => ({
+    key: option.key,
+    label: option.label,
+    href: hrefWith({ type: option.key }, current),
+    active: (option.key === "all" && !type) || option.key === type,
+  }));
 
   return (
     <div className="space-y-6">
@@ -99,51 +112,17 @@ export default async function BooksPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4" aria-label="Filters">
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="Filter transactions by period"
-        >
-          {PERIODS.map((p) => {
-            const active = p.key === data.period;
-            return (
-              <Button
-                key={p.key}
-                asChild
-                variant={active ? "default" : "outline"}
-                size="sm"
-                aria-current={active ? "page" : undefined}
-              >
-                <Link href={hrefWith({ period: p.key }, current)}>{p.label}</Link>
-              </Button>
-            );
-          })}
-        </div>
-
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="Filter transactions by type"
-        >
-          {TYPE_FILTERS.map((f) => {
-            const active = (f.key === "all" && !type) || f.key === type;
-            return (
-              <Button
-                key={f.key}
-                asChild
-                variant={active ? "default" : "outline"}
-                size="sm"
-                aria-current={active ? "page" : undefined}
-              >
-                <Link href={hrefWith({ type: f.key }, current)}>{f.label}</Link>
-              </Button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap items-center gap-2" aria-label="Filters">
+        <ResponsiveFilter label="Filter transactions by period" items={periodFilterItems} />
+        <ResponsiveFilter label="Filter transactions by type" items={typeFilterItems} />
       </div>
 
-      <form action="/books" method="get" className="flex flex-wrap gap-2" role="search">
+      <form
+        action="/books"
+        method="get"
+        className="flex flex-wrap items-center gap-2"
+        role="search"
+      >
         {type ? <input type="hidden" name="type" value={type} /> : null}
         {data.period !== "year" ? <input type="hidden" name="period" value={data.period} /> : null}
         <Input
@@ -151,12 +130,17 @@ export default async function BooksPage({
           name="search"
           defaultValue={data.search}
           placeholder="Search by description or customer"
-          className="max-w-sm"
+          className="min-w-0 flex-1 sm:max-w-sm"
           aria-label="Search transactions"
         />
-        <Button type="submit" variant="outline">
+        <Button
+          type="submit"
+          variant="outline"
+          className="px-3 max-sm:size-11 max-sm:px-0"
+          aria-label="Search transactions"
+        >
           <Search className="size-4" aria-hidden />
-          Search
+          <span className="max-sm:sr-only">Search</span>
         </Button>
         {data.search || type || data.period !== "year" ? (
           <Button asChild variant="ghost">

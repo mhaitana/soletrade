@@ -40,11 +40,38 @@ test("top app-shell controls are at least 44px tall", async ({ ownerPage: page }
   await expectMinHeight(page.getByRole("button", { name: /account/i }), 44, "Account menu");
 });
 
-test("dashboard period filters are at least 44px tall", async ({ ownerPage: page }) => {
+test("dashboard period menu is at least 44px tall", async ({ ownerPage: page }) => {
   await page.goto("/dashboard", { waitUntil: "networkidle" });
 
-  const firstFilter = page.locator('div[role="group"][aria-label="Dashboard period"] a').first();
-  await expectMinHeight(firstFilter, 44, "Dashboard period filter");
+  const periodMenu = page.getByRole("button", { name: /dashboard period/i });
+  await expectMinHeight(periodMenu, 44, "Dashboard period menu");
+});
+
+test("list filters collapse to compact touch-friendly menus", async ({ ownerPage: page }) => {
+  await page.goto("/books", { waitUntil: "networkidle" });
+
+  await expectMinHeight(
+    page.getByRole("button", { name: /filter transactions by period/i }),
+    44,
+    "Books period filter",
+  );
+  await expectMinHeight(
+    page.getByRole("button", { name: /filter transactions by type/i }),
+    44,
+    "Books type filter",
+  );
+
+  await page.goto("/drive", { waitUntil: "networkidle" });
+  await expectMinHeight(
+    page.getByRole("button", { name: /export drive data as csv/i }),
+    44,
+    "Drive export menu",
+  );
+  await expectMinHeight(
+    page.getByRole("button", { name: /filter by platform/i }),
+    44,
+    "Drive platform filter",
+  );
 });
 
 test("customer list controls are at least 44px tall", async ({ ownerPage: page }) => {

@@ -12,6 +12,7 @@ import { PERIODS, parsePeriod, type Period } from "@/shared/utils/periods";
 import { loadDrivePage, type DriveView } from "./actions";
 import { DriveSummary } from "./drive-summary";
 import { SwipeQuickLog } from "./swipe-quick-log";
+import { CollapsibleLinkMenu, ResponsiveFilter } from "@/shared/ui/responsive-filter";
 
 const EXPORT_TYPES: { key: "earnings" | "trips" | "expenses"; label: string }[] = [
   { key: "earnings", label: "Earnings CSV" },
@@ -84,6 +85,38 @@ export default async function DrivePage({
   const hasFilters = Boolean(
     data.search || data.platformFilter || data.view !== "earnings" || data.period !== "year",
   );
+  const viewFilterItems = VIEW_FILTERS.map((filter) => ({
+    key: filter.key,
+    label: filter.label,
+    href: hrefWith({ view: filter.key }, current),
+    active: filter.key === data.view,
+  }));
+  const periodFilterItems = PERIODS.map((item) => ({
+    key: item.key,
+    label: item.label,
+    href: hrefWith({ period: item.key }, current),
+    active: item.key === data.period,
+  }));
+  const platformFilterItems = [
+    {
+      key: "all",
+      label: "All",
+      href: hrefWith({ platform: null }, current),
+      active: !data.platformFilter,
+    },
+    ...DRIVE_PLATFORMS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      href: hrefWith({ platform: item.key }, current),
+      active: item.key === data.platformFilter,
+    })),
+  ];
+  const exportItems = EXPORT_TYPES.map((item) => ({
+    key: item.key,
+    label: item.label,
+    href: `/api/drive/export?type=${item.key}&period=${data.period}`,
+    download: true,
+  }));
 
   return (
     <div className="space-y-6">
@@ -95,8 +128,13 @@ export default async function DrivePage({
         <div className="flex flex-wrap items-center gap-2">
           {data.canManage ? (
             <>
+              <CollapsibleLinkMenu
+                items={exportItems}
+                label="Export Drive data as CSV"
+                triggerLabel="Export CSV"
+              />
               <div
-                className="flex flex-wrap items-center gap-1.5"
+                className="hidden flex-wrap items-center gap-1.5 md:flex"
                 role="group"
                 aria-label="Export Drive data as CSV"
               >
@@ -132,80 +170,18 @@ export default async function DrivePage({
         </Link>
       </nav>
 
-      <div className="flex flex-wrap items-center gap-4" aria-label="Filters">
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="Switch between earnings and mileage"
-        >
-          {VIEW_FILTERS.map((f) => {
-            const active = f.key === data.view;
-            return (
-              <Button
-                key={f.key}
-                asChild
-                variant={active ? "default" : "outline"}
-                size="sm"
-                aria-current={active ? "page" : undefined}
-              >
-                <Link href={hrefWith({ view: f.key }, current)}>{f.label}</Link>
-              </Button>
-            );
-          })}
-        </div>
-
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="Filter by period"
-        >
-          {PERIODS.map((p) => {
-            const active = p.key === data.period;
-            return (
-              <Button
-                key={p.key}
-                asChild
-                variant={active ? "default" : "outline"}
-                size="sm"
-                aria-current={active ? "page" : undefined}
-              >
-                <Link href={hrefWith({ period: p.key }, current)}>{p.label}</Link>
-              </Button>
-            );
-          })}
-        </div>
-
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="Filter by platform"
-        >
-          <Button
-            asChild
-            variant={!data.platformFilter ? "default" : "outline"}
-            size="sm"
-            aria-current={!data.platformFilter ? "page" : undefined}
-          >
-            <Link href={hrefWith({ platform: null }, current)}>All platforms</Link>
-          </Button>
-          {DRIVE_PLATFORMS.map((p) => {
-            const active = data.platformFilter === p.key;
-            return (
-              <Button
-                key={p.key}
-                asChild
-                variant={active ? "default" : "outline"}
-                size="sm"
-                aria-current={active ? "page" : undefined}
-              >
-                <Link href={hrefWith({ platform: p.key }, current)}>{p.label}</Link>
-              </Button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap items-center gap-2" aria-label="Filters">
+        <ResponsiveFilter items={viewFilterItems} label="Switch between earnings and mileage" />
+        <ResponsiveFilter items={periodFilterItems} label="Filter by period" />
+        <ResponsiveFilter items={platformFilterItems} label="Filter by platform" />
       </div>
 
-      <form action="/drive" method="get" className="flex flex-wrap gap-2" role="search">
+      <form
+        action="/drive"
+        method="get"
+        className="flex flex-wrap items-center gap-2"
+        role="search"
+      >
         <input type="hidden" name="view" value={data.view} />
         {data.platformFilter ? (
           <input type="hidden" name="platform" value={data.platformFilter} />
@@ -218,12 +194,12 @@ export default async function DrivePage({
           placeholder={
             data.view === "trips" ? "Search by purpose or notes" : "Search by description or notes"
           }
-          className="max-w-sm"
+          className="min-w-0 flex-1 sm:max-w-sm"
           aria-label={`Search ${data.view}`}
         />
         <Button type="submit" variant="outline">
           <Search className="size-4" aria-hidden />
-          Search
+          <span className="max-sm:sr-only">Search</span>
         </Button>
         {hasFilters ? (
           <Button asChild variant="ghost">

@@ -143,7 +143,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                   id="invite-role"
                   name="role"
                   defaultValue="employee"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
                 >
                   {ROLE_OPTIONS.map((r) => (
                     <option key={r} value={r}>
@@ -190,7 +190,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                         {isSelf ? <span className="text-muted-foreground"> (you)</span> : null}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Member since {new Date(m.createdAt).toLocaleDateString()}
+                        Member since {new Date(m.createdAt).toLocaleDateString("en-AU")}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -200,7 +200,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                           onChange={(e) => void changeRole(m.userId, e.target.value)}
                           disabled={isPending}
                           aria-label={`Change role for ${m.email || m.userId}`}
-                          className="h-9 rounded-md border border-input bg-background px-2 text-sm capitalize ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="h-11 rounded-md border border-input bg-background px-2 text-sm capitalize ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
                         >
                           {CHANGEABLE_ROLES.map((r) => (
                             <option key={r} value={r}>
@@ -245,7 +245,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{inv.email}</p>
                     <p className="text-xs text-muted-foreground">
-                      Expires {new Date(inv.expiresAt).toLocaleDateString()}
+                      Expires {new Date(inv.expiresAt).toLocaleDateString("en-AU")}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

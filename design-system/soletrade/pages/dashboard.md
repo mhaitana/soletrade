@@ -22,14 +22,16 @@ MASTER.md defines the Neutral Pro system; this file pins the in-app shell + dash
 ## Dashboard cards (summaries, not vanity)
 - KPI cards: value rendered in **JetBrains Mono** (`font-mono tabular-nums`), label, delta vs previous period with arrow icon + accessible text ("+12% vs last month"). Never color-only meaning - include icon + text.
 - Trend over time → `<Sparkline>` (ink primary `--chart-1`, blue secondary `--chart-2`); color-not-only.
-- Grid: 1 col mobile, 2 col `sm`, 4 col `lg`. Gap `gap-4`.
+- Grid: 2 compact columns on mobile, 2 col `sm`, 4 col `lg`. Use `gap-3` on mobile and `gap-4` from `sm`; keep mobile figures fluid enough for long currency values.
 - Every card needs loading (skeleton), empty ("No X yet" + CTA), and error states.
 
 ## Tables & lists (use the shared primitives)
 - List pages use `<DataTable>` (invoices, quotes, books, drive, billing ledger) or `<ListRows>` (customers, files, audit, activity).
 - Money / quantity / amount columns: `numeric` → `text-right font-mono tabular-nums`.
 - Document-number columns: `font-mono text-xs`.
-- Status filters / period selectors: `<SegmentedControl>` (single bordered group, active item lifts to `bg-card` with hairline border).
+- Status filters / period selectors: `<ResponsiveFilter>` keeps the single bordered `<SegmentedControl>` on larger screens and collapses it to one 44px active-value menu below `md`. Do not wrap filter shelves across multiple mobile rows. On the dashboard, use the wider `xl` collapse breakpoint so the six-option period selector never crowds the title.
+- Search rows keep the field and icon-only submit action on one mobile line; retain an accessible text label for the icon button. Secondary clear actions may wrap only when active.
+- Data tables that cannot become stacked records must sit in an intentional `overflow-x-auto` container; never clip columns with `overflow-hidden`.
 
 ## Typography in-app
 - Body: **Inter** 14px base (16px mobile). Line-height 1.5.

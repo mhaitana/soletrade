@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { loadCustomersPage } from "./actions";
@@ -35,17 +35,23 @@ export default async function CustomersPage({
         ) : null}
       </div>
 
-      <form action="/customers" method="get" className="flex flex-wrap gap-2" role="search">
+      <form
+        action="/customers"
+        method="get"
+        className="flex flex-wrap items-center gap-2"
+        role="search"
+      >
         <Input
           type="search"
           name="q"
           defaultValue={q ?? ""}
           placeholder="Search by name, email, or company"
-          className="max-w-sm"
+          className="min-w-0 flex-1 sm:max-w-sm"
           aria-label="Search customers"
         />
         <Button type="submit" variant="outline">
-          Search
+          <Search className="size-4" aria-hidden />
+          <span className="max-sm:sr-only">Search</span>
         </Button>
         {q ? (
           <Button asChild variant="ghost">

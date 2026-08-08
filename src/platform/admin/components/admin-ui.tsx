@@ -49,7 +49,12 @@ export function AdminTable({
   className?: string;
 }) {
   return (
-    <div className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}>
+    <div
+      className={cn(
+        "overflow-x-auto overscroll-x-contain rounded-lg border border-border bg-card",
+        className,
+      )}
+    >
       <table className="w-full text-left text-sm">
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         {children}

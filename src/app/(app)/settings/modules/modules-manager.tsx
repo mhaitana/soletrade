@@ -31,7 +31,11 @@ type PreviewPayload = Extract<AddModulePreview, { ok: true }>;
 
 function formatDate(d: Date | null): string {
   if (!d) return "-";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-AU", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 const CANCEL_LABELS: Record<string, { label: string; description: string }> = {

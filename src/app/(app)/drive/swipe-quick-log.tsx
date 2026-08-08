@@ -115,7 +115,7 @@ export function SwipeQuickLog({ defaultPlatform }: { defaultPlatform?: string })
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
             aria-invalid={Boolean(fieldErr("platform"))}
-            className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-11 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
           >
             {DRIVE_PLATFORMS.map((p) => (
               <option key={p.key} value={p.key}>

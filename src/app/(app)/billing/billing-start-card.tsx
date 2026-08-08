@@ -103,7 +103,7 @@ export function BillingStartCard() {
                 type="button"
                 onClick={() => setInterval(iv)}
                 aria-pressed={interval === iv}
-                className={`rounded px-3 py-1 capitalize ${
+                className={`min-h-11 rounded px-3 py-2 capitalize md:min-h-0 md:py-1 ${
                   interval === iv ? "bg-primary text-primary-foreground" : "text-muted-foreground"
                 }`}
               >

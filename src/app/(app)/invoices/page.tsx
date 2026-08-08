@@ -3,7 +3,7 @@ import { Plus, Search } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
-import { SegmentedControl } from "@/shared/ui/segmented-control";
+import { ResponsiveFilter } from "@/shared/ui/responsive-filter";
 import { DataTable, type Column } from "@/shared/ui/data-table";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
 import { formatCents } from "@/platform/billing/pricing";
@@ -54,6 +54,18 @@ export default async function InvoicesPage({
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="invoices" />;
 
+  const statusFilterItems = STATUS_FILTERS.map((filter) => {
+    const active = (filter.key === "all" && !status) || filter.key === status;
+    const search = data.search ? `&search=${encodeURIComponent(data.search)}` : "";
+    const href =
+      filter.key === "all"
+        ? data.search
+          ? `/invoices?search=${encodeURIComponent(data.search)}`
+          : "/invoices"
+        : `/invoices?status=${filter.key}${search}`;
+    return { key: filter.key, label: filter.label, href, active };
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -71,34 +83,26 @@ export default async function InvoicesPage({
         ) : null}
       </div>
 
-      <SegmentedControl
-        label="Filter invoices by status"
-        items={STATUS_FILTERS.map((f) => {
-          const active = (f.key === "all" && !status) || f.key === status;
-          const search = data.search ? `&search=${encodeURIComponent(data.search)}` : "";
-          const href =
-            f.key === "all"
-              ? data.search
-                ? `/invoices?search=${encodeURIComponent(data.search)}`
-                : "/invoices"
-              : `/invoices?status=${f.key}${search}`;
-          return { key: f.key, label: f.label, href, active };
-        })}
-      />
+      <ResponsiveFilter label="Filter invoices by status" items={statusFilterItems} />
 
-      <form action="/invoices" method="get" className="flex flex-wrap gap-2" role="search">
+      <form
+        action="/invoices"
+        method="get"
+        className="flex flex-wrap items-center gap-2"
+        role="search"
+      >
         {status ? <input type="hidden" name="status" value={status} /> : null}
         <Input
           type="search"
           name="search"
           defaultValue={data.search}
           placeholder="Search by invoice number or customer"
-          className="max-w-sm"
+          className="min-w-0 flex-1 sm:max-w-sm"
           aria-label="Search invoices"
         />
         <Button type="submit" variant="outline">
           <Search className="size-4" aria-hidden />
-          Search
+          <span className="max-sm:sr-only">Search</span>
         </Button>
         {data.search || status ? (
           <Button asChild variant="ghost">

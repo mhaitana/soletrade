@@ -97,7 +97,7 @@ export default async function ActivityPage({
           id="activity-filter"
           name="type"
           defaultValue={categoryKey}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-9 sm:flex-none"
         >
           {Object.entries(CATEGORY_FILTERS).map(([key, { label }]) => (
             <option key={key} value={key}>

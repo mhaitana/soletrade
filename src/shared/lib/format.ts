@@ -19,7 +19,11 @@ export function formatRelativeTime(date: Date, now: Date = new Date()): string {
   const day = Math.round(hr / 24);
   if (day < 7) return `${day}d ago`;
   // Beyond a week, render an absolute date so the timeline stays unambiguous.
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString("en-AU", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 /**

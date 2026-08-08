@@ -49,7 +49,7 @@ export function AttentionList({ items }: { items: AttentionItemData[] }) {
           <li key={item.id}>
             <Link
               href={item.href}
-              className="group flex h-full items-start gap-3 rounded-xl border border-border bg-card p-4 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+              className="group flex h-full items-start gap-3 rounded-xl border border-border bg-card p-4 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:p-3.5"
             >
               <span
                 className={cn(
