@@ -11,6 +11,7 @@ import { listCustomers, type CustomerRow } from "@/platform/customers";
 import {
   createTransaction,
   deleteTransaction,
+  getBookSummary,
   getTransaction,
   listTransactions,
   transactionSource,
@@ -19,7 +20,7 @@ import {
   type TransactionRow,
   type TransactionSource,
 } from "@/modules/books";
-import { summarizeTransactions, type TransactionSummary } from "@/modules/books/calc";
+import type { TransactionSummary } from "@/modules/books/calc";
 import { type Period, parsePeriod, periodRange } from "@/shared/utils/periods";
 import { isBookCategory } from "@/shared/constants/books-categories";
 import type { BookType } from "@/server/db/enums";
@@ -216,7 +217,7 @@ export async function loadBooksPage(params?: {
   const period = params?.period ?? parsePeriod(undefined);
   const search = params?.search?.trim() ?? "";
   const range = periodRange(period, undefined, fyStartMonth);
-  const [transactions, summaryRows, canManage] = await Promise.all([
+  const [transactions, summary] = await Promise.all([
     // Page list: cap at the default 100, with the type + search + date range.
     listTransactions(ctx.workspaceId, {
       type: params?.type,
@@ -225,29 +226,18 @@ export async function loadBooksPage(params?: {
       dateTo: range.end,
       limit: 100,
     }),
-    // Summary: type + date range (NO search - the header is the period overview), full
-    // period fetch capped at 2000. Aggregated in JS by the pure `summarizeTransactions`.
-    listTransactions(ctx.workspaceId, {
+    // Summary: type + date range (NO search - the header is the period overview), aggregated
+    // in Postgres so the page receives one compact JSON result instead of up to 2,000 rows.
+    getBookSummary(ctx.workspaceId, {
       type: params?.type,
       dateFrom: range.start ?? undefined,
       dateTo: range.end,
-      limit: 2000,
     }),
-    Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
-  const summary = summarizeTransactions(
-    summaryRows.map((t) => ({
-      type: t.type,
-      amountCents: t.amountCents,
-      date: t.date,
-      category: t.category,
-      gstCents: t.gstCents,
-    })),
-  );
   return {
     installed: true,
     transactions,
-    canManage,
+    canManage: authorize(ctx.role, "manage:books").ok,
     typeFilter: params?.type ?? null,
     search,
     period,

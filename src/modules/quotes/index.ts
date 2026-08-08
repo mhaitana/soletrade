@@ -1,4 +1,5 @@
 import "server-only";
+import { z } from "zod";
 import { getDataClient } from "@/server/db/client";
 import {
   parsePgTimestamp,
@@ -15,6 +16,7 @@ import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { computeLineItemTotals, lineItemAmountCents } from "@/shared/utils/totals";
 import type { QuoteStatus } from "@/server/db/enums";
+import type { QuoteSummary } from "./calc";
 import type {
   CustomerId,
   InvoiceId,
@@ -1231,6 +1233,36 @@ export async function markExpiredQuotes(now: Date = new Date()): Promise<number>
     });
   }
   return rows.length;
+}
+
+export interface QuoteDashboardSummary extends QuoteSummary {
+  readyCount: number;
+}
+
+const quoteDashboardSummarySchema = z.object({
+  acceptedValueCents: z.number(),
+  readyCount: z.number(),
+  sentCount: z.number(),
+  acceptedCount: z.number(),
+  declinedCount: z.number(),
+  convertedCount: z.number(),
+  monthly: z.array(
+    z.object({ month: z.string(), acceptedCents: z.number(), acceptedCount: z.number() }),
+  ),
+});
+
+/** Return quote snapshots and period metrics as one compact database aggregate. */
+export async function getQuoteDashboardSummary(
+  workspaceId: WorkspaceId,
+  currentRange: { start: Date | null; end: Date },
+): Promise<QuoteDashboardSummary> {
+  const { data, error } = await rpc(getDataClient(), "get_quote_dashboard_summary", {
+    p_workspace_id: workspaceId,
+    p_current_from: currentRange.start?.toISOString() ?? null,
+    p_current_to: currentRange.end.toISOString(),
+  });
+  if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  return quoteDashboardSummarySchema.parse(data);
 }
 
 // Re-export for callers that need the totals math directly (e.g. the create form's

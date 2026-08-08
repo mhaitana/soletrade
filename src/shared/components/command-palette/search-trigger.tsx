@@ -1,11 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Search } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { CommandPalette } from "./command-palette";
 import type { ModuleKey } from "@/shared/constants/modules";
+
+// cmdk + its dialog primitives are not needed for first paint. Keep them out of
+// every authenticated page's initial client bundle and load them only after the
+// user opens search.
+const CommandPalette = dynamic(
+  () => import("./command-palette").then((module) => module.CommandPalette),
+  { ssr: false },
+);
 
 /**
  * The header search trigger (Wave 3). A button styled like a search box (search icon +
@@ -50,7 +58,9 @@ export function SearchTrigger({ installedModules }: SearchTriggerProps) {
         <span className="hidden sm:inline">Search…</span>
         <kbd className="ml-auto hidden font-sans text-xs font-medium sm:inline">⌘K</kbd>
       </Button>
-      <CommandPalette open={open} onOpenChange={setOpen} installedModules={installedModules} />
+      {open ? (
+        <CommandPalette open={open} onOpenChange={setOpen} installedModules={installedModules} />
+      ) : null}
     </>
   );
 }

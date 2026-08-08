@@ -1,10 +1,10 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser, type SessionUser } from "@/server/auth/session";
 import type { WorkspaceRole } from "@/server/db/enums";
 import {
   getActiveWorkspaceId,
-  getMembershipRole,
   listUserWorkspaces,
   type WorkspaceMembership,
 } from "@/platform/workspaces";
@@ -40,22 +40,26 @@ export interface WorkspaceContext {
  * (`switchWorkspace` / `createWorkspace` / `acceptInvite`), which run in Server Action contexts
  * where cookie writes are allowed.
  */
-export async function tryWorkspaceContext(): Promise<WorkspaceContext | null> {
+async function resolveWorkspaceContext(): Promise<WorkspaceContext | null> {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const memberships = await listUserWorkspaces(user.id);
+  // The cookie lookup is local request work, so start it alongside the only DB
+  // query needed to resolve the workspace. Each membership row already carries
+  // its role; re-querying the selected row used to add a serial round trip.
+  const [memberships, cookieId] = await Promise.all([
+    listUserWorkspaces(user.id),
+    getActiveWorkspaceId(),
+  ]);
   if (memberships.length === 0) return null;
 
-  const cookieId = await getActiveWorkspaceId();
   const fromCookie = cookieId ? memberships.find((m) => m.workspaceId === cookieId) : undefined;
   const chosen: WorkspaceMembership = fromCookie ?? memberships[0]!;
 
-  const role = await getMembershipRole(chosen.workspaceId, user.id);
-  if (!role) return null;
-
-  return { user, workspaceId: chosen.workspaceId, role };
+  return { user, workspaceId: chosen.workspaceId, role: chosen.role };
 }
+
+export const tryWorkspaceContext = cache(resolveWorkspaceContext);
 
 /**
  * Resolve the workspace context for the current request. Redirects to
@@ -66,7 +70,7 @@ export async function tryWorkspaceContext(): Promise<WorkspaceContext | null> {
  * itself bounces unauthenticated users to /login (preserving pre-refactor
  * behaviour without a second session round-trip here).
  */
-export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
+async function resolveRequiredWorkspaceContext(): Promise<WorkspaceContext> {
   const ctx = await tryWorkspaceContext();
   if (!ctx) {
     const adminCtx = await tryAdminContext();
@@ -77,3 +81,5 @@ export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
   }
   return ctx;
 }
+
+export const requireWorkspaceContext = cache(resolveRequiredWorkspaceContext);

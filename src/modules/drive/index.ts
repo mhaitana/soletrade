@@ -1,11 +1,20 @@
 import "server-only";
+import { z } from "zod";
 import { getDataClient } from "@/server/db/client";
-import { parsePgTimestamp, pgQuote, unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
+import {
+  parsePgTimestamp,
+  pgQuote,
+  rpc,
+  unwrap,
+  unwrapMaybe,
+  unwrapVoid,
+} from "@/server/db/helpers";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { getWorkspace } from "@/platform/workspaces";
 import { isDrivePlatform } from "@/shared/constants/drive-platforms";
 import type { VehicleExpenseType } from "@/server/db/enums";
+import type { DriveSummary as DriveSummaryResult } from "./calc";
 import {
   branded,
   type DriveEarningId,
@@ -615,6 +624,60 @@ export async function getTrip(
       .maybeSingle(),
   );
   return row ? toTripRow(row as TripRaw) : null;
+}
+
+const driveSummarySchema = z.object({
+  totalEarningsCents: z.number(),
+  totalDistanceMeters: z.number(),
+  earningsCount: z.number(),
+  tripsCount: z.number(),
+  byPlatform: z.array(
+    z.object({
+      platform: z.string(),
+      earningsCents: z.number(),
+      distanceMeters: z.number(),
+      earningsCount: z.number(),
+      tripsCount: z.number(),
+    }),
+  ),
+  monthly: z.array(
+    z.object({
+      month: z.string(),
+      earningsCents: z.number(),
+      distanceMeters: z.number(),
+    }),
+  ),
+  weekly: z.array(
+    z.object({
+      week: z.string(),
+      earningsCents: z.number(),
+      distanceMeters: z.number(),
+    }),
+  ),
+  mileageDeductionCents: z.number(),
+  totalExpensesCents: z.number(),
+  profitCents: z.number(),
+});
+
+/** Aggregate Drive earnings, trips, and expenses in Postgres without transferring raw rows. */
+export async function getDriveSummary(
+  workspaceId: WorkspaceId,
+  opts?: {
+    platform?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    mileageRateCentsPerKm?: number;
+  },
+): Promise<DriveSummaryResult> {
+  const { data, error } = await rpc(getDataClient(), "get_drive_summary", {
+    p_workspace_id: workspaceId,
+    p_platform: opts?.platform ?? null,
+    p_date_from: opts?.dateFrom?.toISOString() ?? null,
+    p_date_to: opts?.dateTo?.toISOString() ?? null,
+    p_mileage_rate_cents_per_km: opts?.mileageRateCentsPerKm ?? 0,
+  });
+  if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  return driveSummarySchema.parse(data);
 }
 
 // Re-export the pure aggregator (Phase 9 cross-module dashboard loader uses it).

@@ -1,4 +1,5 @@
 import "server-only";
+import { z } from "zod";
 import { getDataClient } from "@/server/db/client";
 import {
   parsePgTimestamp,
@@ -16,6 +17,7 @@ import { writeAudit } from "@/platform/audit";
 import { computeInvoiceTotals, lineItemAmountCents } from "./totals";
 import type { InvoiceStatus } from "@/server/db/enums";
 import type { Json } from "@/server/db/types";
+import type { InvoiceSummary } from "./calc";
 import type {
   CustomerId,
   InvoiceId,
@@ -1069,6 +1071,40 @@ export async function claimPaymentIntentId(
       .select("id"),
   );
   return Boolean(rows[0]);
+}
+
+export interface InvoiceDashboardSummary extends InvoiceSummary {
+  overdueCents: number;
+  previousPaidCents: number | null;
+}
+
+const invoiceDashboardSummarySchema = z.object({
+  outstandingCents: z.number(),
+  overdueCount: z.number(),
+  overdueCents: z.number(),
+  draftCount: z.number(),
+  paidCents: z.number(),
+  paidCount: z.number(),
+  sentCount: z.number(),
+  previousPaidCents: z.number().nullable(),
+  monthly: z.array(z.object({ month: z.string(), paidCents: z.number(), paidCount: z.number() })),
+});
+
+/** Return current invoice snapshots and period metrics as one compact database aggregate. */
+export async function getInvoiceDashboardSummary(
+  workspaceId: WorkspaceId,
+  currentRange: { start: Date | null; end: Date },
+  previousRange: { start: Date; end: Date } | null,
+): Promise<InvoiceDashboardSummary> {
+  const { data, error } = await rpc(getDataClient(), "get_invoice_dashboard_summary", {
+    p_workspace_id: workspaceId,
+    p_current_from: currentRange.start?.toISOString() ?? null,
+    p_current_to: currentRange.end.toISOString(),
+    p_previous_from: previousRange?.start.toISOString() ?? null,
+    p_previous_to: previousRange?.end.toISOString() ?? null,
+  });
+  if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  return invoiceDashboardSummarySchema.parse(data);
 }
 
 // Re-export for callers that need the totals math directly (e.g. the create form's
