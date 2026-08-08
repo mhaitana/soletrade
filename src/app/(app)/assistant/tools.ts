@@ -1,5 +1,5 @@
 import "server-only";
-import { tool, type ToolSet } from "ai";
+import { jsonSchema, tool, zodSchema, type ToolSet } from "ai";
 import { z } from "zod";
 import { authorize, type Permission } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
@@ -74,6 +74,28 @@ import {
   type HaiOpenFormInput,
   type HaiPageDestination,
 } from "./hai-workflows";
+
+/**
+ * Providers require function-tool inputs to have an object at the JSON Schema
+ * root. A Zod discriminated union serializes as a root `oneOf` without a
+ * `type`, which causes the whole model request to be rejected before any tool
+ * is chosen. Keep the precise per-workflow union and its validation, while
+ * adding the object root that every branch already guarantees.
+ */
+export const haiOpenFormProviderInputSchema = jsonSchema<HaiOpenFormInput>(
+  async () => {
+    const schema = await zodSchema(haiOpenFormInputSchema).jsonSchema;
+    return { ...schema, type: "object" };
+  },
+  {
+    validate: async (value) => {
+      const parsed = await haiOpenFormInputSchema.safeParseAsync(value);
+      return parsed.success
+        ? { success: true, value: parsed.data }
+        : { success: false, error: parsed.error };
+    },
+  },
+);
 
 /**
  * Workspace-aware read-only tools for the AI assistant (Phase 10). This is the
@@ -295,7 +317,7 @@ export function buildAssistantTools(
 
   tools.openForm = tool({
     description: HAI_FORM_TOOL_GUIDE,
-    inputSchema: haiOpenFormInputSchema,
+    inputSchema: haiOpenFormProviderInputSchema,
     execute: async (input) => buildOpenFormResult(ctx, installedModules, input),
   });
 

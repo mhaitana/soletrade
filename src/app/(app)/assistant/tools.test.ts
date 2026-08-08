@@ -128,6 +128,14 @@ beforeEach(() => {
 });
 
 describe("buildAssistantTools - gating", () => {
+  it("publishes openForm with the provider-required object schema root", async () => {
+    const { haiOpenFormProviderInputSchema } = await import("./tools");
+    const schema = await haiOpenFormProviderInputSchema.jsonSchema;
+
+    expect(schema.type).toBe("object");
+    expect(schema.oneOf).toBeInstanceOf(Array);
+  });
+
   it("offers every tool to a readonly role when all modules are installed", async () => {
     const { buildAssistantTools } = await import("./tools");
     const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
