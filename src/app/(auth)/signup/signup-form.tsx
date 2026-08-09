@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   Check,
   CheckCircle2,
   Eye,
@@ -23,6 +24,7 @@ import { signInWithOtpAction, signUpAction, type AuthActionResult } from "@/app/
 import { cn } from "@/shared/lib/utils";
 
 type Mode = "password" | "magic";
+type MobileStep = "account" | "modules";
 
 const DISPLAY_ORDER: ModuleKey[] = ["books", "quotes", "drive", "invoices"];
 
@@ -103,6 +105,11 @@ export function SignupForm({
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [selected, setSelected] = useState<Set<ModuleKey>>(() => new Set(intent.moduleKeys));
   const [interval, setInterval] = useState<Interval>(intent.interval);
+  const [mobileStep, setMobileStep] = useState<MobileStep>("account");
+  const formRef = useRef<HTMLFormElement>(null);
+  const accountHeadingRef = useRef<HTMLHeadingElement>(null);
+  const modulesHeadingRef = useRef<HTMLHeadingElement>(null);
+  const pendingStepFocus = useRef<MobileStep | null>(null);
 
   const selectedKeys = useMemo(() => DISPLAY_ORDER.filter((key) => selected.has(key)), [selected]);
   const pricing = priceSubscription(selectedKeys, interval);
@@ -142,6 +149,25 @@ export function SignupForm({
   useEffect(() => {
     if (state?.ok && state.redirectTo) router.push(state.redirectTo);
   }, [state, router]);
+
+  useEffect(() => {
+    if (pendingStepFocus.current !== mobileStep) return;
+    pendingStepFocus.current = null;
+    const heading =
+      mobileStep === "account" ? accountHeadingRef.current : modulesHeadingRef.current;
+    heading?.focus({ preventScroll: true });
+    formRef.current?.scrollIntoView?.({ block: "start" });
+  }, [mobileStep]);
+
+  function moveToStep(next: MobileStep) {
+    pendingStepFocus.current = next;
+    setMobileStep(next);
+  }
+
+  function advanceToModules() {
+    if (!formRef.current?.reportValidity()) return;
+    moveToStep("modules");
+  }
 
   function toggleModule(key: ModuleKey) {
     setSelected((current) => {
@@ -193,15 +219,42 @@ export function SignupForm({
   const fieldErrors = state && !state.ok ? state.fieldErrors : undefined;
 
   return (
-    <form action={action}>
+    <form ref={formRef} action={action}>
+      <ol
+        className="grid grid-cols-2 border-b border-border lg:hidden"
+        aria-label="Signup progress"
+      >
+        {(["account", "modules"] as const).map((step, index) => (
+          <li
+            key={step}
+            aria-current={mobileStep === step ? "step" : undefined}
+            className={cn(
+              "border-b-2 px-5 py-3 text-xs font-semibold",
+              mobileStep === step
+                ? "border-brand-blue text-brand-blue"
+                : "border-transparent text-muted-foreground",
+            )}
+          >
+            {index + 1}. {step === "account" ? "Account" : "Tools & price"}
+          </li>
+        ))}
+      </ol>
       <div className="grid lg:grid-cols-[minmax(0,1fr)_23rem]">
-        <section className="p-6 sm:p-8 lg:p-10" aria-labelledby="account-details-title">
+        <section
+          className={cn("p-6 sm:p-8 lg:block lg:p-10", mobileStep !== "account" && "hidden")}
+          aria-labelledby="account-details-title"
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-brand-blue">
+              <p className="hidden text-xs font-semibold uppercase tracking-wider text-brand-blue lg:block">
                 Step 1 of 2
               </p>
-              <h2 id="account-details-title" className="mt-2 text-lg font-semibold">
+              <h2
+                ref={accountHeadingRef}
+                id="account-details-title"
+                tabIndex={-1}
+                className="mt-2 text-lg font-semibold outline-none"
+              >
                 Your account
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -304,18 +357,42 @@ export function SignupForm({
               </Link>
             </p>
           </div>
+          <Button
+            type="button"
+            size="lg"
+            className="mt-6 w-full lg:hidden"
+            onClick={advanceToModules}
+          >
+            Choose your tools
+          </Button>
         </section>
 
         <aside
-          className="border-t border-border bg-muted/30 p-6 sm:p-8 lg:border-l lg:border-t-0"
+          className={cn(
+            "border-t border-border bg-muted/30 p-6 sm:p-8 lg:block lg:border-l lg:border-t-0",
+            mobileStep !== "modules" && "hidden",
+          )}
           aria-labelledby="module-selection-title"
         >
+          <Button
+            type="button"
+            variant="ghost"
+            className="-ml-3 mb-3 min-h-11 px-3 text-muted-foreground lg:hidden"
+            onClick={() => moveToStep("account")}
+          >
+            <ArrowLeft className="size-4" /> Back to account
+          </Button>
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-brand-blue">
                 Your setup
               </p>
-              <h2 id="module-selection-title" className="mt-2 text-lg font-semibold">
+              <h2
+                ref={modulesHeadingRef}
+                id="module-selection-title"
+                tabIndex={-1}
+                className="mt-2 text-lg font-semibold outline-none"
+              >
                 Choose your tools
               </h2>
             </div>
