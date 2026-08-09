@@ -119,6 +119,11 @@ export function SignupForm({
   const suffix = interval === "monthly" ? "/mo" : "/yr";
   const promotionalTotal = discountedTotal(pricing.totalCents, promotion);
 
+  function routeAuthResult(result: AuthActionResult): AuthActionResult {
+    if (!result.ok) setMobileStep("account");
+    return result;
+  }
+
   const [state, action, pending] = useActionState(
     async (_prev: AuthActionResult | null, formData: FormData): Promise<AuthActionResult> => {
       const email = String(formData.get("email") ?? "");
@@ -131,7 +136,9 @@ export function SignupForm({
       if (mode === "password") {
         const password = String(formData.get("password") ?? "");
         const confirm = String(formData.get("confirm") ?? "");
-        if (password !== confirm) return { ok: false, error: "Passwords do not match." };
+        if (password !== confirm) {
+          return routeAuthResult({ ok: false, error: "Passwords do not match." });
+        }
         const fullName = String(formData.get("fullName") ?? "").trim();
         const result = await signUpAction({
           email,
@@ -140,11 +147,11 @@ export function SignupForm({
           ...signupIntent,
         });
         if (result.ok && result.checkEmail) setShowCheckEmail(true);
-        return result;
+        return routeAuthResult(result);
       }
       const result = await signInWithOtpAction({ email, mode: "signup", ...signupIntent });
       if (result.ok && result.message) setShowCheckEmail(true);
-      return result;
+      return routeAuthResult(result);
     },
     null,
   );
@@ -152,10 +159,6 @@ export function SignupForm({
   useEffect(() => {
     if (state?.ok && state.redirectTo) router.push(state.redirectTo);
   }, [state, router]);
-
-  useEffect(() => {
-    if (state && !state.ok) setMobileStep("account");
-  }, [state]);
 
   useEffect(() => {
     if (state && !state.ok && mobileStep === "account") accountErrorRef.current?.focus();
