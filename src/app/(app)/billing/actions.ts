@@ -24,6 +24,12 @@ import type { BillingInterval } from "@/server/db/enums";
 import { env } from "@/shared/lib/env";
 import { createCheckoutSession } from "@/server/stripe/stripe-lifecycle";
 import { moduleRefundCents } from "@/platform/billing/pricing";
+import { resolveCheckoutPromotion } from "@/platform/billing/promotions";
+import {
+  billingSetupPath,
+  normalizePromotionCode,
+  type SignupIntent,
+} from "@/platform/billing/signup-intent";
 
 export interface BillingOverviewData {
   /** null = billing not started yet (no Stripe subscription on the row). */
@@ -87,6 +93,7 @@ export async function loadBillingOverview(): Promise<BillingOverviewData> {
 const startBillingInputSchema = z.object({
   moduleKeys: z.array(z.enum(MODULE_KEYS)).min(1, "Select at least one module."),
   interval: z.enum(["monthly", "annual"]),
+  promotionCode: z.string().trim().max(100).optional(),
 });
 
 export type StartBillingCheckoutResult = { ok: true; url: string } | { ok: false; error: string };
@@ -112,13 +119,32 @@ export async function startBillingCheckoutAction(
   }
   const appUrl = env.NEXT_PUBLIC_APP_URL;
   try {
+    const promotionCode = normalizePromotionCode(parsed.data.promotionCode);
+    const promotion = promotionCode
+      ? ((await resolveCheckoutPromotion(promotionCode, {
+          moduleKeys: parsed.data.moduleKeys,
+          interval: parsed.data.interval,
+        })) ?? undefined)
+      : undefined;
+    if (promotionCode && !promotion) {
+      return {
+        ok: false,
+        error: "This promotional offer is no longer available for your selection.",
+      };
+    }
+    const intent: SignupIntent = {
+      moduleKeys: parsed.data.moduleKeys,
+      interval: parsed.data.interval,
+      ...(promotionCode ? { promotionCode } : {}),
+    };
     const { url } = await createCheckoutSession(ctx.workspaceId, {
       moduleKeys: parsed.data.moduleKeys,
       interval: parsed.data.interval,
       email: ctx.user.email || null,
       successUrl: `${appUrl}/billing?session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${appUrl}/billing`,
+      cancelUrl: `${appUrl}${billingSetupPath(intent)}`,
       allowPromotionCodes: true,
+      promotion,
     });
     return { ok: true, url };
   } catch (err) {

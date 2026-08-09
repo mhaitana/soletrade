@@ -16,6 +16,8 @@ import {
 import { CreatePromotionDialog } from "./create-promotion-dialog";
 import { SyncPromotionDialog } from "./sync-promotion-dialog";
 import { ArchivePromotionDialog } from "./archive-promotion-dialog";
+import { PromotionLink } from "./promotion-link";
+import { urls } from "@/config/urls";
 
 export default async function AdminPromotionsPage() {
   await requireAdminContext("view:subscriptions");
@@ -53,7 +55,11 @@ export default async function AdminPromotionsPage() {
                 <AdminTr key={p.id}>
                   <AdminTd className="font-medium text-foreground">{p.name}</AdminTd>
                   <AdminTd>
-                    <Mono className="text-foreground">{p.publicCode ?? "—"}</Mono>
+                    {p.publicCode ? (
+                      <PromotionLink code={p.publicCode} appUrl={urls.app} />
+                    ) : (
+                      <Mono className="text-foreground">—</Mono>
+                    )}
                   </AdminTd>
                   <AdminTd className="tabular-nums text-foreground">
                     {p.discountType === "percentage"

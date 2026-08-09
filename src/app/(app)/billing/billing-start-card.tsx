@@ -6,6 +6,7 @@ import { Button } from "@/shared/ui/button";
 import { MODULES, MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 import { MODULE_PRICES, formatCents, type Interval } from "@/platform/billing/pricing";
 import { startBillingCheckoutAction } from "./actions";
+import { Tag } from "lucide-react";
 
 /**
  * Start-billing card. Lets an owner/admin pick a set of modules + an interval and
@@ -16,9 +17,19 @@ import { startBillingCheckoutAction } from "./actions";
  * to the hosted Checkout URL (`window.location.href` - the URL is external, so
  * `router.push` would not work). No client Stripe SDK is loaded.
  */
-export function BillingStartCard() {
-  const [selected, setSelected] = useState<Set<ModuleKey>>(new Set<ModuleKey>(["books"]));
-  const [interval, setInterval] = useState<Interval>("monthly");
+export function BillingStartCard({
+  initialModules = ["books"],
+  initialInterval = "monthly",
+  promotionCode,
+  linkedOfferLabel,
+}: {
+  initialModules?: ModuleKey[];
+  initialInterval?: Interval;
+  promotionCode?: string;
+  linkedOfferLabel?: string;
+}) {
+  const [selected, setSelected] = useState<Set<ModuleKey>>(new Set<ModuleKey>(initialModules));
+  const [interval, setInterval] = useState<Interval>(initialInterval);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +53,7 @@ export function BillingStartCard() {
       const res = await startBillingCheckoutAction({
         moduleKeys: selectedKeys,
         interval,
+        promotionCode,
       });
       if (!res.ok) {
         setError(res.error);
@@ -113,6 +125,18 @@ export function BillingStartCard() {
             ))}
           </div>
         </fieldset>
+
+        {linkedOfferLabel ? (
+          <div
+            className="flex items-center gap-2 rounded-md border border-success/30 bg-success/5 px-3 py-2 text-sm text-success"
+            role="status"
+          >
+            <Tag className="size-4" />
+            <span>
+              <span className="font-medium">Linked offer:</span> {linkedOfferLabel}
+            </span>
+          </div>
+        ) : null}
 
         <div className="flex flex-col items-end gap-1">
           <Button onClick={onClick} disabled={isPending || noneSelected}>

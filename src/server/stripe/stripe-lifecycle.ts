@@ -8,6 +8,7 @@ import { getStripe } from "./client";
 import { getModulePriceId, priceSlot } from "./prices";
 import type { ModuleKey } from "@/shared/constants/modules";
 import type { WorkspaceId } from "@/shared/types/ids";
+import type { CheckoutPromotion } from "@/platform/billing/promotions";
 
 /**
  * Stripe lifecycle service (brief §10 - one customer + one unified subscription per
@@ -98,6 +99,7 @@ export async function createCheckoutSession(
     successUrl: string;
     cancelUrl: string;
     allowPromotionCodes?: boolean;
+    promotion?: CheckoutPromotion;
   },
 ): Promise<{ url: string; sessionId: string }> {
   if (opts.moduleKeys.length === 0) {
@@ -117,14 +119,25 @@ export async function createCheckoutSession(
   const customerId = await ensureStripeCustomer(workspaceId, { email: opts.email });
   const stripe = getStripe();
 
+  // Stripe forbids combining a pre-applied discount with the manual promotion-code
+  // field. A linked promotion wins; otherwise Checkout still offers code entry.
+  const promotionParams = opts.promotion
+    ? { discounts: [{ promotion_code: opts.promotion.stripePromotionCodeId }] }
+    : { allow_promotion_codes: opts.allowPromotionCodes ?? false };
+
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     line_items: lineItems,
     client_reference_id: String(workspaceId),
-    allow_promotion_codes: opts.allowPromotionCodes ?? false,
+    ...promotionParams,
+    metadata: opts.promotion ? { promotionId: opts.promotion.id } : undefined,
     subscription_data: {
-      metadata: { workspaceId: String(workspaceId), interval: opts.interval },
+      metadata: {
+        workspaceId: String(workspaceId),
+        interval: opts.interval,
+        ...(opts.promotion ? { promotionId: opts.promotion.id } : {}),
+      },
     },
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,

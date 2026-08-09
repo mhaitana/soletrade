@@ -14,6 +14,7 @@ import {
 import { markInvoicePaidByStripe } from "@/modules/invoices";
 import { branded } from "@/shared/types/ids";
 import type { BillingInterval } from "@/server/db/enums";
+import { recordPromotionRedemption } from "@/platform/billing/promotions";
 
 /**
  * Stripe webhook dispatcher (brief §4 - signature verification on every webhook,
@@ -127,6 +128,16 @@ async function reconcileCheckoutSession(session: Stripe.Checkout.Session): Promi
     items.push({ moduleKey: mapping.moduleKey, role: mapping.role, itemId: si.id });
   }
   await reconcileFromCheckoutSession(session, { interval, items });
+
+  const promotionId = session.metadata?.promotionId;
+  const workspaceId = session.client_reference_id;
+  if (promotionId && workspaceId) {
+    await recordPromotionRedemption({
+      promotionId,
+      workspaceId: branded<"WorkspaceId">(workspaceId),
+      stripeSubscriptionId: sub.id,
+    });
+  }
 }
 
 /**

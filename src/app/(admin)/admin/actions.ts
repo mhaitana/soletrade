@@ -433,7 +433,14 @@ const CURRENCIES = ["AUD", "NZD", "USD"] as const;
 const createPromotionSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(120),
   internalDescription: z.string().trim().max(2000).optional(),
-  publicCode: z.string().trim().max(100).optional(),
+  publicCode: z
+    .string()
+    .trim()
+    .min(3, "Code must be at least 3 characters.")
+    .max(40, "Code must be 40 characters or fewer.")
+    .regex(/^[a-zA-Z0-9-]+$/, "Use letters, numbers, or hyphens only.")
+    .transform((value) => value.toUpperCase())
+    .optional(),
   currency: z.enum(CURRENCIES).default("AUD"),
   discountType: z.enum(DISCOUNT_TYPES),
   percentOff: z.number().min(1).max(100).optional(),

@@ -119,7 +119,17 @@ export function CreatePromotionDialog() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="promo-public-code">Public code (optional)</Label>
-              <Input id="promo-public-code" name="publicCode" placeholder="SUMMER25" />
+              <Input
+                id="promo-public-code"
+                name="publicCode"
+                placeholder="SUMMER25"
+                autoCapitalize="characters"
+                spellCheck={false}
+                aria-describedby="promo-public-code-help"
+              />
+              <p id="promo-public-code-help" className="text-xs text-muted-foreground">
+                Creates a shareable /signup?promo=CODE link.
+              </p>
               <FieldError>{fe?.publicCode?.[0]}</FieldError>
             </div>
           </div>

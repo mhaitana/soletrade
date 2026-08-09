@@ -9,6 +9,8 @@ import { ensureUserMirror } from "@/platform/users";
 import { rateLimit } from "@/server/rate-limit";
 import { getClientIp } from "@/server/security";
 import { tryAdminContext } from "@/platform/admin/services/admin-auth";
+import { MODULE_KEYS } from "@/shared/constants/modules";
+import { onboardingPath } from "@/platform/billing/signup-intent";
 
 /** Throttle message used by every auth action when a rate limit is hit. */
 const THROTTLED = "Too many attempts. Please try again shortly.";
@@ -39,11 +41,17 @@ const signUpSchema = z.object({
   email: emailSchema,
   password: z.string().min(8, "Password must be at least 8 characters."),
   fullName: z.string().trim().max(120, "Name is too long.").optional(),
+  moduleKeys: z.array(z.enum(MODULE_KEYS)).min(1).default(["books"]),
+  interval: z.enum(["monthly", "annual"]).default("monthly"),
+  promotionCode: z.string().trim().max(100).optional(),
 });
 
 const otpSchema = z.object({
   email: emailSchema,
   mode: z.enum(["signin", "signup"]),
+  moduleKeys: z.array(z.enum(MODULE_KEYS)).min(1).optional(),
+  interval: z.enum(["monthly", "annual"]).optional(),
+  promotionCode: z.string().trim().max(100).optional(),
 });
 
 function fieldErrorsOf(error: z.ZodError): Record<string, string[]> {
@@ -51,8 +59,10 @@ function fieldErrorsOf(error: z.ZodError): Record<string, string[]> {
 }
 
 /** The PKCE email-link redirect target, derived from the app URL. */
-function emailRedirectTo(): string {
-  return `${env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+function emailRedirectTo(next?: string): string {
+  const url = new URL("/auth/callback", env.NEXT_PUBLIC_APP_URL);
+  if (next) url.searchParams.set("next", next);
+  return url.toString();
 }
 
 /**
@@ -116,14 +126,15 @@ export async function signUpAction(input: unknown): Promise<AuthActionResult> {
       fieldErrors: fieldErrorsOf(parsed.error),
     };
   }
-  const { email, password, fullName } = parsed.data;
+  const { email, password, fullName, moduleKeys, interval, promotionCode } = parsed.data;
+  const next = onboardingPath({ moduleKeys, interval, promotionCode });
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: fullName ? { full_name: fullName } : undefined,
-      emailRedirectTo: emailRedirectTo(),
+      emailRedirectTo: emailRedirectTo(next),
     },
   });
   if (error) {
@@ -137,7 +148,7 @@ export async function signUpAction(input: unknown): Promise<AuthActionResult> {
       email: data.user.email ?? email,
       fullName,
     });
-    return { ok: true, redirectTo: "/onboarding" };
+    return { ok: true, redirectTo: next };
   }
   // Email-confirmation path - Supabase sent a verification link.
   return { ok: true, checkEmail: true };
@@ -162,16 +173,24 @@ export async function signInWithOtpAction(input: unknown): Promise<AuthActionRes
       fieldErrors: fieldErrorsOf(parsed.error),
     };
   }
-  const { email, mode } = parsed.data;
+  const { email, mode, moduleKeys, interval, promotionCode } = parsed.data;
   if (!(await rateLimit(`auth:otp-email:${email}`, { max: 5, windowMs: WINDOW_MS }))) {
     return { ok: false, error: THROTTLED };
   }
   const supabase = createSupabaseServerClient();
+  const next =
+    mode === "signup"
+      ? onboardingPath({
+          moduleKeys: moduleKeys ?? ["books"],
+          interval: interval ?? "monthly",
+          promotionCode,
+        })
+      : undefined;
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
       shouldCreateUser: mode === "signup",
-      emailRedirectTo: emailRedirectTo(),
+      emailRedirectTo: emailRedirectTo(next),
     },
   });
   if (error) {

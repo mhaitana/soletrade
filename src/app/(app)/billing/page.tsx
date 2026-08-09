@@ -8,6 +8,8 @@ import { formatCents } from "@/platform/billing";
 import { loadBillingOverview } from "./actions";
 import { BillingStartCard } from "./billing-start-card";
 import { BillingManageActions } from "./billing-manage-actions";
+import { parseSignupIntent } from "@/platform/billing/signup-intent";
+import { getPromotionPreview, promotionLabel } from "@/platform/billing/promotions";
 
 export const metadata = { title: "Billing" };
 
@@ -27,8 +29,23 @@ const intervalLabel: Record<string, string> = {
 
 const suffixFor = (interval: string) => (interval === "annual" ? "/yr" : "/mo");
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    modules?: string | string[];
+    interval?: string | string[];
+    promo?: string | string[];
+    coupon?: string | string[];
+  }>;
+}) {
   const data = await loadBillingOverview();
+  const sp = await searchParams;
+  const hasSetupIntent = Boolean(sp.modules || sp.interval || sp.promo || sp.coupon);
+  const setupIntent = hasSetupIntent ? parseSignupIntent(sp) : undefined;
+  const linkedPromotion = setupIntent?.promotionCode
+    ? await getPromotionPreview(setupIntent.promotionCode).catch(() => null)
+    : null;
   const balanceClass = data.balanceCents < 0 ? "text-destructive" : "text-success";
   const interval = data.currentPricing.interval;
   const suffix = suffixFor(interval);
@@ -146,7 +163,12 @@ export default async function BillingPage() {
           </CardContent>
         </Card>
       ) : data.canManage ? (
-        <BillingStartCard />
+        <BillingStartCard
+          initialModules={setupIntent?.moduleKeys}
+          initialInterval={setupIntent?.interval}
+          promotionCode={linkedPromotion?.code}
+          linkedOfferLabel={linkedPromotion ? promotionLabel(linkedPromotion) : undefined}
+        />
       ) : null}
 
       {/* Recent ledger */}

@@ -96,6 +96,25 @@ describe("auth action rate limits", () => {
   });
 
   describe("signUpAction", () => {
+    it("carries the selected modules, interval, and promotion through email verification", async () => {
+      setIp("203.0.113.29");
+      const res = await signUpAction({
+        email: "linked@example.com",
+        password: "password123",
+        moduleKeys: ["books", "quotes"],
+        interval: "annual",
+        promotionCode: "launch25",
+      });
+
+      expect(res.ok).toBe(true);
+      const options = signUp.mock.calls[0]?.[0]?.options;
+      const callback = new URL(options.emailRedirectTo);
+      expect(callback.pathname).toBe("/auth/callback");
+      expect(callback.searchParams.get("next")).toBe(
+        "/onboarding?modules=books%2Cquotes&interval=annual&promo=LAUNCH25",
+      );
+    });
+
     it("allows 5 per IP then throttles the 6th", async () => {
       setIp("203.0.113.30");
       for (let i = 0; i < 5; i++) {
@@ -110,6 +129,25 @@ describe("auth action rate limits", () => {
   });
 
   describe("signInWithOtpAction", () => {
+    it("preserves signup intent in a magic-link callback", async () => {
+      setIp("203.0.113.39");
+      const res = await signInWithOtpAction({
+        email: "magic@example.com",
+        mode: "signup",
+        moduleKeys: ["drive", "invoices"],
+        interval: "monthly",
+        promotionCode: "DRIVE-20",
+      });
+
+      expect(res.ok).toBe(true);
+      const options = signInWithOtp.mock.calls[0]?.[0]?.options;
+      const callback = new URL(options.emailRedirectTo);
+      expect(options.shouldCreateUser).toBe(true);
+      expect(callback.searchParams.get("next")).toBe(
+        "/onboarding?modules=invoices%2Cdrive&interval=monthly&promo=DRIVE-20",
+      );
+    });
+
     it("allows 5 per IP then throttles the 6th", async () => {
       setIp("203.0.113.40");
       for (let i = 0; i < 5; i++) {
