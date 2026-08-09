@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ToolSet } from "ai";
+import { generateText, type ToolSet } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { branded } from "@/shared/types/ids";
 import type { WorkspaceContext } from "@/platform/context";
 import type { ModuleKey } from "@/shared/constants/modules";
@@ -128,12 +129,69 @@ beforeEach(() => {
 });
 
 describe("buildAssistantTools - gating", () => {
-  it("publishes openForm with the provider-required object schema root", async () => {
+  it("publishes openForm as a plain object while retaining strict validation", async () => {
     const { haiOpenFormProviderInputSchema } = await import("./tools");
     const schema = await haiOpenFormProviderInputSchema.jsonSchema;
 
     expect(schema.type).toBe("object");
-    expect(schema.oneOf).toBeInstanceOf(Array);
+    for (const unsupportedRootKeyword of ["oneOf", "anyOf", "allOf", "enum", "const", "not"]) {
+      expect(schema).not.toHaveProperty(unsupportedRootKeyword);
+    }
+
+    const valid = await haiOpenFormProviderInputSchema.validate?.({
+      workflow: "invoice.create",
+      requestSummary: "Draft an invoice for Acme",
+      fields: { customerQuery: "Acme" },
+    });
+    expect(valid?.success).toBe(true);
+
+    const unsafe = await haiOpenFormProviderInputSchema.validate?.({
+      workflow: "invoice.create",
+      requestSummary: "Draft and send an invoice",
+      fields: { sendImmediately: true },
+    });
+    expect(unsafe?.success).toBe(false);
+  });
+
+  it("serializes openForm as a provider-compatible OpenAI function tool", async () => {
+    const { buildAssistantTools } = await import("./tools");
+    const openForm = buildAssistantTools(ctx("owner"), ALL_MODULES).openForm;
+    expect(openForm).toBeDefined();
+
+    let requestBody: Record<string, unknown> | undefined;
+    const captureFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json(
+        {
+          error: {
+            message: "Captured provider request.",
+            type: "invalid_request_error",
+            code: "captured_request",
+          },
+        },
+        { status: 400 },
+      );
+    });
+    const openai = createOpenAI({ apiKey: "test-key", fetch: captureFetch });
+
+    await expect(
+      generateText({
+        model: openai("gpt-4o-mini"),
+        prompt: "Draft an invoice for Acme Corp for $250",
+        tools: { openForm: openForm! },
+        maxRetries: 0,
+      }),
+    ).rejects.toBeDefined();
+
+    expect(captureFetch).toHaveBeenCalledOnce();
+    const wireTools = requestBody?.tools as Array<Record<string, unknown>> | undefined;
+    const wireOpenForm = wireTools?.find((entry) => entry.name === "openForm");
+    expect(wireOpenForm).toBeDefined();
+    const parameters = wireOpenForm?.parameters as Record<string, unknown>;
+    expect(parameters.type).toBe("object");
+    for (const unsupportedRootKeyword of ["oneOf", "anyOf", "allOf", "enum", "const", "not"]) {
+      expect(parameters).not.toHaveProperty(unsupportedRootKeyword);
+    }
   });
 
   it("offers every tool to a readonly role when all modules are installed", async () => {

@@ -1,6 +1,85 @@
 import { expect, test } from "../fixtures/auth";
 
 test.describe("global hAI assistant", () => {
+  test("answers from workspace evidence and persists the conversation to History", async ({
+    ownerPage,
+  }) => {
+    const hydrationErrors: string[] = [];
+    ownerPage.on("console", (message) => {
+      if (message.type() === "error" && /hydration failed/i.test(message.text())) {
+        hydrationErrors.push(message.text());
+      }
+    });
+    ownerPage.on("pageerror", (error) => {
+      if (/hydration failed/i.test(error.message)) hydrationErrors.push(error.message);
+    });
+
+    await ownerPage.goto("/dashboard", { waitUntil: "networkidle" });
+    await ownerPage.getByRole("button", { name: "hAI", exact: true }).click();
+
+    const panel = ownerPage.getByRole("complementary", { name: "hAI global assistant" });
+    await expect(panel.getByText("Context: /dashboard")).toBeVisible();
+    await panel.getByRole("button", { name: "What should I pay attention to here?" }).click();
+
+    await expect(
+      panel.getByText(/Here's a snapshot of your workspace \(current month\):/),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+      panel.getByText(/Installed modules: invoices, books, drive, quotes/),
+    ).toBeVisible();
+    await expect(panel.getByText(/Outstanding invoices: \$21,450\.00 \(1 overdue\)/)).toBeVisible();
+    await expect(
+      panel.getByText(/Ready to invoice \(accepted quotes\): \$4,400\.00/),
+    ).toBeVisible();
+
+    const history = panel.getByRole("link", { name: "History" });
+    const historyHref = await history.getAttribute("href");
+    expect(historyHref).toMatch(/^\/assistant\?c=[0-9a-f-]{36}$/);
+    await history.click();
+    await ownerPage.waitForURL(/\/assistant\?c=[0-9a-f-]{36}$/);
+
+    // Close the persistent panel so the server-rendered History transcript is
+    // the only visible copy. A hard reload then proves both turns came from DB.
+    await panel.getByRole("button", { name: "Close hAI" }).click();
+    const main = ownerPage.locator("main");
+    await expect(
+      main.getByText("What should I pay attention to here?", { exact: true }).last(),
+    ).toBeVisible();
+    await expect(
+      main.getByText(/Here's a snapshot of your workspace \(current month\):/),
+    ).toBeVisible();
+
+    await ownerPage.reload({ waitUntil: "networkidle" });
+    await expect(ownerPage).toHaveURL(new RegExp(`${historyHref!.replace("?", "\\?")}$`));
+    await expect(
+      main.getByText("What should I pay attention to here?", { exact: true }).last(),
+    ).toBeVisible();
+    await expect(main.getByText(/Outstanding invoices: \$21,450\.00 \(1 overdue\)/)).toBeVisible();
+    expect(hydrationErrors).toEqual([]);
+  });
+
+  test("keeps restricted draft requests on the current page without creating data", async ({
+    readonlyPage,
+  }) => {
+    await readonlyPage.goto("/dashboard", { waitUntil: "networkidle" });
+    await readonlyPage.getByRole("button", { name: "hAI", exact: true }).click();
+
+    const panel = readonlyPage.getByRole("complementary", { name: "hAI global assistant" });
+    const message = panel.getByLabel("Message hAI");
+    await message.fill("Draft an invoice for Acme Corp for $250");
+    await message.press("Enter");
+
+    await expect(panel.getByText(/don't have permission to open new invoice/i).first()).toBeVisible(
+      {
+        timeout: 20_000,
+      },
+    );
+    await expect(readonlyPage).toHaveURL(/\/dashboard$/);
+    await expect(
+      readonlyPage.getByRole("complementary", { name: "hAI assisted draft" }),
+    ).not.toBeVisible();
+  });
+
   test("navigates safely and prepares a review-only invoice draft", async ({
     ownerPage,
     viewport,

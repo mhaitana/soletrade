@@ -367,7 +367,17 @@ export function AssistantChat({
           {writeEnabled
             ? "Write tools are on - the assistant will ask for confirmation before creating anything. "
             : ""}
-          {activeConversation ? `Started ${formatDate(activeConversation.updatedAt)}.` : ""}
+          {activeConversation ? (
+            <>
+              Started{" "}
+              <time dateTime={activeConversation.updatedAt.toISOString()} suppressHydrationWarning>
+                {formatDate(activeConversation.updatedAt)}
+              </time>
+              .
+            </>
+          ) : (
+            ""
+          )}
         </p>
       </section>
     </div>

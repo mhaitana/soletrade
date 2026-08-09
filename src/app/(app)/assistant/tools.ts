@@ -1,5 +1,5 @@
 import "server-only";
-import { jsonSchema, tool, zodSchema, type ToolSet } from "ai";
+import { jsonSchema, tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { authorize, type Permission } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
@@ -76,16 +76,42 @@ import {
 } from "./hai-workflows";
 
 /**
- * Providers require function-tool inputs to have an object at the JSON Schema
- * root. A Zod discriminated union serializes as a root `oneOf` without a
- * `type`, which causes the whole model request to be rejected before any tool
- * is chosen. Keep the precise per-workflow union and its validation, while
- * adding the object root that every branch already guarantees.
+ * Providers require function-tool inputs to be a plain object at the JSON
+ * Schema root: root-level `oneOf`/`anyOf`/`allOf` are rejected even when every
+ * branch is an object. Publish a provider-portable object shape and retain the
+ * precise discriminated union below as the runtime validator. The tool guide
+ * describes every workflow-specific field to the model; the validator remains
+ * the fail-closed safety boundary for unknown or mismatched fields.
  */
 export const haiOpenFormProviderInputSchema = jsonSchema<HaiOpenFormInput>(
-  async () => {
-    const schema = await zodSchema(haiOpenFormInputSchema).jsonSchema;
-    return { ...schema, type: "object" };
+  {
+    type: "object",
+    properties: {
+      workflow: {
+        type: "string",
+        enum: Object.keys(HAI_FORM_WORKFLOWS),
+        description: "The exact create or edit workflow to open.",
+      },
+      entityId: {
+        type: "string",
+        format: "uuid",
+        description: "Required for edit workflows and omitted for create workflows.",
+      },
+      requestSummary: {
+        type: "string",
+        minLength: 1,
+        maxLength: 240,
+        description: "A concise summary of what the user asked hAI to prepare.",
+      },
+      fields: {
+        type: "object",
+        description:
+          "Only confidently understood, workflow-specific unsaved fields listed in this tool's description.",
+        additionalProperties: true,
+      },
+    },
+    required: ["workflow", "requestSummary", "fields"],
+    additionalProperties: false,
   },
   {
     validate: async (value) => {
