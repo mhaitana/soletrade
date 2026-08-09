@@ -106,9 +106,12 @@ export function SignupForm({
   const [selected, setSelected] = useState<Set<ModuleKey>>(() => new Set(intent.moduleKeys));
   const [interval, setInterval] = useState<Interval>(intent.interval);
   const [mobileStep, setMobileStep] = useState<MobileStep>("account");
+  const [passwordMismatch, setPasswordMismatch] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const accountHeadingRef = useRef<HTMLHeadingElement>(null);
   const modulesHeadingRef = useRef<HTMLHeadingElement>(null);
+  const accountErrorRef = useRef<HTMLParagraphElement>(null);
+  const passwordMismatchRef = useRef<HTMLParagraphElement>(null);
   const pendingStepFocus = useRef<MobileStep | null>(null);
 
   const selectedKeys = useMemo(() => DISPLAY_ORDER.filter((key) => selected.has(key)), [selected]);
@@ -151,6 +154,14 @@ export function SignupForm({
   }, [state, router]);
 
   useEffect(() => {
+    if (state && !state.ok) setMobileStep("account");
+  }, [state]);
+
+  useEffect(() => {
+    if (state && !state.ok && mobileStep === "account") accountErrorRef.current?.focus();
+  }, [mobileStep, state]);
+
+  useEffect(() => {
     if (pendingStepFocus.current !== mobileStep) return;
     pendingStepFocus.current = null;
     const heading =
@@ -159,13 +170,26 @@ export function SignupForm({
     formRef.current?.scrollIntoView?.({ block: "start" });
   }, [mobileStep]);
 
+  useEffect(() => {
+    if (passwordMismatch) passwordMismatchRef.current?.focus();
+  }, [passwordMismatch]);
+
   function moveToStep(next: MobileStep) {
     pendingStepFocus.current = next;
     setMobileStep(next);
   }
 
   function advanceToModules() {
-    if (!formRef.current?.reportValidity()) return;
+    const form = formRef.current;
+    if (!form?.reportValidity()) return;
+    if (mode === "password") {
+      const data = new FormData(form);
+      if (data.get("password") !== data.get("confirm")) {
+        setPasswordMismatch(true);
+        return;
+      }
+    }
+    setPasswordMismatch(false);
     moveToStep("modules");
   }
 
@@ -269,8 +293,10 @@ export function SignupForm({
           <div className="mt-7 space-y-4">
             {error ? (
               <p
-                className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                ref={accountErrorRef}
+                className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive outline-none"
                 role="alert"
+                tabIndex={-1}
               >
                 {error}
               </p>
@@ -329,7 +355,26 @@ export function SignupForm({
                     </p>
                   )}
                 </div>
-                <PasswordInput id="confirm" name="confirm" label="Confirm password" />
+                <div>
+                  <PasswordInput
+                    id="confirm"
+                    name="confirm"
+                    label="Confirm password"
+                    describedBy={passwordMismatch ? "confirm-error" : undefined}
+                    invalid={passwordMismatch}
+                  />
+                  {passwordMismatch ? (
+                    <p
+                      ref={passwordMismatchRef}
+                      id="confirm-error"
+                      className="mt-1.5 text-sm text-destructive outline-none"
+                      role="alert"
+                      tabIndex={-1}
+                    >
+                      Passwords do not match.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
@@ -343,7 +388,10 @@ export function SignupForm({
               type="button"
               variant="link"
               className="h-auto p-0 text-brand-blue"
-              onClick={() => setMode((current) => (current === "password" ? "magic" : "password"))}
+              onClick={() => {
+                setPasswordMismatch(false);
+                setMode((current) => (current === "password" ? "magic" : "password"));
+              }}
             >
               {mode === "password" ? "Use a magic link" : "Create a password"}
             </Button>
