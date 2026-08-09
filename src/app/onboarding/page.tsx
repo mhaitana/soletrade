@@ -44,9 +44,9 @@ export default async function OnboardingPage({
     : null;
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="mb-8 flex justify-center">
+    <div className="flex min-h-dvh flex-col items-center justify-start px-4 py-8 sm:justify-center sm:py-12">
+      <div className="w-full min-w-0 max-w-md">
+        <div className="mb-6 flex justify-center sm:mb-8">
           <Logo />
         </div>
         <h1 className="text-center text-2xl font-semibold tracking-tight">

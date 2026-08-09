@@ -114,7 +114,6 @@ export function CreateWorkspaceForm({
           minLength={2}
           maxLength={80}
           autoComplete="organization"
-          autoFocus
           aria-invalid={Boolean(fieldErrors?.name || fieldErrors?.slug)}
           aria-describedby={fieldErrors?.name || fieldErrors?.slug ? "name-error" : "name-help"}
         />
@@ -130,18 +129,21 @@ export function CreateWorkspaceForm({
       </div>
 
       {intent && pricing ? (
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="min-w-0 rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between gap-4">
             <p className="text-sm font-medium">Your selected setup</p>
             <span className="text-xs capitalize text-muted-foreground">{intent.interval}</span>
           </div>
           <div className="mt-3 space-y-2">
             {pricing.modules.map((item) => (
-              <div key={item.key} className="flex items-center justify-between gap-4 text-sm">
-                <span className="flex items-center gap-2 text-muted-foreground">
+              <div
+                key={item.key}
+                className="flex min-w-0 items-center justify-between gap-3 text-sm sm:gap-4"
+              >
+                <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
                   <Check className="size-3.5 text-success" /> {MODULES[item.key].name}
                 </span>
-                <span className="font-mono text-xs tabular-nums">
+                <span className="shrink-0 whitespace-nowrap font-mono text-xs tabular-nums">
                   {formatCents(item.netCents)}
                   {suffix}
                 </span>
