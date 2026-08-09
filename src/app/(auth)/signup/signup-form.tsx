@@ -243,9 +243,9 @@ export function SignupForm({
   const fieldErrors = state && !state.ok ? state.fieldErrors : undefined;
 
   return (
-    <form ref={formRef} action={action}>
+    <form ref={formRef} action={action} className="min-w-0">
       <ol
-        className="grid grid-cols-2 border-b border-border lg:hidden"
+        className="grid min-w-0 grid-cols-2 border-b border-border lg:hidden"
         aria-label="Signup progress"
       >
         {(["account", "modules"] as const).map((step, index) => (
@@ -263,13 +263,19 @@ export function SignupForm({
           </li>
         ))}
       </ol>
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_23rem]">
+      <div
+        className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_23rem]"
+        data-testid="signup-stage-grid"
+      >
         <section
-          className={cn("p-6 sm:p-8 lg:block lg:p-10", mobileStep !== "account" && "hidden")}
+          className={cn(
+            "min-w-0 p-5 sm:p-8 lg:block lg:p-10",
+            mobileStep !== "account" && "hidden",
+          )}
           aria-labelledby="account-details-title"
         >
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="hidden text-xs font-semibold uppercase tracking-wider text-brand-blue lg:block">
                 Step 1 of 2
               </p>
@@ -290,7 +296,7 @@ export function SignupForm({
             </div>
           </div>
 
-          <div className="mt-7 space-y-4">
+          <div className="mt-6 min-w-0 space-y-4 sm:mt-7">
             {error ? (
               <p
                 ref={accountErrorRef}
@@ -336,8 +342,8 @@ export function SignupForm({
             </div>
 
             {mode === "password" ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <div className="min-w-0">
                   <PasswordInput
                     id="password"
                     name="password"
@@ -355,7 +361,7 @@ export function SignupForm({
                     </p>
                   )}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <PasswordInput
                     id="confirm"
                     name="confirm"
@@ -417,7 +423,7 @@ export function SignupForm({
 
         <aside
           className={cn(
-            "border-t border-border bg-muted/30 p-6 sm:p-8 lg:block lg:border-l lg:border-t-0",
+            "min-w-0 border-t border-border bg-muted/30 p-5 sm:p-8 lg:block lg:border-l lg:border-t-0",
             mobileStep !== "modules" && "hidden",
           )}
           aria-labelledby="module-selection-title"
@@ -431,7 +437,7 @@ export function SignupForm({
             <ArrowLeft className="size-4" /> Back to account
           </Button>
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wider text-brand-blue">
                 Your setup
               </p>
@@ -462,7 +468,7 @@ export function SignupForm({
                   <label
                     key={key}
                     className={cn(
-                      "flex min-h-16 cursor-pointer items-center gap-3 rounded-lg border bg-card p-3 outline-none transition-colors has-[:focus-visible]:border-ring has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/40",
+                      "flex min-h-16 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border bg-card p-3 outline-none transition-colors has-[:focus-visible]:border-ring has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/40 sm:gap-3",
                       checked ? "border-foreground" : "border-border hover:bg-muted/40",
                     )}
                   >
@@ -475,15 +481,15 @@ export function SignupForm({
                     <span className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-muted/50">
                       <Icon className="size-4" />
                     </span>
-                    <span className="min-w-0 flex-1">
+                    <span className="min-w-0 flex-1 overflow-hidden">
                       <span className="block text-sm font-medium">{moduleMeta.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">
                         {moduleMeta.description}
                       </span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-2">
+                    <span className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                       {checked ? (
-                        <span className="text-right font-mono text-xs tabular-nums">
+                        <span className="whitespace-nowrap text-right font-mono text-xs tabular-nums">
                           {formatCents(cents)}
                           {suffix}
                         </span>
@@ -516,7 +522,7 @@ export function SignupForm({
                   onClick={() => setInterval(value)}
                   aria-pressed={interval === value}
                   className={cn(
-                    "min-h-10 cursor-pointer rounded-md px-3 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40 lg:text-xs",
+                    "min-h-11 cursor-pointer rounded-md px-2 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40 sm:px-3 lg:text-xs",
                     interval === value
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted",

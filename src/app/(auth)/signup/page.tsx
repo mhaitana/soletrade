@@ -26,13 +26,13 @@ export default async function SignupPage({
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-col items-center border-b border-border px-6 py-7 text-center sm:px-10">
+    <div className="mx-auto w-full max-w-5xl min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex flex-col items-center border-b border-border px-5 py-5 text-center sm:px-10 sm:py-7">
         <Logo href={null} />
-        <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-brand-blue">
+        <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-brand-blue sm:mt-5">
           Build your workspace
         </p>
-        <h1 className="mt-2 text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="mt-2 max-w-xl text-balance text-xl font-semibold tracking-tight sm:text-3xl">
           Start with exactly what your business needs
         </h1>
         <p className="mt-2 max-w-xl text-balance text-sm leading-6 text-muted-foreground">

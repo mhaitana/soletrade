@@ -120,4 +120,13 @@ describe("SignupForm mobile stages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Email already registered.");
     expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Account");
   });
+
+  it("uses narrow-screen-safe module and billing classes", () => {
+    renderSignup();
+
+    expect(screen.getByTestId("signup-stage-grid")).toHaveClass("min-w-0");
+    expect(screen.getByText("Track income, expenses, and receipts.")).not.toHaveClass("truncate");
+    expect(screen.getByRole("button", { name: "Monthly" })).toHaveClass("min-h-11");
+    expect(screen.getByRole("button", { name: /Annual/ })).toHaveClass("min-h-11");
+  });
 });
