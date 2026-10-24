@@ -4,14 +4,17 @@ import {
   invoiceOverdueEmail,
   invoicePaidEmail,
   invoiceSentEmail,
+  memberInvitedEmail,
   quoteAcceptedEmail,
   quoteDeclinedEmail,
   quoteLink,
   quoteSentEmail,
+  refundIssuedEmail,
   type InvoiceEmailMeta,
   type QuoteEmailMeta,
   type QuoteMerchantMeta,
 } from "./templates";
+import { urls } from "@/config/urls";
 
 const APP_URL = "https://app.soletrade.example";
 
@@ -179,5 +182,84 @@ describe("quoteDeclinedEmail", () => {
     expect(html).not.toContain("View quote");
     expect(text).toContain("AUD 180.00");
     expect(text).toContain("from Globex Corp");
+  });
+});
+
+describe("HB email branding", () => {
+  const cases = [
+    ["invoice sent", () => invoiceSentEmail(meta(), APP_URL)],
+    ["invoice overdue", () => invoiceOverdueEmail(meta(), APP_URL)],
+    ["invoice paid", () => invoicePaidEmail({ ...meta(), source: "stripe" }, APP_URL)],
+    ["quote sent", () => quoteSentEmail(quoteMeta(), APP_URL)],
+    ["quote accepted", () => quoteAcceptedEmail(merchantMeta(), APP_URL)],
+    ["quote declined", () => quoteDeclinedEmail(merchantMeta(), APP_URL)],
+    [
+      "member invited",
+      () =>
+        memberInvitedEmail(
+          {
+            email: "member@example.com",
+            role: "employee",
+            token: "sample-invitation",
+            workspaceName: "Example Studio",
+            inviterName: "Alex",
+          },
+          APP_URL,
+        ),
+    ],
+    [
+      "refund issued",
+      () =>
+        refundIssuedEmail(
+          {
+            amountCents: 900,
+            currency: "AUD",
+            reason: "Module cancelled",
+            moduleKey: "books",
+            method: "card",
+          },
+          APP_URL,
+        ),
+    ],
+  ] as const;
+
+  it.each(cases)(
+    "brands %s with the HB image, product name and parent attribution",
+    (_, render) => {
+      const email = render();
+      const document = new DOMParser().parseFromString(email.html, "text/html");
+      const logo = document.querySelector("img");
+
+      expect(logo).not.toBeNull();
+      expect(logo?.getAttribute("src")).toBe(
+        `${APP_URL}/icons/soletrade-v1/icon-192x192.png`,
+      );
+      expect(logo?.getAttribute("width")).toBe("40");
+      expect(logo?.getAttribute("height")).toBe("40");
+      expect(logo?.getAttribute("alt")).toBe("");
+      expect(logo?.closest("tr")?.textContent).toContain("Soletrade");
+      expect(logo?.closest("tr")?.textContent).not.toContain("Matt Haitana");
+      expect(document.body.textContent).toContain("© Matt Haitana");
+      expect(email.text).toMatch(/Soletrade\n© Matt Haitana$/);
+      expect(email.html).not.toContain("<svg");
+      expect(email.html).not.toMatch(/display:\s*(flex|grid)/);
+    },
+  );
+
+  it("uses the supplied deployment origin for the logo when the app URL has a path", () => {
+    const email = invoiceSentEmail(meta(), "https://tenant.example.com/app/");
+    const document = new DOMParser().parseFromString(email.html, "text/html");
+    expect(document.querySelector("img")?.getAttribute("src")).toBe(
+      "https://tenant.example.com/icons/soletrade-v1/icon-192x192.png",
+    );
+    expect(email.html).toContain('href="https://tenant.example.com/app/i/abc-123-token"');
+  });
+
+  it("defaults informational emails to the configured application origin", () => {
+    const email = quoteAcceptedEmail(merchantMeta());
+    const document = new DOMParser().parseFromString(email.html, "text/html");
+    expect(document.querySelector("img")?.getAttribute("src")).toBe(
+      `${new URL(urls.app).origin}/icons/soletrade-v1/icon-192x192.png`,
+    );
   });
 });

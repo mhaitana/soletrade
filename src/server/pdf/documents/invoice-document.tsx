@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { brand } from "@/config/brand";
+import { DocumentBrandFooter, DocumentBrandHeader } from "./document-brand";
 import {
   getPaymentMethodDetails,
   getPaymentMethodLabel,
@@ -55,8 +56,7 @@ function fmtDate(d: Date | null): string {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontSize: 11, fontFamily: "Helvetica", color: "#0f172a" },
-  brand: { fontFamily: "Helvetica-Bold", fontSize: 14, marginBottom: 24 },
+  page: { padding: 40, paddingBottom: 60, fontSize: 11, fontFamily: "Helvetica", color: "#0f172a" },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   label: { color: "#64748b", fontSize: 9 },
   heading: { fontSize: 22, marginBottom: 16 },
@@ -100,9 +100,14 @@ export function InvoiceDocument({
 }) {
   const customerName = invoice.customerName ?? "Walk-in customer";
   return (
-    <Document>
+    <Document
+      title={`Invoice ${invoice.number}`}
+      author={workspaceName ?? brand.productName}
+      creator={brand.productName}
+      producer={brand.companyName}
+    >
       <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>{brand.wordmark}</Text>
+        <DocumentBrandHeader />
         <View style={styles.row}>
           <Text style={styles.label}>From</Text>
           <Text style={styles.label}>Invoice</Text>
@@ -181,6 +186,7 @@ export function InvoiceDocument({
             ))}
           </View>
         ) : null}
+        <DocumentBrandFooter />
       </Page>
     </Document>
   );

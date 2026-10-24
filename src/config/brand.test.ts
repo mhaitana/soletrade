@@ -11,7 +11,7 @@ describe("brand config", () => {
     expect(brand.productName).toBe("Soletrade");
   });
 
-  it("retains the parent wordmark for existing email/PDF headers", () => {
+  it("retains the parent wordmark for legacy reports", () => {
     expect(brand.wordmark).toBe("soletrade");
   });
 

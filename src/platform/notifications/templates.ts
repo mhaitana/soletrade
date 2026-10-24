@@ -6,7 +6,7 @@
  *
  * **Standalone HTML** - not React-rendered - because emails render in a mail client, not the
  * browser. Styles are inlined (many clients strip `<style>` tags). The visual language mirrors
- * the public `/i/[token]` page (brand wordmark, amount hero, emerald-for-paid / red-for-overdue
+ * the public `/i/[token]` page (product branding, amount hero, emerald-for-paid / red-for-overdue
  * accents) but the template is maintained separately and can drift over time (documented
  * limitation in the Phase 5c notes).
  *
@@ -21,6 +21,8 @@
 
 import { branded, type CustomerId } from "@/shared/types/ids";
 import { brand } from "@/config/brand";
+import { pwaBrand } from "@/config/pwa";
+import { urls } from "@/config/urls";
 
 export type InvoiceEmailMeta = {
   number: string;
@@ -78,8 +80,9 @@ export function invoiceLink(publicToken: string, appUrl: string): string {
   return `${appUrl.replace(/\/$/, "")}/i/${publicToken}`;
 }
 
-/** Shared HTML wrapper - brand wordmark + content card + footer. */
+/** Shared HTML wrapper - HB product lockup + content card + parent copyright. */
 function emailHtml(opts: {
+  appUrl: string;
   accent: string; // hex
   heading: string;
   preheading?: string;
@@ -88,27 +91,38 @@ function emailHtml(opts: {
   buttonLabel: string;
   showButton: boolean;
 }): string {
+  const logoUrl = new URL(pwaBrand.icons.standard192, opts.appUrl).href;
   const button = opts.showButton
     ? `<a href="${opts.buttonHref}" style="display:inline-block;background:${opts.accent};color:#ffffff;text-decoration:none;font-weight:600;padding:14px 28px;border-radius:8px;font-size:15px;">${opts.buttonLabel}</a>`
     : "";
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:24px 0;">
-    <tr><td align="center">
-      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
-        <tr><td style="padding:20px 24px;border-bottom:1px solid #e2e8f0;">
-          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:-0.01em;">${brand.wordmark}</span>
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="margin:0;padding:0;background:${pwaBrand.background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${pwaBrand.ink};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${pwaBrand.background};">
+    <tr><td align="center" style="padding:24px 12px;">
+      <!--[if mso]><table role="presentation" align="center" width="480" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:480px;background:#ffffff;border:1px solid #e7e5e4;border-radius:16px;overflow:hidden;">
+        <tr><td style="padding:20px 24px;border-bottom:1px solid #e7e5e4;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+            <td width="40" valign="middle"><img src="${logoUrl}" alt="" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;border-radius:8px;"></td>
+            <td valign="middle" style="padding-left:12px;font-size:18px;line-height:24px;font-weight:600;letter-spacing:-0.01em;color:${pwaBrand.ink};">${brand.productName}</td>
+          </tr></table>
         </td></tr>
         <tr><td style="padding:28px 24px;">
-          ${opts.preheading ? `<p style="margin:0 0 4px;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;">${opts.preheading}</p>` : ""}
+          ${opts.preheading ? `<p style="margin:0 0 4px;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#78716c;">${opts.preheading}</p>` : ""}
           <h1 style="margin:0 0 12px;font-size:22px;font-weight:600;color:${opts.accent};">${opts.heading}</h1>
           ${opts.bodyHtml}
           ${button ? `<div style="margin-top:24px;">${button}</div>` : ""}
         </td></tr>
       </table>
-      <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">${brand.productName}. If you did not expect this email, you can ignore it.</p>
+      <!--[if mso]></td></tr></table><![endif]-->
+      <p style="max-width:480px;margin:16px 0 0;font-size:12px;line-height:18px;color:#78716c;">${brand.productName}. If you did not expect this email, you can ignore it.</p>
+      <p style="margin:8px 0 0;font-size:12px;line-height:18px;color:#78716c;">© ${brand.companyName}</p>
     </td></tr>
   </table>
 </body></html>`;
+}
+
+function emailText(text: string): string {
+  return `${text}\n\n${brand.productName}\n© ${brand.companyName}`;
 }
 
 /** "You have a new invoice" - sent on `InvoiceSent`. */
@@ -118,12 +132,13 @@ export function invoiceSentEmail(m: InvoiceEmailMeta, appUrl: string): RenderedE
   const due = m.dueDate ? ` due ${formatDate(m.dueDate)}` : "";
   const subject = `Invoice ${m.number}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Amount due${due}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Amount due${due}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">You have a new invoice (${m.number}). Click below to view the details and pay securely online.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">You have a new invoice (${m.number}). Click below to view the details and pay securely online.</p>`;
   const html = emailHtml({
-    accent: "#0f172a",
+    appUrl,
+    accent: pwaBrand.ink,
     preheading: `Invoice ${m.number}`,
     heading: "You have a new invoice",
     bodyHtml,
@@ -140,7 +155,7 @@ export function invoiceSentEmail(m: InvoiceEmailMeta, appUrl: string): RenderedE
     `View and pay online:`,
     link,
   ].join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }
 
 /** "Your invoice is overdue" - sent on `InvoiceOverdue`. */
@@ -149,11 +164,12 @@ export function invoiceOverdueEmail(m: InvoiceEmailMeta, appUrl: string): Render
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
   const subject = `Overdue: Invoice ${m.number}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Overdue amount${m.dueDate ? ` · was due ${formatDate(m.dueDate)}` : ""}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Overdue amount${m.dueDate ? ` · was due ${formatDate(m.dueDate)}` : ""}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Invoice ${m.number} is past its due date. Please pay online to avoid further reminders.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Invoice ${m.number} is past its due date. Please pay online to avoid further reminders.</p>`;
   const html = emailHtml({
+    appUrl,
     accent: "#DC2626",
     preheading: `Overdue · Invoice ${m.number}`,
     heading: "Your invoice is overdue",
@@ -171,7 +187,7 @@ export function invoiceOverdueEmail(m: InvoiceEmailMeta, appUrl: string): Render
     `Pay online:`,
     link,
   ].join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }
 
 /** "Payment receipt" - sent on `InvoicePaid` (Stripe or manual source). */
@@ -183,11 +199,12 @@ export function invoicePaidEmail(
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
   const subject = `Receipt: Invoice ${m.number}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Payment received</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Payment received</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Thanks - we've received your payment for invoice ${m.number}. You can view the receipt online anytime.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Thanks - we've received your payment for invoice ${m.number}. You can view the receipt online anytime.</p>`;
   const html = emailHtml({
+    appUrl,
     accent: "#059669",
     preheading: `Receipt · Invoice ${m.number}`,
     heading: "Payment received",
@@ -205,7 +222,7 @@ export function invoicePaidEmail(
     `View online:`,
     link,
   ].join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,12 +309,13 @@ export function quoteSentEmail(m: QuoteEmailMeta, appUrl: string): RenderedEmail
   const valid = m.validUntil ? ` - valid until ${formatDate(m.validUntil)}` : "";
   const subject = `Quote ${m.number}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">${greeting}</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Quote amount${valid}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Quote amount${valid}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">You have a new quote (${m.number}). Review the details and accept or decline it online.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">You have a new quote (${m.number}). Review the details and accept or decline it online.</p>`;
   const html = emailHtml({
-    accent: "#0f172a",
+    appUrl,
+    accent: pwaBrand.ink,
     preheading: `Quote ${m.number}`,
     heading: "You have a new quote",
     bodyHtml,
@@ -314,19 +332,20 @@ export function quoteSentEmail(m: QuoteEmailMeta, appUrl: string): RenderedEmail
     `Review and accept or decline online:`,
     link,
   ].join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }
 
 /** "A quote was accepted" - sent to workspace members on `QuoteAccepted`. Informational, no button. */
-export function quoteAcceptedEmail(m: QuoteMerchantMeta): RenderedEmail {
+export function quoteAcceptedEmail(m: QuoteMerchantMeta, appUrl = urls.app): RenderedEmail {
   const customer = m.customerName ? ` from ${m.customerName}` : "";
   const subject = `Quote ${m.number} accepted`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A quote you sent has been accepted.</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Accepted quote${customer}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">A quote you sent has been accepted.</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Accepted quote${customer}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Quote ${m.number}${customer} was accepted by the customer. Convert it to an invoice in ${brand.productName} when you're ready to bill.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Quote ${m.number}${customer} was accepted by the customer. Convert it to an invoice in ${brand.productName} when you're ready to bill.</p>`;
   const html = emailHtml({
+    appUrl,
     accent: "#059669",
     preheading: `Accepted · Quote ${m.number}`,
     heading: "A quote was accepted",
@@ -342,19 +361,20 @@ export function quoteAcceptedEmail(m: QuoteMerchantMeta): RenderedEmail {
     ``,
     `Convert it to an invoice in ${brand.productName} when you're ready to bill.`,
   ].join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }
 
 /** "A quote was declined" - sent to workspace members on `QuoteDeclined`. Informational, no button. */
-export function quoteDeclinedEmail(m: QuoteMerchantMeta): RenderedEmail {
+export function quoteDeclinedEmail(m: QuoteMerchantMeta, appUrl = urls.app): RenderedEmail {
   const customer = m.customerName ? ` from ${m.customerName}` : "";
   const subject = `Quote ${m.number} declined`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A quote you sent was declined.</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Declined quote${customer}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">A quote you sent was declined.</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Declined quote${customer}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">Quote ${m.number}${customer} was declined by the customer. You may want to follow up or issue a revised quote.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Quote ${m.number}${customer} was declined by the customer. You may want to follow up or issue a revised quote.</p>`;
   const html = emailHtml({
+    appUrl,
     accent: "#DC2626",
     preheading: `Declined · Quote ${m.number}`,
     heading: "A quote was declined",
@@ -370,7 +390,7 @@ export function quoteDeclinedEmail(m: QuoteMerchantMeta): RenderedEmail {
     ``,
     `You may want to follow up or issue a revised quote.`,
   ].join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -419,11 +439,12 @@ export function memberInvitedEmail(m: MemberInvitedEmailMeta, appUrl: string): R
     : "You've been invited to join";
   const subject = `You've been invited to join ${m.workspaceName}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">Hi,</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">${inviter}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">Hi,</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">${inviter}</p>
     <p style="margin:0 0 16px;font-size:28px;font-weight:600;">${m.workspaceName}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">You've been invited as <strong>${roleLabel(m.role)}</strong>. Click below to accept and create your account. This link expires in 7 days and can only be used once.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">You've been invited as <strong>${roleLabel(m.role)}</strong>. Click below to accept and create your account. This link expires in 7 days and can only be used once.</p>`;
   const html = emailHtml({
+    appUrl,
     accent: "#059669",
     preheading: `Invitation to join ${m.workspaceName}`,
     heading: "You're invited",
@@ -443,7 +464,7 @@ export function memberInvitedEmail(m: MemberInvitedEmailMeta, appUrl: string): R
     ``,
     `This link expires in 7 days and can only be used once.`,
   ].join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -477,16 +498,17 @@ export function coerceRefundMeta(record: Record<string, unknown> | undefined): R
 }
 
 /** "A refund was issued" - sent to workspace members on `RefundIssued`. Informational, no button. */
-export function refundIssuedEmail(m: RefundMeta): RenderedEmail {
+export function refundIssuedEmail(m: RefundMeta, appUrl = urls.app): RenderedEmail {
   const modulePart = m.moduleKey ? ` for ${m.moduleKey}` : "";
   const reason = m.reason ? ` - ${m.reason}` : "";
   const subject = `Refund issued${modulePart}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#334155;">A refund was issued from your workspace.</p>
-    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Refund${modulePart}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">A refund was issued from your workspace.</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Refund${modulePart}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.amountCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#334155;">${m.method ? `Refunded to ${m.method}.` : "The refund has been processed."}${reason}</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">${m.method ? `Refunded to ${m.method}.` : "The refund has been processed."}${reason}</p>`;
   const html = emailHtml({
+    appUrl,
     accent: "#DC2626",
     preheading: `Refund${modulePart}`,
     heading: "A refund was issued",
@@ -504,5 +526,5 @@ export function refundIssuedEmail(m: RefundMeta): RenderedEmail {
   ]
     .filter(Boolean)
     .join("\n");
-  return { subject, html, text };
+  return { subject, html, text: emailText(text) };
 }

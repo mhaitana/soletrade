@@ -18,9 +18,10 @@
  *
  * `productName` ("Soletrade") names the product in UI lockups, metadata, email copy,
  * Stripe products and "Powered by" footers. The shared `Logo` pairs the HB mark with this
- * name or `shortProductName` ("Business") for compact app surfaces. `wordmark` ("soletrade")
- * remains the parent wordmark used by existing email/PDF headers. The manifest also uses
- * `shortProductName` as its short_name.
+ * name or `shortProductName` ("Business") for compact app surfaces. Email templates and
+ * invoice/quote PDFs use the same HB product identity, with the parent in copyright and
+ * document metadata. `wordmark` ("soletrade") remains available for legacy parent-branded
+ * reports. The manifest also uses `shortProductName` as its short_name.
  */
 export const brand = {
   companyName: "Matt Haitana",
