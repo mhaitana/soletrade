@@ -1,1 +1,1 @@
-export { MoreScreen as default } from "@/screens/tabs";
+export { MoreScreen as default } from "@/application/navigation/more";

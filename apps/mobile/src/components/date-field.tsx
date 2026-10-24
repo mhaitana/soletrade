@@ -1,8 +1,8 @@
+import { Action, Field } from "@/components/ui";
+import { spacing, useTheme } from "@/theme/index";
+import { DateTimePicker } from "@expo/ui/community/datetime-picker";
 import { useState } from "react";
 import { View } from "react-native";
-import { DateTimePicker } from "@expo/ui/community/datetime-picker";
-import { Action, Field } from "./ui";
-import { spacing, useTheme } from "@/theme";
 export function DateField({
   label,
   value,

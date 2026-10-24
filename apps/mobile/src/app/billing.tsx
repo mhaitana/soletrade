@@ -1,1 +1,1 @@
-export { BillingScreen as default } from "@/screens/tabs";
+export { BillingScreen as default } from "@/features/billing/screens/billing";

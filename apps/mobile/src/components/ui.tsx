@@ -1,3 +1,6 @@
+import { radius, spacing, typography, useTheme } from "@/theme/index";
+import { Button, Host, Picker, Switch } from "@expo/ui";
+import { router } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
@@ -8,9 +11,6 @@ import {
   View,
   type TextInputProps,
 } from "react-native";
-import { Host, Button, Picker, Switch } from "@expo/ui";
-import { router } from "expo-router";
-import { radius, spacing, typography, useTheme } from "@/theme";
 
 export function Copy({
   children,
@@ -111,7 +111,9 @@ export function Field({
   const theme = useTheme();
   return (
     <View style={{ gap: spacing.xs }}>
-      <Copy variant="caption" muted>{label}</Copy>
+      <Copy variant="caption" muted>
+        {label}
+      </Copy>
       <TextInput
         {...props}
         accessibilityLabel={label}
@@ -154,7 +156,9 @@ export function Choice({
   if (options.length <= 6) {
     return (
       <View style={{ gap: spacing.xs }}>
-        <Copy variant="caption" muted>{label}</Copy>
+        <Copy variant="caption" muted>
+          {label}
+        </Copy>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -238,11 +242,13 @@ export function Row({
   title,
   subtitle,
   trailing,
+  badge,
   onPress,
 }: {
   title: string;
   subtitle?: string;
   trailing?: string;
+  badge?: React.ReactNode;
   onPress?: () => void;
 }) {
   const theme = useTheme();
@@ -255,6 +261,7 @@ export function Row({
             {subtitle}
           </Copy>
         )}
+        {badge}
       </View>
       {trailing && <Copy muted>{trailing}</Copy>}
     </>

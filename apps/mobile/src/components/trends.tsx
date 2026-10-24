@@ -1,6 +1,6 @@
+import { Copy, Group, Row, formatMoney, human } from "@/components/ui";
+import { radius, spacing, useTheme } from "@/theme/index";
 import { View } from "react-native";
-import { Copy, Group, Row, formatMoney, human } from "./ui";
-import { spacing, radius, useTheme } from "@/theme";
 export function TrendChart({
   title,
   points,

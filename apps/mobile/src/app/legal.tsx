@@ -1,1 +1,1 @@
-export { LegalScreen as default } from "@/screens/tools";
+export { LegalScreen as default } from "@/features/account/screens/legal";

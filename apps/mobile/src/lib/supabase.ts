@@ -1,6 +1,6 @@
-import "react-native-url-polyfill/auto";
 import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
+import "react-native-url-polyfill/auto";
 
 // SecureStore entries have platform size limits. Chunking also supports long JWTs.
 const storage = {

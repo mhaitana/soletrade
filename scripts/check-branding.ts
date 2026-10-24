@@ -2,7 +2,7 @@
 //
 // Flags occurrences of the old product names in src TS/TSX files so a future edit doesn't
 // silently reintroduce pre-rebrand branding. Customer-facing brand strings must come from
-// src/config/brand.ts (product: "Soletrade", company: "Matt Haitana").
+// apps/web/src/config/brand.ts (product: "Soletrade", company: "Matt Haitana").
 //
 // Flagged phrases (case-insensitive): the old "soletrade OS", "soletrade Workspace" and legacy
 // "soletrade suite" product forms. The valid repository/package slug `soletrade` is NEVER
@@ -14,8 +14,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 // Run via pnpm from the repo root, so process.cwd() is the repository root.
-const ROOT = process.cwd();
-const SRC = join(ROOT, "src");
+const ROOT = join(import.meta.dirname, "..");
+const SOURCES = ["apps/web/src", "apps/mobile/src"].map((source) => join(ROOT, source));
 
 // Case-insensitive deprecated phrases. The repo slug `soletrade` is excluded per-line below.
 const DEPRECATED = ["soletrade os", "soletradeos", "soletrade suite", "soletrade workspace"];
@@ -46,7 +46,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 const hits: { file: string; line: number; text: string }[] = [];
-for (const file of walk(SRC)) {
+for (const file of SOURCES.flatMap((source) => walk(source))) {
   const lines = readFileSync(file, "utf8").split("\n");
   for (const [i, line] of lines.entries()) {
     // Never flag the valid repo/package slug `soletrade`.
@@ -59,7 +59,9 @@ for (const file of walk(SRC)) {
 }
 
 if (hits.length > 0) {
-  console.error("❌ Deprecated customer-facing branding found - use src/config/brand.ts instead:");
+  console.error(
+    "❌ Deprecated customer-facing branding found - use apps/web/src/config/brand.ts instead:",
+  );
   for (const h of hits) {
     console.error(`  ${h.file}:${h.line}: ${h.text}`);
   }
@@ -68,4 +70,4 @@ if (hits.length > 0) {
   );
   process.exit(1);
 }
-console.log("✅ No deprecated customer-facing branding found in src/.");
+console.log("✅ No deprecated customer-facing branding found in applications.");

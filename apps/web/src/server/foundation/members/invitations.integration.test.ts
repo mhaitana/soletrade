@@ -1,0 +1,113 @@
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { getDataClient } from "@/server/infrastructure/db/client";
+import { unwrapMaybe } from "@/server/infrastructure/db/helpers";
+import { cleanupWorkspaces, seedUsers } from "@/testing/db-helpers";
+import { branded, type WorkspaceId } from "@/types/ids";
+import { createWorkspace } from "@/server/foundation/workspaces";
+import { clearEventBus } from "@/server/infrastructure/events";
+import {
+  acceptInvitation,
+  getInvitationByToken,
+  inviteMember,
+  resendInvitation,
+  revokeInvitation,
+} from "@/server/foundation/members";
+
+/**
+ * Wave 4 Part A integration: the full invitation lifecycle - invite → get-by-token →
+ * resend → revoke, plus the accept path (new user joins). DB-gated (skips without DATABASE_URL).
+ * UUID suffixes `...0000e5`/`...0000e6` are unique to this file (e1/e2 are used by the
+ * files integration test - sharing them caused a cross-file FK collision under parallel
+ * execution, so this file moved off them).
+ */
+const HAS_DB = Boolean(process.env.DATABASE_URL);
+
+describe.skipIf(!HAS_DB)("member invitations lifecycle (requires DATABASE_URL)", () => {
+  const owner = branded<"UserId">("00000000-0000-4000-8000-0000000000e5");
+  const invitee = branded<"UserId">("00000000-0000-4000-8000-0000000000e6");
+  const inviteeEmail = "invitee-e2@soletrade-test.local";
+  let ws: WorkspaceId;
+  const createdInvitationIds: string[] = [];
+
+  beforeAll(async () => {
+    await seedUsers([
+      { id: owner, email: "invite-owner@soletrade-test.local", fullName: "Invite Owner" },
+      { id: invitee, email: inviteeEmail, fullName: "Invitee Two" },
+    ]);
+    ws = await createWorkspace(owner, "Invite Test", `invite-test-${Date.now()}`);
+  });
+
+  afterEach(() => clearEventBus());
+
+  afterAll(async () => {
+    await cleanupWorkspaces(
+      ws ? [ws] : [],
+      [owner, invitee],
+      [{ table: "workspace_invitations" }, { table: "audit_logs" }],
+    );
+  });
+
+  it("invite → getInvitationByToken → resend → revoke", async () => {
+    const result = await inviteMember(ws!, inviteeEmail, "manager", owner);
+    createdInvitationIds.push(result.invitationId);
+    expect(result.token).toBeTruthy();
+    expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+    // getInvitationByToken resolves the invitation + workspace name + not-yet-expired flag.
+    const inv = await getInvitationByToken(result.token);
+    expect(inv).not.toBeNull();
+    expect(inv!.email).toBe(inviteeEmail);
+    expect(inv!.role).toBe("manager");
+    expect(inv!.status).toBe("pending");
+    expect(inv!.expired).toBe(false);
+    expect(inv!.workspaceName).toBe("Invite Test");
+
+    // Resend bumps the expiry + re-publishes MemberInvited; token is preserved.
+    const before = result.expiresAt.getTime();
+    const resent = await resendInvitation(ws!, result.invitationId, owner);
+    expect(resent).not.toBeNull();
+    expect(resent!.token).toBe(result.token);
+    expect(resent!.expiresAt.getTime()).toBeGreaterThan(before);
+
+    // Revoke marks the row revoked; getInvitationByToken still returns it (status !== pending).
+    await revokeInvitation(ws!, result.invitationId, owner);
+    const afterRevoke = await getInvitationByToken(result.token);
+    expect(afterRevoke).not.toBeNull();
+    expect(afterRevoke!.status).toBe("revoked");
+  });
+
+  it("acceptInvitation joins the user to the workspace + marks the invitation accepted", async () => {
+    const result = await inviteMember(ws!, inviteeEmail, "accountant", owner);
+    createdInvitationIds.push(result.invitationId);
+
+    const joinedWs = await acceptInvitation(result.token, invitee, inviteeEmail);
+    expect(joinedWs).toBe(ws!);
+
+    // The invitee is now a member with the offered role.
+    const memberRow = await unwrapMaybe(
+      getDataClient()
+        .from("workspace_members")
+        .select("role")
+        .eq("user_id", invitee)
+        .limit(1)
+        .maybeSingle(),
+    );
+    expect(memberRow?.role).toBe("accountant");
+
+    // Re-accepting the same token fails (already accepted).
+    await expect(acceptInvitation(result.token, invitee, inviteeEmail)).rejects.toThrow(
+      /not found or already used/i,
+    );
+  });
+
+  it("getInvitationByToken returns null for an unknown token", async () => {
+    expect(await getInvitationByToken("does-not-exist")).toBeNull();
+  });
+
+  it("resendInvitation returns null for a non-pending (revoked) invitation", async () => {
+    const result = await inviteMember(ws!, inviteeEmail, "employee", owner);
+    createdInvitationIds.push(result.invitationId);
+    await revokeInvitation(ws!, result.invitationId, owner);
+    expect(await resendInvitation(ws!, result.invitationId, owner)).toBeNull();
+  });
+});

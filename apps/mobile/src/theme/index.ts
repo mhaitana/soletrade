@@ -1,5 +1,5 @@
-import { useColorScheme, type TextStyle } from "react-native";
 import { designTokens } from "@soletrade/contracts";
+import { useColorScheme, type TextStyle } from "react-native";
 
 const palette = {
   light: {

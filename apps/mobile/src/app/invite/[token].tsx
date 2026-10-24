@@ -1,1 +1,1 @@
-export { InviteScreen as default } from "@/screens/auth";
+export { InviteScreen as default } from "@/features/auth/screens/auth";

@@ -70,10 +70,10 @@ const config: ExpoConfig = {
             description: "Last-synced business overview and quick actions",
             ios: {
               supportedFamilies: ["systemSmall", "systemMedium"],
-              initialLayout: "./src/native/overview-widget.ios.tsx",
+              initialLayout: "./src/lib/native/overview-widget.ios.tsx",
             },
             android: {
-              initialLayout: "./src/native/overview-widget.android.tsx",
+              initialLayout: "./src/lib/native/overview-widget.android.tsx",
               targetCellWidth: 3,
               targetCellHeight: 2,
             },

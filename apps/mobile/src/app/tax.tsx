@@ -1,1 +1,1 @@
-export { TaxScreen as default } from "@/screens/tools";
+export { TaxScreen as default } from "@/features/tax/screens/tax";

@@ -82,4 +82,3 @@ export const designTokens = {
 
 export type DesignTokens = typeof designTokens;
 export type ColorPalette = typeof designTokens.colors.light;
-

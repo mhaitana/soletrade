@@ -1,1 +1,1 @@
-export { HomeScreen as default } from "@/screens/tabs";
+export { HomeScreen as default } from "@/features/overview/screens/home";

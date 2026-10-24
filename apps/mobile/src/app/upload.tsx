@@ -1,1 +1,1 @@
-export { UploadScreen as default } from "@/screens/upload";
+export { UploadScreen as default } from "@/features/files/screens/upload";

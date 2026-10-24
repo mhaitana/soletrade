@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { router } from "expo-router";
-import { Action, Choice, Copy, ErrorNotice, Field, Group } from "./ui";
-import { useSession } from "@/lib/session";
-import { nativeOperation } from "@/offline/store";
-import { catalog, formBody } from "@/lib/catalog";
+import { Action, Choice, Copy, ErrorNotice, Field, Group } from "@/components/ui";
+import { catalog, formBody } from "@/config/resources";
+import { nativeOperation } from "@/lib/offline/store";
 import { detailHref, type Entity } from "@/lib/resources";
+import { useSession } from "@/lib/session";
+import { router } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 export function ReceiptReview({
   receipt,
   onSaved,

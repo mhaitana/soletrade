@@ -1,1 +1,1 @@
-export { MoneyScreen as default } from "@/screens/tabs";
+export { MoneyScreen as default } from "@/features/books/screens/money";

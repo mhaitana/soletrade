@@ -1,10 +1,10 @@
-import React, { useMemo } from "react";
-import { View, Text } from "react-native";
+import { contextualCreate } from "@/lib/navigation/global-actions";
+import { radius, spacing, useTheme } from "@/theme/index";
 import { Button, Host, Text as NativeText } from "@expo/ui";
-import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { MobileModule } from "@soletrade/contracts";
-import { contextualCreate } from "@/lib/global-actions";
-import { radius, spacing, useTheme } from "@/theme";
+import React, { useMemo } from "react";
+import { Text, View } from "react-native";
+import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ToolbarProps = {
   workspaceName: string;

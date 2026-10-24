@@ -6,9 +6,28 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./currencies": "./src/currencies.ts",
+    "./business-income": "./src/business-income.ts",
+    "./home-overview": "./src/home-overview.ts",
+    "./design-tokens": "./src/design-tokens.ts",
+    "./mobile": "./src/mobile.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:ci": "pnpm test",
+    "check": "pnpm type-check && pnpm lint && pnpm test"
+  },
+  "devDependencies": {
+    "@soletrade/eslint-config": "workspace:*",
+    "@soletrade/typescript-config": "workspace:*",
+    "typescript": "^5",
+    "eslint": "^9",
+    "vitest": "^4.1.9"
   }
 }

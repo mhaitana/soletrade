@@ -1,1 +1,1 @@
-export { AuthCallbackScreen as default } from "@/screens/auth";
+export { AuthCallbackScreen as default } from "@/features/auth/screens/auth";

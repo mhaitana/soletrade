@@ -1,1 +1,1 @@
-export { DriveScreen as default } from "@/screens/tabs";
+export { DriveScreen as default } from "@/features/drive/screens/drive";

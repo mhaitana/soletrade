@@ -1,8 +1,8 @@
+import { authoritativeDenial } from "@/lib/access-denial";
+import { ApiError, subscribeApiFailures } from "@/lib/api";
+import { cacheReference, clearWorkspaceReferences, readReference } from "@/lib/offline/store";
+import { useSession } from "@/lib/session";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSession } from "./session";
-import { cacheReference, clearWorkspaceReferences, readReference } from "@/offline/store";
-import { authoritativeDenial } from "./access-denial";
-import { ApiError, subscribeApiFailures } from "./api";
 
 export type Entity = { id: string; updatedAt?: string; [key: string]: unknown };
 export function useResource<T>(path: string | null) {

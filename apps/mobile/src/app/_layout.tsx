@@ -1,6 +1,6 @@
+import { AppShell } from "@/application/layouts/app-shell";
+import { SessionProvider } from "@/application/providers/session";
 import { Stack } from "expo-router/stack";
-import { SessionProvider } from "@/lib/session";
-import { AppShell } from "@/screens/shell";
 export default function RootLayout() {
   return (
     <SessionProvider>

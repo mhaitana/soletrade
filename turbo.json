@@ -1,0 +1,99 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": [
+    ".node-version",
+    "packages/eslint-config/**",
+    "packages/typescript-config/**"
+  ],
+  "globalEnv": ["CI", "NODE_ENV"],
+  "tasks": {
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "APP_URL",
+        "NEXT_PUBLIC_*",
+        "SUPABASE_*",
+        "STRIPE_*",
+        "AI_PROVIDER",
+        "OPENAI_*",
+        "ANTHROPIC_*",
+        "CRON_SECRET",
+        "RESEND_API_KEY",
+        "EMAIL_FROM",
+        "SUPPORT_EMAIL",
+        "TWILIO_*",
+        "UPSTASH_*",
+        "RECEIPT_EXTRACTION_COST_CENTS",
+        "VERCEL_*",
+        "APPLE_*",
+        "GOOGLE_*",
+        "MOBILE_*",
+        "EXPO_*",
+        "DATABASE_URL",
+        "EAS_*"
+      ]
+    },
+    "build": {
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**"],
+      "env": [
+        "APP_URL",
+        "NEXT_PUBLIC_*",
+        "SUPABASE_*",
+        "STRIPE_*",
+        "AI_PROVIDER",
+        "OPENAI_*",
+        "ANTHROPIC_*",
+        "CRON_SECRET",
+        "RESEND_API_KEY",
+        "EMAIL_FROM",
+        "SUPPORT_EMAIL",
+        "TWILIO_*",
+        "UPSTASH_*",
+        "RECEIPT_EXTRACTION_COST_CENTS",
+        "VERCEL_*",
+        "APPLE_*",
+        "GOOGLE_*",
+        "MOBILE_*",
+        "EXPO_*",
+        "DATABASE_URL"
+      ]
+    },
+    "lint": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    "lint:fix": {
+      "cache": false
+    },
+    "type-check": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/supabase/migrations/**"],
+      "outputs": []
+    },
+    "test:integration": {
+      "cache": false
+    },
+    "test:stripe": {
+      "cache": false
+    },
+    "test:e2e": {
+      "cache": false
+    },
+    "export": {
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**"],
+      "env": ["EXPO_PUBLIC_*", "EXPO_*", "EAS_*"]
+    }
+  }
+}

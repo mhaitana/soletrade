@@ -1,4 +1,4 @@
-import { Action, Choice, Copy, Field, Group } from "./ui";
+import { Action, Choice, Copy, Field, Group } from "@/components/ui";
 export type Payment = {
   type: string;
   label?: string;

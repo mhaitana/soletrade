@@ -13,14 +13,14 @@ Expo SDK 58 / React Native 0.88 / Expo Router. The existing Next.js server owns 
 
 ## Architecture
 
-- `src/app/` contains route entrypoints and layouts only. Home / Sales / Money / Drive / More are native tabs with SF/Material icon counterparts.
-- `src/lib/session.tsx`: `SessionProvider` / `useSession`, SecureStore-backed Supabase sessions, PKCE/OTP callbacks, token refresh, workspace selection, cached bootstrap and account-bound `MobileRequest`.
-- `src/lib/api.ts`: bearer requests, `{data}` / `{error}` envelopes, UUID idempotency and `If-Match`, binary/stream transport, authorization failure notifications.
-- `src/lib/resources.ts`: workspace-bound data loading and SQLite reference cache; cached content coexists with transient refresh failures. Authorization failures never restore cached data.
-- `src/screens/editor.tsx`: human-labelled resource forms and structured invoices/quotes. Explicit Save is the creation boundary; new offline-capable records go through the durable outbox even when online. Server-linked Books mirrors are read only.
-- `src/screens/resources.tsx`: paginated lists, filters, customer history, document lifecycle, files and sharing. `screens/tools.tsx`: search, reports, BAS, transfers and account closure. `screens/assistant.tsx`: persistent SSE conversations and reviewed native form/navigation directives.
-- `src/native/` and `src/offline/`: receipt capture/OCR review, durable uploads/outbox, shifts, private GPS routes, notifications, biometric lock, widgets in-app purchases, private route maps and account/workspace-bound app shortcuts. See `docs/mobile/device-report.md` for their verification limits.
-- `src/theme/` and `src/components/ui.tsx`: warm neutral / blue light-dark tokens, scalable type, accessible native `@expo/ui` buttons, pickers and toggles. More uses native grouped forms.
+- `src/app/` contains Expo Router route entrypoints and layouts only. Route paths, app links, native tabs and modal presentation stay stable.
+- `src/application/` composes session lifecycle, native startup, account cleanup, navigation and feature screens. The root provider registers background shift tasks at module scope.
+- `src/features/` owns auth, account, assistant, overview, sales, books, drive, billing, records, files, receipts, search, reporting, tax and device settings. Each feature contains its screens, components and private policies beside their tests.
+- `src/features/records/` is the shared generic list/detail/editor feature; other features use common reference fields and record displays from `src/components/`, without importing its screen internals.
+- `src/lib/` owns API transport, the session context, resource fetching, sharing and device/offline adapters. `src/config/resources.ts` describes common resource fields and permissions.
+- `src/lib/offline/` preserves account/workspace-bound durable outbox and cached-reference storage. `src/lib/native/` owns background shifts, widgets, notifications and device adapters; feature screens remain under their owning feature.
+- `src/components/`, `src/theme/` and `src/hooks/` (when needed) hold app-wide UI primitives and theme behavior. Shared runtime contracts are consumed through `@soletrade/contracts`; mobile never imports web source.
+- Features can depend on their own internals and app-wide primitives. Application composition can depend on all features. Shared layers cannot depend on application or feature code.
 
 ## Verify
 
@@ -28,11 +28,12 @@ Expo SDK 58 / React Native 0.88 / Expo Router. The existing Next.js server owns 
 pnpm --dir apps/mobile type-check
 pnpm --dir apps/mobile lint
 pnpm --dir apps/mobile test
-pnpm exec vitest run apps/mobile/src/offline apps/mobile/src/native
+pnpm --dir apps/mobile test:ui
+pnpm --dir apps/mobile test:unit
 pnpm --dir apps/mobile exec expo export --platform ios --platform android
 ```
 
-Jest runs the UI/transport tests; the root Vitest runner owns device/offline policy tests. `maestro/` contains four native journeys for a configured development build. Run with a seeded confirmed account, active modules and appropriate owner/member roles:
+Jest runs UI/transport tests; the mobile-owned Vitest runner runs `*.vitest.test.ts` device/offline policy tests. The two runners have disjoint discovery patterns. `maestro/` contains four native journeys for a configured development build. Run with a seeded confirmed account, active modules and appropriate owner/member roles:
 
 ```sh
 maestro test -e EMAIL=qa@example.com -e PASSWORD='your-test-password' apps/mobile/maestro/01-auth.yaml

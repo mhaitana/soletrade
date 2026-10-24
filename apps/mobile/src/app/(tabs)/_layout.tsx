@@ -1,5 +1,5 @@
+import { useTheme } from "@/theme/index";
 import { NativeTabs } from "expo-router/native-tabs";
-import { useTheme } from "@/theme";
 export default function TabLayout() {
   const theme = useTheme();
   return (

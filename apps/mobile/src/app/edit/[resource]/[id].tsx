@@ -1,1 +1,1 @@
-export { EditorScreen as default } from "@/screens/editor";
+export { EditorScreen as default } from "@/features/records/components/editor";

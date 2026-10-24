@@ -1,1 +1,1 @@
-export { ResourceDetailScreen as default } from "@/screens/resources";
+export { ResourceDetailScreen as default } from "@/features/records/components/resources";

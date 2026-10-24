@@ -1,1 +1,1 @@
-export { SalesScreen as default } from "@/screens/tabs";
+export { SalesScreen as default } from "@/features/sales/screens/sales";

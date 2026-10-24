@@ -1,3 +1,8 @@
 import { defineConfig } from "eslint/config";
 import expo from "eslint-config-expo/flat.js";
-export default defineConfig([expo, { ignores: [".expo/**", "dist/**"] }]);
+import architecture from "@soletrade/eslint-config/boundaries";
+export default defineConfig([
+  expo,
+  architecture(import.meta.dirname),
+  { ignores: [".expo/**", "dist/**", "coverage/**"] },
+]);

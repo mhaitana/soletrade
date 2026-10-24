@@ -1,1 +1,1 @@
-export { WorkspacesScreen as default } from "@/screens/auth";
+export { WorkspacesScreen as default } from "@/features/auth/screens/auth";
