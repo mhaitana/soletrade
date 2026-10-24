@@ -2,8 +2,15 @@ import "server-only";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { getDataClient } from "@/server/db/client";
-import { parsePgTimestamp, unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
+import {
+  parsePgTimestamp,
+  unwrap,
+  unwrapCount,
+  unwrapMaybe,
+  unwrapVoid,
+} from "@/server/db/helpers";
 import type { Json } from "@/server/db/types";
+import { normalizeListOffset } from "@/shared/utils/pagination";
 import { getFile, downloadFileBytes } from "@/platform/files";
 import { getWorkspace } from "@/platform/workspaces";
 import { getAIModel, isMockProvider } from "@/platform/ai/provider";
@@ -402,19 +409,43 @@ export async function rejectExtraction(
   });
 }
 
+/** Count the full review queue without transferring receipt details or applying a list limit. */
+export async function countExtractions(
+  workspaceId: WorkspaceId,
+  opts?: { status?: ExtractionRow["status"] },
+): Promise<number> {
+  const supabase = getDataClient();
+  let query = supabase
+    .from("receipt_extractions")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId);
+  if (opts?.status) query = query.eq("status", opts.status);
+  return unwrapCount(query);
+}
+
 /** List extractions for the review queue, optionally filtered by status. */
 export async function listExtractions(
   workspaceId: WorkspaceId,
-  opts?: { status?: "pending" | "reviewed" | "applied" | "rejected"; limit?: number },
+  opts?: {
+    status?: "pending" | "reviewed" | "applied" | "rejected";
+    limit?: number;
+    offset?: number;
+  },
 ): Promise<ExtractionRow[]> {
   const supabase = getDataClient();
   const limit = Math.min(opts?.limit ?? 100, 500);
+  const offset = normalizeListOffset(opts?.offset);
   let query = supabase
     .from("receipt_extractions")
     .select(EXTRACTION_COLUMNS)
     .eq("workspace_id", workspaceId);
   if (opts?.status) query = query.eq("status", opts.status);
-  const rows = await unwrap(query.order("created_at", { ascending: false }).limit(limit));
+  const rows = await unwrap(
+    query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1),
+  );
   return rows.map((r) => toExtractionRow(r as ExtractionRaw));
 }
 

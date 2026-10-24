@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { defaultFilter } from "cmdk";
 import {
   CommandDialog,
   CommandEmpty,
@@ -13,6 +14,7 @@ import {
 import { buildNav, type NavItem } from "@/shared/components/app-shell/app-shell";
 import { SEARCH_MODULE_LABEL, type SearchResultGroup } from "@/shared/types/search";
 import { cn } from "@/shared/lib/utils";
+import { Button } from "@/shared/ui/button";
 import type { ModuleKey } from "@/shared/constants/modules";
 
 /**
@@ -21,10 +23,9 @@ import type { ModuleKey } from "@/shared/constants/modules";
  * (so the palette and nav never drift), and **live search** groups fetched from `/api/search`
  * with a 150ms debounce as the user types. Selecting any item navigates + closes the palette.
  *
- * cmdk filters all items client-side against the input; nav items that don't match the typed
- * query simply disappear, leaving the live search results. Search results carry `label +
- * sublabel` as their cmdk `value` so the same substring the server matched (name/number/
- * description/email) is what cmdk matches on - keeping client + server filtering consistent.
+ * Navigation is filtered locally; server results are already matched against fields such as
+ * customer company and notes that may not appear in the displayed label. Each response belongs
+ * to one query attempt so typing or retrying cannot display results from an earlier request.
  */
 export interface CommandPaletteProps {
   open: boolean;
@@ -32,49 +33,53 @@ export interface CommandPaletteProps {
   installedModules: ModuleKey[];
 }
 
+type SearchResponse =
+  | { version: number; status: "success"; groups: SearchResultGroup[] }
+  | { version: number; status: "error" };
+
 export function CommandPalette({ open, onOpenChange, installedModules }: CommandPaletteProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [groups, setGroups] = useState<SearchResultGroup[]>([]);
-  const [loading, setLoading] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const [requestVersion, setRequestVersion] = useState(0);
+  const [response, setResponse] = useState<SearchResponse | null>(null);
 
   const navItems = useMemo<NavItem[]>(() => buildNav(installedModules), [installedModules]);
 
   const term = query.trim();
-  // Stale results from a previous query are hidden during render when the term drops below the
-  // 2-char server guard, so the search effect never needs to setState for the short-query case
-  // (that would trip react-hooks/set-state-in-effect and cause cascading renders).
-  const showResults = term.length >= 2;
+  const showResults = open && term.length >= 2;
+  const currentResponse = response?.version === requestVersion ? response : null;
+  const loading = showResults && currentResponse === null;
+  const failed = showResults && currentResponse?.status === "error";
+  const visibleGroups =
+    showResults && currentResponse?.status === "success" ? currentResponse.groups : [];
+  const visibleNavItems = navItems.filter((item) => !term || defaultFilter(item.label, term) > 0);
 
-  // Debounced live search. The effect owns ONLY the fetch side-effect (debounce timer + abort
-  // controller); `setLoading` lives inside the debounced callback, not the effect body, so there
-  // is no loading flash to clear on each keystroke. Below 2 chars the server guard returns []
-  // anyway, so we skip the fetch entirely.
+  // Include the debounce in the loading state, and guard completion as well as fetch itself:
+  // an obsolete request may already be decoding its response when it is aborted.
   useEffect(() => {
-    if (!open || !showResults) return;
+    if (!showResults) return;
     const controller = new AbortController();
-    abortRef.current = controller;
-    const handle = setTimeout(() => {
-      setLoading(true);
-      fetch(`/api/search?q=${encodeURIComponent(term)}`, { signal: controller.signal })
-        .then((r) => (r.ok ? r.json() : { groups: [] }))
-        .then((data: { groups?: SearchResultGroup[] }) => setGroups(data.groups ?? []))
-        .catch(() => {
-          // Abort on new keystroke is expected - swallow. Real errors leave the last good list.
-        })
-        .finally(() => setLoading(false));
+    const handle = setTimeout(async () => {
+      try {
+        const result = await fetch(`/api/search?q=${encodeURIComponent(term)}`, {
+          signal: controller.signal,
+        });
+        if (!result.ok) throw new Error("Search request failed");
+        const data = (await result.json()) as { groups?: SearchResultGroup[] };
+        if (!controller.signal.aborted) {
+          setResponse({ version: requestVersion, status: "success", groups: data.groups ?? [] });
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setResponse({ version: requestVersion, status: "error" });
+        }
+      }
     }, 150);
     return () => {
       clearTimeout(handle);
       controller.abort();
     };
-  }, [term, open, showResults]);
-
-  // Abort any in-flight request when the palette closes (pure side-effect - no setState).
-  useEffect(() => {
-    if (!open) abortRef.current?.abort();
-  }, [open]);
+  }, [term, requestVersion, showResults]);
 
   // Reset query + results when the palette closes. Uses the adjust-state-during-render pattern
   // (react-hooks/set-state-in-effect flags setState in an effect body); tracking the previous
@@ -85,8 +90,7 @@ export function CommandPalette({ open, onOpenChange, installedModules }: Command
     setPrevOpen(open);
     if (!open) {
       setQuery("");
-      setGroups([]);
-      setLoading(false);
+      setResponse(null);
     }
   }
 
@@ -95,30 +99,64 @@ export function CommandPalette({ open, onOpenChange, installedModules }: Command
     router.push(href);
   }
 
-  const visibleGroups = showResults ? groups : [];
   const hasResults = visibleGroups.some((g) => g.results.length > 0);
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} className="sm:max-w-xl">
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Search workspace"
+      description="Find records or navigate to a page."
+      shouldFilter={false}
+      className="sm:max-w-xl"
+    >
       <CommandInput
         value={query}
-        onValueChange={setQuery}
+        onValueChange={(value) => {
+          setQuery(value);
+          setRequestVersion((version) => version + 1);
+        }}
         placeholder="Search customers, invoices, quotes, files…"
       />
-      <CommandList>
-        <CommandEmpty>{loading ? "Searching…" : "No results."}</CommandEmpty>
+      {loading ? (
+        <p role="status" className="px-4 py-3 text-sm text-muted-foreground">
+          Searching…
+        </p>
+      ) : null}
+      {failed ? (
+        <div role="alert" className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+          <p className="text-destructive">Couldn&apos;t search your workspace. Please try again.</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onKeyDown={(event) => event.stopPropagation()}
+            onClick={() => setRequestVersion((version) => version + 1)}
+          >
+            Try again
+          </Button>
+        </div>
+      ) : null}
+      <CommandList aria-busy={loading}>
+        {!loading && !failed ? (
+          <CommandEmpty>
+            {showResults ? "No results." : "Type at least 2 characters to search records."}
+          </CommandEmpty>
+        ) : null}
 
-        <CommandGroup heading="Navigate">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
-                <Icon className="size-4 shrink-0 opacity-60" aria-hidden />
-                <span>{item.label}</span>
-              </CommandItem>
-            );
-          })}
-        </CommandGroup>
+        {visibleNavItems.length > 0 ? (
+          <CommandGroup heading="Navigate">
+            {visibleNavItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
+                  <Icon className="size-4 shrink-0 opacity-60" aria-hidden />
+                  <span>{item.label}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        ) : null}
 
         {hasResults
           ? visibleGroups.map((group) =>
@@ -127,7 +165,7 @@ export function CommandPalette({ open, onOpenChange, installedModules }: Command
                   {group.results.map((r) => (
                     <CommandItem
                       key={`${r.module}-${r.id}`}
-                      value={`${r.label} ${r.sublabel ?? ""}`}
+                      value={`${r.module}-${r.id}`}
                       onSelect={() => go(r.href)}
                     >
                       <span className="truncate font-medium">{r.label}</span>

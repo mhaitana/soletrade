@@ -6,6 +6,8 @@ import { Badge } from "@/shared/ui/badge";
 import { ResponsiveFilter } from "@/shared/ui/responsive-filter";
 import { DataTable, type Column } from "@/shared/ui/data-table";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
+import { ListPagination } from "@/shared/components/list-pagination";
+import { pageHref, parsePage } from "@/shared/utils/pagination";
 import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
 import { loadInvoicesPage } from "./actions";
@@ -37,7 +39,11 @@ const STATUS_BADGE: Record<
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string | string[]; search?: string | string[] }>;
+  searchParams: Promise<{
+    status?: string | string[];
+    search?: string | string[];
+    page?: string | string[];
+  }>;
 }) {
   const sp = await searchParams;
   const rawStatus = typeof sp.status === "string" ? sp.status : undefined;
@@ -50,7 +56,7 @@ export default async function InvoicesPage({
     rawStatus === "void"
       ? (rawStatus as InvoiceStatus)
       : undefined;
-  const data = await loadInvoicesPage({ status, search: rawSearch });
+  const data = await loadInvoicesPage({ status, search: rawSearch, page: parsePage(sp.page) });
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="invoices" />;
 
@@ -114,9 +120,22 @@ export default async function InvoicesPage({
       {data.invoices.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
           <p className="text-sm text-muted-foreground">
-            {data.search || status ? "No invoices match your filters." : "No invoices yet."}
+            {data.page > 1
+              ? "No invoices on this page."
+              : data.search || status
+                ? "No invoices match your filters."
+                : "No invoices yet."}
           </p>
-          {data.canManage && !data.search && !status ? (
+          {data.page > 1 ? (
+            <p className="mt-1 text-sm">
+              <Link
+                href={pageHref("/invoices", 1, { status, search: data.search })}
+                className="text-brand-blue hover:underline"
+              >
+                Return to first page
+              </Link>
+            </p>
+          ) : data.canManage && !data.search && !status ? (
             <p className="mt-1 text-sm">
               <Link href="/invoices/new" className="text-brand-blue hover:underline">
                 Create your first invoice
@@ -177,6 +196,12 @@ export default async function InvoicesPage({
           }
         />
       )}
+      <ListPagination
+        pathname="/invoices"
+        page={data.page}
+        hasNext={data.hasNext}
+        filters={{ status, search: data.search }}
+      />
     </div>
   );
 }

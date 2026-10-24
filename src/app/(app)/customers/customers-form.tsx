@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useActionState, useRef } from "react";
+import { startTransition, useActionState, useEffect, useRef, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button";
@@ -20,6 +20,8 @@ import {
 } from "@/app/(app)/assistant/hai-form-prefill";
 
 type Result = CreateCustomerResult | UpdateCustomerResult;
+
+const CUSTOMER_SAVE_UNCONFIRMED = "We couldn’t confirm whether this customer was saved.";
 
 export function CustomerForm({
   mode,
@@ -41,10 +43,17 @@ export function CustomerForm({
         company: String(formData.get("company") ?? ""),
         notes: String(formData.get("notes") ?? ""),
       };
-      if (isEdit && customer) {
-        return updateCustomerAction({ customerId: customer.id, ...input });
+      try {
+        if (isEdit && customer) {
+          return await updateCustomerAction({ customerId: customer.id, ...input });
+        }
+        return await createCustomerAction(input);
+      } catch {
+        return {
+          ok: false,
+          error: CUSTOMER_SAVE_UNCONFIRMED,
+        };
       }
-      return createCustomerAction(input);
     },
     null,
   );
@@ -55,6 +64,13 @@ export function CustomerForm({
 
   const error = state && !state.ok ? state.error : "";
   const fieldErrors = state && !state.ok ? state.fieldErrors : undefined;
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => action(formData));
+  }
 
   const haiNotice = useHaiFormPrefill(
     mode === "create" ? "customer.create" : "customer.edit",
@@ -81,87 +97,126 @@ export function CustomerForm({
   );
 
   return (
-    <form ref={formRef} action={action} className="space-y-4">
-      <HaiPrefillNotice notice={haiNotice} />
-      <div className="space-y-1.5">
-        <Label htmlFor="name">Name</Label>
-        <Input
-          id="name"
-          name="name"
-          required
-          maxLength={120}
-          defaultValue={customer?.name ?? ""}
-          placeholder="Jane Smith"
-          aria-invalid={Boolean(fieldErrors?.name)}
-        />
-        {fieldErrors?.name?.[0] ? (
-          <p className="text-sm text-destructive">{fieldErrors.name[0]}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          defaultValue={customer?.email ?? ""}
-          placeholder="jane@example.com"
-          aria-invalid={Boolean(fieldErrors?.email)}
-        />
-        {fieldErrors?.email?.[0] ? (
-          <p className="text-sm text-destructive">{fieldErrors.email[0]}</p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form ref={formRef} action={action} onSubmit={onSubmit} aria-busy={pending}>
+      <fieldset disabled={pending} className="min-w-0 space-y-4 border-0 p-0">
+        <HaiPrefillNotice notice={haiNotice} />
         <div className="space-y-1.5">
-          <Label htmlFor="phone">Phone</Label>
+          <Label htmlFor="name">Name</Label>
           <Input
-            id="phone"
-            name="phone"
-            defaultValue={customer?.phone ?? ""}
-            placeholder="+61 4…"
+            id="name"
+            name="name"
+            required
+            maxLength={120}
+            defaultValue={customer?.name ?? ""}
+            placeholder="Jane Smith"
+            aria-invalid={Boolean(fieldErrors?.name)}
+          />
+          {fieldErrors?.name?.[0] ? (
+            <p className="text-sm text-destructive">{fieldErrors.name[0]}</p>
+          ) : null}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            defaultValue={customer?.email ?? ""}
+            placeholder="jane@example.com"
+            aria-invalid={Boolean(fieldErrors?.email)}
+          />
+          {fieldErrors?.email?.[0] ? (
+            <p className="text-sm text-destructive">{fieldErrors.email[0]}</p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">Phone</Label>
+            <Input
+              id="phone"
+              name="phone"
+              maxLength={120}
+              defaultValue={customer?.phone ?? ""}
+              placeholder="+61 4…"
+              aria-invalid={Boolean(fieldErrors?.phone)}
+              aria-describedby={fieldErrors?.phone?.[0] ? "phone-error" : undefined}
+            />
+            {fieldErrors?.phone?.[0] ? (
+              <p id="phone-error" className="text-sm text-destructive">
+                {fieldErrors.phone[0]}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="company">Company</Label>
+            <Input
+              id="company"
+              name="company"
+              maxLength={120}
+              defaultValue={customer?.company ?? ""}
+              placeholder="Acme Pty Ltd"
+              aria-invalid={Boolean(fieldErrors?.company)}
+              aria-describedby={fieldErrors?.company?.[0] ? "company-error" : undefined}
+            />
+            {fieldErrors?.company?.[0] ? (
+              <p id="company-error" className="text-sm text-destructive">
+                {fieldErrors.company[0]}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="notes">Notes</Label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows={4}
+            maxLength={2000}
+            defaultValue={customer?.notes ?? ""}
+            placeholder="Internal notes about this customer."
+            className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="company">Company</Label>
-          <Input
-            id="company"
-            name="company"
-            defaultValue={customer?.company ?? ""}
-            placeholder="Acme Pty Ltd"
-          />
+
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error === CUSTOMER_SAVE_UNCONFIRMED ? (
+              <>
+                {CUSTOMER_SAVE_UNCONFIRMED}{" "}
+                <Link
+                  href="/customers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium underline underline-offset-4"
+                >
+                  Check customers
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </Link>{" "}
+                before trying again.
+              </>
+            ) : (
+              error
+            )}
+          </p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <Button type="submit" disabled={pending}>
+            {pending ? "Saving…" : isEdit ? "Save changes" : "Add customer"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => router.push("/customers")}
+          >
+            Cancel
+          </Button>
         </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="notes">Notes</Label>
-        <textarea
-          id="notes"
-          name="notes"
-          rows={4}
-          maxLength={2000}
-          defaultValue={customer?.notes ?? ""}
-          placeholder="Internal notes about this customer."
-          className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </div>
-
-      {error && !fieldErrors ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Saving…" : isEdit ? "Save changes" : "Add customer"}
-        </Button>
-        <Button asChild type="button" variant="outline">
-          <Link href="/customers">Cancel</Link>
-        </Button>
-      </div>
+      </fieldset>
     </form>
   );
 }

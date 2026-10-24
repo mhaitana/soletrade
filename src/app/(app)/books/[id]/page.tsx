@@ -44,9 +44,11 @@ export default async function TransactionDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{tx.description}</h1>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="w-full max-w-full break-words text-2xl font-semibold tracking-tight sm:w-auto">
+              {tx.description}
+            </h1>
             <Badge variant={badge.variant}>{badge.label}</Badge>
             {data.source ? (
               <Badge asChild variant="outline">
@@ -87,7 +89,7 @@ export default async function TransactionDetailPage({
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wide text-muted-foreground">Amount</dt>
-          <dd className="text-sm tabular-nums">{formatCents(signed, tx.currency)}</dd>
+          <dd className="font-mono text-sm tabular-nums">{formatCents(signed, tx.currency)}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wide text-muted-foreground">Category</dt>

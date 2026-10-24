@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeListOffset } from "@/shared/utils/pagination";
 import { z } from "zod";
 import { getDataClient } from "@/server/db/client";
 import {
@@ -456,10 +457,17 @@ export async function updateInvoice(
 /** List invoices for a workspace, optionally filtered by status/search/customer. */
 export async function listInvoices(
   workspaceId: WorkspaceId,
-  opts?: { status?: InvoiceStatus; search?: string; customerId?: CustomerId; limit?: number },
+  opts?: {
+    status?: InvoiceStatus;
+    search?: string;
+    customerId?: CustomerId;
+    limit?: number;
+    offset?: number;
+  },
 ): Promise<InvoiceRow[]> {
   const supabase = getDataClient();
   const limit = Math.min(opts?.limit ?? 100, 200);
+  const offset = normalizeListOffset(opts?.offset);
   let query = supabase.from("invoices").select(INVOICE_COLUMNS).eq("workspace_id", workspaceId);
   if (opts?.status) query = query.eq("status", opts.status);
   if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
@@ -490,7 +498,8 @@ export async function listInvoices(
     query
       .order("issue_date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(limit),
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1),
   );
   return rows.map((r) => toInvoiceRow(r as InvoiceRaw));
 }

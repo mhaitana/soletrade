@@ -90,8 +90,7 @@ function transactionResult(t: TransactionRow): SearchResult {
     id: t.id,
     label: t.description,
     sublabel: `${sign}${formatCents(t.amountCents, t.currency)}`,
-    // Books has no per-transaction detail route (Wave 3) - deep-link to the list for now.
-    href: `/books`,
+    href: `/books/${t.id}`,
   };
 }
 

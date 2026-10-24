@@ -23,6 +23,7 @@ import {
 import type { InvoiceStatus } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 import { getWorkspace } from "@/platform/workspaces";
+import { DOCUMENT_PAGE_SIZE, parsePage } from "@/shared/utils/pagination";
 import {
   parsePaymentMethods,
   paymentMethodsSchema,
@@ -289,30 +290,38 @@ export type InvoicesPageData =
       canManage: boolean;
       statusFilter: InvoiceStatus | null;
       search: string;
+      page: number;
+      hasNext: boolean;
     }
   | { installed: false };
 
 export async function loadInvoicesPage(params?: {
   status?: InvoiceStatus;
   search?: string;
+  page?: number;
 }): Promise<InvoicesPageData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "invoices"))) return { installed: false };
 
   const search = params?.search?.trim() ?? "";
+  const page = parsePage(params?.page);
   const [invoices, canManage] = await Promise.all([
     listInvoices(ctx.workspaceId, {
       status: params?.status,
       search: search || undefined,
+      offset: (page - 1) * DOCUMENT_PAGE_SIZE,
+      limit: DOCUMENT_PAGE_SIZE + 1,
     }),
     Promise.resolve(authorize(ctx.role, "manage:invoice").ok),
   ]);
   return {
     installed: true,
-    invoices,
+    invoices: invoices.slice(0, DOCUMENT_PAGE_SIZE),
     canManage,
     statusFilter: params?.status ?? null,
     search,
+    page,
+    hasNext: invoices.length > DOCUMENT_PAGE_SIZE,
   };
 }
 

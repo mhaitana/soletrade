@@ -14,6 +14,7 @@ import {
   type ExtractionRow,
 } from "@/modules/books/receipt-extraction";
 import { branded } from "@/shared/types/ids";
+import { DOCUMENT_PAGE_SIZE, parsePage } from "@/shared/utils/pagination";
 
 const forbid = (msg = "You don't have permission to manage books.") => ({
   ok: false as const,
@@ -30,6 +31,8 @@ export type ReceiptsPageData =
       extractions: ExtractionRow[];
       canManage: boolean;
       statusFilter: ExtractionStatus | null;
+      page: number;
+      hasNext: boolean;
     }
   | { installed: false };
 
@@ -40,18 +43,31 @@ export type ReceiptsPageData =
  */
 export async function loadReceiptsPage(params?: {
   status?: ExtractionStatus;
+  page?: number;
 }): Promise<ReceiptsPageData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
 
   const canManage = authorize(ctx.role, "manage:books").ok;
   const statusFilter = params?.status ?? null;
+  const page = parsePage(params?.page);
   // Only fetch extractions for managers - viewers can't act on them anyway and the
   // page renders a permission message, so a DB hit would be wasted.
   const extractions = canManage
-    ? await listExtractions(ctx.workspaceId, { status: params?.status, limit: 200 })
+    ? await listExtractions(ctx.workspaceId, {
+        status: params?.status,
+        limit: DOCUMENT_PAGE_SIZE + 1,
+        offset: (page - 1) * DOCUMENT_PAGE_SIZE,
+      })
     : [];
-  return { installed: true, extractions, canManage, statusFilter };
+  return {
+    installed: true,
+    extractions: extractions.slice(0, DOCUMENT_PAGE_SIZE),
+    canManage,
+    statusFilter,
+    page,
+    hasNext: extractions.length > DOCUMENT_PAGE_SIZE,
+  };
 }
 
 // --- Actions ----------------------------------------------------------------

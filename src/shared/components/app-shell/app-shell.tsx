@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bot,
@@ -32,7 +32,15 @@ import type { LucideIcon } from "lucide-react";
 import type { WorkspaceRole } from "@/server/db/enums";
 import type { WorkspaceId } from "@/shared/types/ids";
 import { brand } from "@/config/brand";
-import { HaiAssistantPanel } from "@/app/(app)/assistant/hai-assistant-panel";
+import { HaiPanelFrame } from "./hai-panel-frame";
+
+// The assistant and AI SDK are only needed after the user asks to open hAI.
+// Keep the panel mounted after its first use so drafts and streams survive closing.
+const HaiAssistantPanel = lazy(() =>
+  import("@/app/(app)/assistant/hai-assistant-panel").then((module) => ({
+    default: module.HaiAssistantPanel,
+  })),
+);
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -86,7 +94,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors max-md:px-4 max-md:py-3",
+              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:px-4 max-md:py-3",
               active
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -101,7 +109,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
       <Link
         href="/settings/modules"
         onClick={onNavigate}
-        className="mt-1 flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground max-md:px-4 max-md:py-3"
+        className="mt-1 flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:px-4 max-md:py-3"
       >
         <Plus className="size-4 shrink-0" aria-hidden />
         <span>Add module</span>
@@ -129,6 +137,9 @@ function BottomNav({ items }: { items: NavItem[] }) {
       (item, index, all) => all.findIndex((candidate) => candidate.href === item.href) === index,
     )
     .slice(0, 4);
+  const moreActive = items.some(
+    (item) => isActive(pathname, item.href) && !pinned.some((pin) => pin.href === item.href),
+  );
   return (
     <nav
       aria-label="Mobile primary"
@@ -142,7 +153,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className="flex min-w-14 flex-1 flex-col items-center gap-1 px-2 py-2 text-[0.65rem] font-medium"
+            className="flex min-w-14 flex-1 flex-col items-center gap-1 px-2 py-2 text-[0.65rem] font-medium focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/40"
           >
             <Icon
               className={cn("size-5", active ? "text-primary" : "text-muted-foreground")}
@@ -158,18 +169,25 @@ function BottomNav({ items }: { items: NavItem[] }) {
         <SheetTrigger asChild>
           <button
             type="button"
-            aria-label="More navigation"
-            className="flex min-w-14 flex-1 flex-col items-center gap-1 px-2 py-2 text-[0.65rem] font-medium"
+            aria-label={moreActive ? "More navigation (current section)" : "More navigation"}
+            className={cn(
+              "flex min-w-14 flex-1 cursor-pointer flex-col items-center gap-1 px-2 py-2 text-[0.65rem] font-medium focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/40",
+              moreActive ? "text-foreground" : "text-muted-foreground",
+            )}
           >
-            <MoreHorizontal className="size-5 text-muted-foreground" aria-hidden />
-            <span className="text-muted-foreground">More</span>
+            <MoreHorizontal className="size-5" aria-hidden />
+            <span>More</span>
           </button>
         </SheetTrigger>
-        <SheetContent side="bottom" className="w-full">
-          <SheetHeader>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] w-full gap-0 overflow-hidden"
+          aria-describedby={undefined}
+        >
+          <SheetHeader className="shrink-0 border-b border-border pr-16">
             <SheetTitle>Navigation</SheetTitle>
           </SheetHeader>
-          <div className="px-4 pb-6 pt-2">
+          <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
             <NavList items={items} onNavigate={() => setMoreOpen(false)} />
           </div>
         </SheetContent>
@@ -190,6 +208,8 @@ export function AppShell({
   const items = useMemo(() => buildNav(installedModules), [installedModules]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [haiOpen, setHaiOpen] = useState(false);
+  const [haiStarted, setHaiStarted] = useState(false);
+  const haiTriggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="min-h-dvh overflow-x-clip">
@@ -213,7 +233,7 @@ export function AppShell({
       <div
         className={cn(
           "transition-[padding] duration-200 motion-reduce:transition-none md:pl-64",
-          haiOpen && "xl:pr-96",
+          haiOpen && "2xl:pr-96",
         )}
       >
         {/* Top bar */}
@@ -224,13 +244,17 @@ export function AppShell({
                 <Menu className="size-5" aria-hidden />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72">
-              <SheetHeader>
+            <SheetContent
+              side="left"
+              className="h-dvh w-72 gap-0 overflow-hidden"
+              aria-describedby={undefined}
+            >
+              <SheetHeader className="shrink-0 border-b border-border pr-16">
                 <SheetTitle>
                   <Logo href={null} variant="compact" />
                 </SheetTitle>
               </SheetHeader>
-              <div className="space-y-4 px-3 pb-6 pt-2">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
                 {/* Workspace switcher is desktop-only in the top bar; surface it here so
                     mobile users can still switch workspaces without the desktop chrome. */}
                 <WorkspaceSwitcher
@@ -251,10 +275,14 @@ export function AppShell({
 
           <div className="ml-auto flex items-center gap-0 min-[360px]:gap-1">
             <Button
+              ref={haiTriggerRef}
               type="button"
               variant={haiOpen ? "secondary" : "ghost"}
               size="sm"
-              onClick={() => setHaiOpen((current) => !current)}
+              onClick={() => {
+                setHaiStarted(true);
+                setHaiOpen((current) => !current);
+              }}
               aria-expanded={haiOpen}
               aria-controls="hai-assistant-panel"
               className="min-h-11 min-w-11 gap-1.5 px-2.5 text-brand-blue max-[420px]:size-11 max-[420px]:px-0"
@@ -269,15 +297,35 @@ export function AppShell({
           </div>
         </header>
 
-        <main id="main-content" className="px-4 pb-24 pt-6 md:px-8 md:pb-12">
+        <main id="main-content" tabIndex={-1} className="px-4 pb-24 pt-6 md:px-8 md:pb-12">
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
 
       <BottomNav items={items} />
-      <div id="hai-assistant-panel">
-        <HaiAssistantPanel open={haiOpen} onOpenChange={setHaiOpen} />
-      </div>
+      {haiStarted ? (
+        <Suspense
+          fallback={
+            <HaiPanelFrame open={haiOpen} onOpenChange={setHaiOpen} returnFocusRef={haiTriggerRef}>
+              <div className="flex items-center justify-between gap-3 p-4">
+                <p role="status" className="text-sm text-muted-foreground">
+                  Loading {brand.assistantName}…
+                </p>
+                <Button variant="outline" onClick={() => setHaiOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </HaiPanelFrame>
+          }
+        >
+          <HaiAssistantPanel
+            key={activeWorkspaceId}
+            open={haiOpen}
+            onOpenChange={setHaiOpen}
+            returnFocusRef={haiTriggerRef}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

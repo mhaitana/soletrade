@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -16,6 +17,8 @@ import {
   ResponsiveDialogTrigger,
 } from "@/shared/components/responsive-dialog";
 import { createCustomerAction } from "./actions";
+
+const CUSTOMER_SAVE_UNCONFIRMED = "We couldn’t confirm whether this customer was saved.";
 
 /**
  * Inline customer-creation dialog used by the invoice + quote forms so a user can
@@ -57,6 +60,7 @@ export function CustomerCreateDialog({
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (isPending) return;
     setError("");
     setFieldErrors(undefined);
     const trimmedName = name.trim();
@@ -71,13 +75,19 @@ export function CustomerCreateDialog({
     }
 
     startTransition(async () => {
-      const res = await createCustomerAction({
-        name: trimmedName,
-        email: trimmedEmail,
-        phone: "",
-        company: "",
-        notes: "",
-      });
+      let res: Awaited<ReturnType<typeof createCustomerAction>>;
+      try {
+        res = await createCustomerAction({
+          name: trimmedName,
+          email: trimmedEmail,
+          phone: "",
+          company: "",
+          notes: "",
+        });
+      } catch {
+        setError(CUSTOMER_SAVE_UNCONFIRMED);
+        return;
+      }
       if (!res.ok) {
         setError(res.error);
         setFieldErrors(res.fieldErrors);
@@ -92,9 +102,10 @@ export function CustomerCreateDialog({
   return (
     <ResponsiveDialog
       open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (!o) reset();
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && isPending) return;
+        setOpen(nextOpen);
+        if (!nextOpen) reset();
       }}
     >
       <ResponsiveDialogTrigger asChild>
@@ -103,7 +114,7 @@ export function CustomerCreateDialog({
           Add customer
         </Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent>
+      <ResponsiveDialogContent showCloseButton={!isPending} aria-busy={isPending}>
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Add customer</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
@@ -121,6 +132,7 @@ export function CustomerCreateDialog({
               required
               autoFocus
               maxLength={120}
+              disabled={isPending}
               aria-invalid={Boolean(fieldErrors?.name?.[0])}
             />
             {fieldErrors?.name?.[0] ? (
@@ -136,6 +148,7 @@ export function CustomerCreateDialog({
               onChange={(e) => setEmail(e.target.value)}
               required
               maxLength={120}
+              disabled={isPending}
               aria-invalid={Boolean(fieldErrors?.email?.[0])}
             />
             {fieldErrors?.email?.[0] ? (
@@ -144,12 +157,28 @@ export function CustomerCreateDialog({
           </div>
           {error ? (
             <p className="text-sm text-destructive" role="alert">
-              {error}
+              {error === CUSTOMER_SAVE_UNCONFIRMED ? (
+                <>
+                  {CUSTOMER_SAVE_UNCONFIRMED}{" "}
+                  <Link
+                    href="/customers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium underline underline-offset-4"
+                  >
+                    Check customers
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </Link>{" "}
+                  before trying again.
+                </>
+              ) : (
+                error
+              )}
             </p>
           ) : null}
           <ResponsiveDialogFooter>
             <ResponsiveDialogClose asChild>
-              <Button type="button" variant="outline">
+              <Button type="button" variant="outline" disabled={isPending}>
                 Cancel
               </Button>
             </ResponsiveDialogClose>

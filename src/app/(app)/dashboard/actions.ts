@@ -16,7 +16,7 @@ import { getInvoiceDashboardSummary } from "@/modules/invoices";
 import { getBookSummary } from "@/modules/books";
 import { getDriveSummary } from "@/modules/drive";
 import { getQuoteDashboardSummary } from "@/modules/quotes";
-import { listExtractions } from "@/modules/books/receipt-extraction";
+import { countExtractions } from "@/modules/books/receipt-extraction";
 import { consolidateBusinessIncome, type PeriodIncome } from "./business-overview";
 
 /**
@@ -326,14 +326,14 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
 
   // Fetch only installed modules; each runs its own parallel fetches internally. All four
   // run concurrently here alongside the activity feed.
-  const [invoices, books, drive, quotes, pendingReceipts, activity] = await Promise.all([
+  const [invoices, books, drive, quotes, pendingReceiptCount, activity] = await Promise.all([
     has("invoices") ? invoicesCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("books") ? booksCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("drive") ? driveCard(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("quotes") ? quotesCards(ctx.workspaceId, currentRange, currency) : null,
     has("books") && authorize(ctx.role, "manage:books").ok
-      ? listExtractions(ctx.workspaceId, { status: "pending", limit: 100 })
-      : Promise.resolve([]),
+      ? countExtractions(ctx.workspaceId, { status: "pending" })
+      : Promise.resolve(0),
     listActivity(ctx.workspaceId, { limit: 5 }),
   ]);
 
@@ -413,10 +413,10 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
       icon: "quote",
     });
   }
-  if (pendingReceipts.length > 0) {
+  if (pendingReceiptCount > 0) {
     attentionItems.push({
       id: "pending-receipts",
-      title: `${pendingReceipts.length} ${pendingReceipts.length === 1 ? "receipt needs" : "receipts need"} review`,
+      title: `${pendingReceiptCount} ${pendingReceiptCount === 1 ? "receipt needs" : "receipts need"} review`,
       detail: "Confirm the extracted details before adding them to your books.",
       href: "/books/receipts?status=pending",
       actionLabel: "Review receipts",

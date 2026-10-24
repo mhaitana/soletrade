@@ -4,6 +4,8 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
+import { ListPagination } from "@/shared/components/list-pagination";
+import { pageHref, parsePage } from "@/shared/utils/pagination";
 import { formatCents } from "@/platform/billing/pricing";
 import { formatDate } from "@/shared/utils/format-date";
 import { loadQuotesPage } from "./actions";
@@ -48,7 +50,11 @@ const VALID_STATUSES: QuoteStatus[] = [
 export default async function QuotesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string | string[]; search?: string | string[] }>;
+  searchParams: Promise<{
+    status?: string | string[];
+    search?: string | string[];
+    page?: string | string[];
+  }>;
 }) {
   const sp = await searchParams;
   const rawStatus = typeof sp.status === "string" ? sp.status : undefined;
@@ -57,7 +63,7 @@ export default async function QuotesPage({
     rawStatus && VALID_STATUSES.includes(rawStatus as QuoteStatus)
       ? (rawStatus as QuoteStatus)
       : undefined;
-  const data = await loadQuotesPage({ status, search: rawSearch });
+  const data = await loadQuotesPage({ status, search: rawSearch, page: parsePage(sp.page) });
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="quotes" />;
 
@@ -123,9 +129,22 @@ export default async function QuotesPage({
       {data.quotes.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
           <p className="text-sm text-muted-foreground">
-            {data.search || status ? "No quotes match your filters." : "No quotes yet."}
+            {data.page > 1
+              ? "No quotes on this page."
+              : data.search || status
+                ? "No quotes match your filters."
+                : "No quotes yet."}
           </p>
-          {data.canManage && !data.search && !status ? (
+          {data.page > 1 ? (
+            <p className="mt-1 text-sm">
+              <Link
+                href={pageHref("/quotes", 1, { status, search: data.search })}
+                className="text-brand-blue hover:underline"
+              >
+                Return to first page
+              </Link>
+            </p>
+          ) : data.canManage && !data.search && !status ? (
             <p className="mt-1 text-sm">
               <Link href="/quotes/new" className="text-primary hover:underline">
                 Create your first quote
@@ -193,6 +212,12 @@ export default async function QuotesPage({
           </table>
         </div>
       )}
+      <ListPagination
+        pathname="/quotes"
+        page={data.page}
+        hasNext={data.hasNext}
+        filters={{ status, search: data.search }}
+      />
     </div>
   );
 }

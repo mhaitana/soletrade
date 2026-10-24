@@ -28,6 +28,8 @@ import {
 
 type Result = CreateQuoteResult | UpdateQuoteResult;
 
+const QUOTE_SAVE_UNCONFIRMED = "We couldn’t confirm whether this quote was saved.";
+
 interface LineItemState {
   key: string;
   description: string;
@@ -227,6 +229,7 @@ export function QuoteForm({
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isPending) return;
     setError("");
     setFieldErrors(undefined);
 
@@ -272,10 +275,16 @@ export function QuoteForm({
     };
 
     startTransition(async () => {
-      const res: Result =
-        isEdit && quote
-          ? await updateQuoteAction({ quoteId: quote.id, ...input })
-          : await createQuoteAction(input);
+      let res: Result;
+      try {
+        res =
+          isEdit && quote
+            ? await updateQuoteAction({ quoteId: quote.id, ...input })
+            : await createQuoteAction(input);
+      } catch {
+        setError(QUOTE_SAVE_UNCONFIRMED);
+        return;
+      }
       if (res.ok) {
         router.push("/quotes");
         router.refresh();
@@ -289,285 +298,311 @@ export function QuoteForm({
   const fieldErr = (name: string) => fieldErrors?.[name]?.[0];
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      <HaiPrefillNotice notice={haiNotice} />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="customerId">Customer</Label>
-          <div className="flex gap-2">
-            <select
-              id="customerId"
-              name="customerId"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Pick a customer…</option>
-              {customerList.map((c) => (
-                <option key={c.id} value={c.id} disabled={!c.email}>
-                  {c.name}
-                  {c.company ? ` · ${c.company}` : ""}
-                  {!c.email ? " (no email - add one)" : ""}
-                </option>
-              ))}
-            </select>
-            <CustomerCreateDialog
-              onCreated={(c) => {
-                setCustomerList((prev) => (prev.some((p) => p.id === c.id) ? prev : [...prev, c]));
-                setCustomerId(c.id);
-              }}
-            />
-          </div>
-          {fieldErr("customerId") ? (
-            <p className="text-sm text-destructive">{fieldErr("customerId")}</p>
-          ) : null}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="taxRate">Tax rate (%)</Label>
-          <Input
-            id="taxRate"
-            name="taxRate"
-            type="number"
-            min={0}
-            max={100}
-            step={1}
-            value={taxRate}
-            onChange={(e) => setTaxRate(e.target.value)}
-            aria-invalid={Boolean(fieldErr("taxRate"))}
-            className="tabular-nums"
-          />
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={pricesIncludeTax}
-              onChange={(e) => setPricesIncludeTax(e.target.checked)}
-              className="size-4 rounded border-input"
-            />
-            Prices include tax (gross)
-          </label>
-          {fieldErr("taxRate") ? (
-            <p className="text-sm text-destructive">{fieldErr("taxRate")}</p>
-          ) : null}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="issueDate">Issue date</Label>
-          <Input
-            id="issueDate"
-            name="issueDate"
-            type="date"
-            required
-            value={issueDate}
-            onChange={(e) => setIssueDate(e.target.value)}
-            aria-invalid={Boolean(fieldErr("issueDate"))}
-          />
-          {fieldErr("issueDate") ? (
-            <p className="text-sm text-destructive">{fieldErr("issueDate")}</p>
-          ) : null}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="validUntil">Valid until</Label>
-          <Input
-            id="validUntil"
-            name="validUntil"
-            type="date"
-            value={validUntil}
-            onChange={(e) => setValidUntil(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Optional - sent quotes auto-expire past this date.
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium">Line items</h2>
-          <Button type="button" variant="outline" size="sm" onClick={addItem}>
-            <Plus className="size-4" aria-hidden />
-            Add line
-          </Button>
-        </div>
-        {fieldErr("lineItems") ? (
-          <p className="text-sm text-destructive" role="alert">
-            {fieldErr("lineItems")}
-          </p>
-        ) : null}
-        <div className="space-y-2">
-          {items.map((it, i) => (
-            <div
-              key={it.key}
-              className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_5rem_7rem_auto]"
-            >
-              <Input
-                aria-label={`Line ${i + 1} description`}
-                placeholder="Description"
-                value={it.description}
-                onChange={(e) => updateItem(it.key, { description: e.target.value })}
-              />
-              <Input
-                aria-label={`Line ${i + 1} quantity`}
-                type="number"
-                min={0}
-                step="0.01"
-                inputMode="decimal"
-                placeholder="Qty"
-                value={it.quantity}
-                onChange={(e) => updateItem(it.key, { quantity: e.target.value })}
-                className="tabular-nums"
-              />
-              <Input
-                aria-label={`Line ${i + 1} unit price`}
-                type="number"
-                min={0}
-                step="0.01"
-                inputMode="decimal"
-                placeholder={`Unit ${quote?.currency ?? defaultCurrency}`}
-                value={it.unitPriceDollars}
-                onChange={(e) => updateItem(it.key, { unitPriceDollars: e.target.value })}
-                className="tabular-nums"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove line ${i + 1}`}
-                disabled={items.length === 1}
-                onClick={() => removeItem(it.key)}
+    <form onSubmit={onSubmit} aria-busy={isPending}>
+      <fieldset disabled={isPending} className="min-w-0 space-y-6 border-0 p-0">
+        <HaiPrefillNotice notice={haiNotice} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="customerId">Customer</Label>
+            <div className="flex gap-2">
+              <select
+                id="customerId"
+                name="customerId"
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Trash2 className="size-4 text-destructive" aria-hidden />
-              </Button>
+                <option value="">Pick a customer…</option>
+                {customerList.map((c) => (
+                  <option key={c.id} value={c.id} disabled={!c.email}>
+                    {c.name}
+                    {c.company ? ` · ${c.company}` : ""}
+                    {!c.email ? " (no email - add one)" : ""}
+                  </option>
+                ))}
+              </select>
+              <CustomerCreateDialog
+                onCreated={(c) => {
+                  setCustomerList((prev) =>
+                    prev.some((p) => p.id === c.id) ? prev : [...prev, c],
+                  );
+                  setCustomerId(c.id);
+                }}
+              />
             </div>
-          ))}
+            {fieldErr("customerId") ? (
+              <p className="text-sm text-destructive">{fieldErr("customerId")}</p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="taxRate">Tax rate (%)</Label>
+            <Input
+              id="taxRate"
+              name="taxRate"
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={taxRate}
+              onChange={(e) => setTaxRate(e.target.value)}
+              aria-invalid={Boolean(fieldErr("taxRate"))}
+              className="tabular-nums"
+            />
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={pricesIncludeTax}
+                onChange={(e) => setPricesIncludeTax(e.target.checked)}
+                className="size-4 rounded border-input"
+              />
+              Prices include tax (gross)
+            </label>
+            {fieldErr("taxRate") ? (
+              <p className="text-sm text-destructive">{fieldErr("taxRate")}</p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="issueDate">Issue date</Label>
+            <Input
+              id="issueDate"
+              name="issueDate"
+              type="date"
+              required
+              value={issueDate}
+              onChange={(e) => setIssueDate(e.target.value)}
+              aria-invalid={Boolean(fieldErr("issueDate"))}
+            />
+            {fieldErr("issueDate") ? (
+              <p className="text-sm text-destructive">{fieldErr("issueDate")}</p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="validUntil">Valid until</Label>
+            <Input
+              id="validUntil"
+              name="validUntil"
+              type="date"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional - sent quotes auto-expire past this date.
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium">Sections</h2>
-          <Button type="button" variant="outline" size="sm" onClick={addSection}>
-            <Plus className="size-4" aria-hidden />
-            Add section
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Optional content blocks shown to the customer between the line items and totals (e.g.
-          scope of work, terms). Mark a section optional if the customer can opt in at accept time.
-        </p>
-        {fieldErr("sections") ? (
-          <p className="text-sm text-destructive" role="alert">
-            {fieldErr("sections")}
-          </p>
-        ) : null}
         <div className="space-y-2">
-          {sections.map((s, i) => (
-            <div key={s.key} className="space-y-2 rounded-md border border-border p-3">
-              <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium">Line items</h2>
+            <Button type="button" variant="outline" size="sm" onClick={addItem}>
+              <Plus className="size-4" aria-hidden />
+              Add line
+            </Button>
+          </div>
+          {fieldErr("lineItems") ? (
+            <p className="text-sm text-destructive" role="alert">
+              {fieldErr("lineItems")}
+            </p>
+          ) : null}
+          <div className="space-y-2">
+            {items.map((it, i) => (
+              <div
+                key={it.key}
+                className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_5rem_7rem_auto]"
+              >
                 <Input
-                  aria-label={`Section ${i + 1} title`}
-                  placeholder="Section title"
-                  value={s.title}
-                  onChange={(e) => updateSection(s.key, { title: e.target.value })}
+                  aria-label={`Line ${i + 1} description`}
+                  placeholder="Description"
+                  value={it.description}
+                  onChange={(e) => updateItem(it.key, { description: e.target.value })}
+                />
+                <Input
+                  aria-label={`Line ${i + 1} quantity`}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="Qty"
+                  value={it.quantity}
+                  onChange={(e) => updateItem(it.key, { quantity: e.target.value })}
+                  className="tabular-nums"
+                />
+                <Input
+                  aria-label={`Line ${i + 1} unit price`}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder={`Unit ${quote?.currency ?? defaultCurrency}`}
+                  value={it.unitPriceDollars}
+                  onChange={(e) => updateItem(it.key, { unitPriceDollars: e.target.value })}
+                  className="tabular-nums"
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  aria-label={`Remove section ${i + 1}`}
-                  onClick={() => removeSection(s.key)}
+                  aria-label={`Remove line ${i + 1}`}
+                  disabled={items.length === 1}
+                  onClick={() => removeItem(it.key)}
                 >
                   <Trash2 className="size-4 text-destructive" aria-hidden />
                 </Button>
               </div>
-              <textarea
-                aria-label={`Section ${i + 1} body`}
-                rows={4}
-                maxLength={10000}
-                placeholder="Section body (shown to the customer as written)."
-                value={s.body}
-                onChange={(e) => updateSection(s.key, { body: e.target.value })}
-                className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={s.optional}
-                  onChange={(e) => updateSection(s.key, { optional: e.target.checked })}
-                  className="size-4 rounded border-input"
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium">Sections</h2>
+            <Button type="button" variant="outline" size="sm" onClick={addSection}>
+              <Plus className="size-4" aria-hidden />
+              Add section
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Optional content blocks shown to the customer between the line items and totals (e.g.
+            scope of work, terms). Mark a section optional if the customer can opt in at accept
+            time.
+          </p>
+          {fieldErr("sections") ? (
+            <p className="text-sm text-destructive" role="alert">
+              {fieldErr("sections")}
+            </p>
+          ) : null}
+          <div className="space-y-2">
+            {sections.map((s, i) => (
+              <div key={s.key} className="space-y-2 rounded-md border border-border p-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label={`Section ${i + 1} title`}
+                    placeholder="Section title"
+                    value={s.title}
+                    onChange={(e) => updateSection(s.key, { title: e.target.value })}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove section ${i + 1}`}
+                    onClick={() => removeSection(s.key)}
+                  >
+                    <Trash2 className="size-4 text-destructive" aria-hidden />
+                  </Button>
+                </div>
+                <textarea
+                  aria-label={`Section ${i + 1} body`}
+                  rows={4}
+                  maxLength={10000}
+                  placeholder="Section body (shown to the customer as written)."
+                  value={s.body}
+                  onChange={(e) => updateSection(s.key, { body: e.target.value })}
+                  className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
-                Optional (customer can opt in at accept time)
-              </label>
-            </div>
-          ))}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={s.optional}
+                    onChange={(e) => updateSection(s.key, { optional: e.target.checked })}
+                    className="size-4 rounded border-input"
+                  />
+                  Optional (customer can opt in at accept time)
+                </label>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="notes">Notes</Label>
-        <textarea
-          id="notes"
-          name="notes"
-          rows={3}
-          maxLength={2000}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Internal notes (not shown to the customer)."
-          className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="termsConditions">Terms &amp; Conditions</Label>
-        <textarea
-          id="termsConditions"
-          name="termsConditions"
-          rows={5}
-          maxLength={50000}
-          value={termsConditions}
-          onChange={(e) => setTermsConditions(e.target.value)}
-          placeholder="Terms shown to the customer above the accept button. Leave blank for none."
-          className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </div>
-
-      <div className="rounded-md border border-border bg-muted/30 p-4">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            {pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
-          </span>
-          <span className="tabular-nums">
-            {formatCents(totals.subtotalCents, quote?.currency ?? defaultCurrency)}
-          </span>
+        <div className="space-y-1.5">
+          <Label htmlFor="notes">Notes</Label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows={3}
+            maxLength={2000}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Internal notes (not shown to the customer)."
+            className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
         </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            Tax ({Number(taxRate) || 0}%{pricesIncludeTax ? ", included" : ""})
-          </span>
-          <span className="tabular-nums">
-            {formatCents(totals.taxCents, quote?.currency ?? defaultCurrency)}
-          </span>
-        </div>
-        <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-base font-medium">
-          <span>Total</span>
-          <span className="tabular-nums">
-            {formatCents(totals.totalCents, quote?.currency ?? defaultCurrency)}
-          </span>
-        </div>
-      </div>
 
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
+        <div className="space-y-1.5">
+          <Label htmlFor="termsConditions">Terms &amp; Conditions</Label>
+          <textarea
+            id="termsConditions"
+            name="termsConditions"
+            rows={5}
+            maxLength={50000}
+            value={termsConditions}
+            onChange={(e) => setTermsConditions(e.target.value)}
+            placeholder="Terms shown to the customer above the accept button. Leave blank for none."
+            className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving…" : isEdit ? "Save changes" : "Create quote"}
-        </Button>
-        <Button asChild type="button" variant="outline">
-          <Link href="/quotes">Cancel</Link>
-        </Button>
-      </div>
+        <div className="rounded-md border border-border bg-muted/30 p-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              {pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
+            </span>
+            <span className="tabular-nums">
+              {formatCents(totals.subtotalCents, quote?.currency ?? defaultCurrency)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Tax ({Number(taxRate) || 0}%{pricesIncludeTax ? ", included" : ""})
+            </span>
+            <span className="tabular-nums">
+              {formatCents(totals.taxCents, quote?.currency ?? defaultCurrency)}
+            </span>
+          </div>
+          <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-base font-medium">
+            <span>Total</span>
+            <span className="tabular-nums">
+              {formatCents(totals.totalCents, quote?.currency ?? defaultCurrency)}
+            </span>
+          </div>
+        </div>
+
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error === QUOTE_SAVE_UNCONFIRMED ? (
+              <>
+                {QUOTE_SAVE_UNCONFIRMED}{" "}
+                <Link
+                  href="/quotes"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium underline underline-offset-4"
+                >
+                  Check quotes
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </Link>{" "}
+                before trying again.
+              </>
+            ) : (
+              error
+            )}
+          </p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "Saving…" : isEdit ? "Save changes" : "Create quote"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isPending}
+            onClick={() => router.push("/quotes")}
+          >
+            Cancel
+          </Button>
+        </div>
+      </fieldset>
     </form>
   );
 }

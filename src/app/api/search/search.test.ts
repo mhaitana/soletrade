@@ -139,7 +139,7 @@ describe("searchWorkspace", () => {
       label: "Office supplies sale",
       // income → "+" prefix; formatCents(12000, "AUD") = "$120.00"
       sublabel: "+$120.00",
-      href: "/books",
+      href: "/books/00000000-0000-4000-8000-0000000000b1",
     });
   });
 

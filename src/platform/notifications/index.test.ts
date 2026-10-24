@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { publishEvent, clearEventBus, type BusEvent } from "@/server/events";
 import {
   clearEmailClientForTest,
@@ -9,6 +9,18 @@ import {
 import { branded } from "@/shared/types/ids";
 import { registerNotifications } from "./index";
 import type { InvoiceEmailMeta, QuoteEmailMeta } from "./templates";
+
+// These tests exercise event-driven email delivery. Keep optional PDF generation
+// and in-app recipient lookup offline; their storage behavior belongs to integration tests.
+vi.mock("@/server/pdf/attachments", () => ({
+  renderInvoiceAttachment: vi.fn().mockResolvedValue(null),
+  renderQuoteAttachment: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("./store", () => ({
+  memberIdsWithPermission: vi.fn().mockResolvedValue([]),
+  createNotification: vi.fn(),
+}));
 
 // publishEvent reads env.NEXT_PUBLIC_APP_URL via the notifications handlers; the assertions
 // check the link contains `/i/<token>` rather than the exact host, so this test is env-agnostic.

@@ -2,12 +2,14 @@ import Link from "next/link";
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { ModuleNotInstalledCard } from "@/shared/components/module-not-installed-card";
+import { ListPagination } from "@/shared/components/list-pagination";
 import { formatDate } from "@/shared/utils/format-date";
 import { formatCents } from "@/platform/billing/pricing";
 import { categoryLabel } from "@/shared/constants/books-categories";
 import { loadReceiptsPage } from "./actions";
 import { ReceiptReviewCard } from "./receipt-review-card";
 import { ResponsiveFilter } from "@/shared/ui/responsive-filter";
+import { pageHref, parsePage } from "@/shared/utils/pagination";
 
 export const metadata = { title: "Receipts" };
 export const dynamic = "force-dynamic";
@@ -41,7 +43,7 @@ function hrefWith(patch: { status?: "all" | StatusFilter }): string {
 export default async function ReceiptsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string | string[] }>;
+  searchParams: Promise<{ status?: string | string[]; page?: string | string[] }>;
 }) {
   const sp = await searchParams;
   const rawStatus = typeof sp.status === "string" ? sp.status : undefined;
@@ -52,7 +54,7 @@ export default async function ReceiptsPage({
     rawStatus === "rejected"
       ? (rawStatus as StatusFilter)
       : undefined;
-  const data = await loadReceiptsPage({ status });
+  const data = await loadReceiptsPage({ status, page: parsePage(sp.page) });
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="books" />;
 
@@ -88,10 +90,22 @@ export default async function ReceiptsPage({
       {data.extractions.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
           <p className="text-sm text-muted-foreground">
-            {data.statusFilter
-              ? `No ${data.statusFilter} receipts.`
-              : "No receipts extracted yet. Upload a receipt on a transaction to start."}
+            {data.page > 1
+              ? "No receipts on this page."
+              : data.statusFilter
+                ? `No ${data.statusFilter} receipts.`
+                : "No receipts extracted yet. Upload a receipt on a transaction to start."}
           </p>
+          {data.page > 1 ? (
+            <p className="mt-1 text-sm">
+              <Link
+                href={pageHref("/books/receipts", 1, { status: data.statusFilter })}
+                className="text-brand-blue hover:underline"
+              >
+                Return to first page
+              </Link>
+            </p>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-4">
@@ -127,6 +141,12 @@ export default async function ReceiptsPage({
           })}
         </div>
       )}
+      <ListPagination
+        pathname="/books/receipts"
+        page={data.page}
+        hasNext={data.hasNext}
+        filters={{ status: data.statusFilter }}
+      />
     </div>
   );
 }

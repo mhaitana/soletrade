@@ -26,6 +26,7 @@ import { createInvoice, getInvoice } from "@/modules/invoices";
 import type { QuoteStatus } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 import { getWorkspace } from "@/platform/workspaces";
+import { DOCUMENT_PAGE_SIZE, parsePage } from "@/shared/utils/pagination";
 
 const forbid = (msg = "You don't have permission to manage quotes.") => ({
   ok: false as const,
@@ -320,30 +321,38 @@ export type QuotesPageData =
       canManage: boolean;
       statusFilter: QuoteStatus | null;
       search: string;
+      page: number;
+      hasNext: boolean;
     }
   | { installed: false };
 
 export async function loadQuotesPage(params?: {
   status?: QuoteStatus;
   search?: string;
+  page?: number;
 }): Promise<QuotesPageData> {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "quotes"))) return { installed: false };
 
   const search = params?.search?.trim() ?? "";
+  const page = parsePage(params?.page);
   const [quotes, canManage] = await Promise.all([
     listQuotes(ctx.workspaceId, {
       status: params?.status,
       search: search || undefined,
+      offset: (page - 1) * DOCUMENT_PAGE_SIZE,
+      limit: DOCUMENT_PAGE_SIZE + 1,
     }),
     Promise.resolve(authorize(ctx.role, "manage:quote").ok),
   ]);
   return {
     installed: true,
-    quotes,
+    quotes: quotes.slice(0, DOCUMENT_PAGE_SIZE),
     canManage,
     statusFilter: params?.status ?? null,
     search,
+    page,
+    hasNext: quotes.length > DOCUMENT_PAGE_SIZE,
   };
 }
 

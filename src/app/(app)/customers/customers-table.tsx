@@ -26,17 +26,24 @@ export function CustomersTable({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [deleting, setDeleting] = useState<CustomerRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function confirmDelete() {
     const target = deleting;
-    setDeleting(null);
-    if (!target) return;
+    if (!target || isPending) return;
+    setDeleteError(null);
     startTransition(async () => {
-      const res = await deleteCustomerAction({ customerId: target.id });
-      if (!res.ok) {
-        // Surface a minimal error via the dialog state; refresh keeps list in sync.
+      try {
+        const res = await deleteCustomerAction({ customerId: target.id });
+        if (!res.ok) {
+          setDeleteError(res.error);
+          return;
+        }
+        setDeleting(null);
+        router.refresh();
+      } catch {
+        setDeleteError("Unable to delete this customer. Please try again.");
       }
-      router.refresh();
     });
   }
 
@@ -92,7 +99,10 @@ export function CustomersTable({
                     aria-label={`Delete ${c.name}`}
                     className="max-md:min-h-11"
                     disabled={isPending}
-                    onClick={() => setDeleting(c)}
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleting(c);
+                    }}
                   >
                     <Trash2 className="size-4 text-destructive" aria-hidden />
                   </Button>
@@ -103,19 +113,29 @@ export function CustomersTable({
         </ul>
       </div>
 
-      <Dialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
-        <DialogContent>
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open && !isPending) setDeleting(null);
+        }}
+      >
+        <DialogContent showCloseButton={!isPending} aria-busy={isPending}>
           <DialogHeader>
             <DialogTitle>Delete customer?</DialogTitle>
             <DialogDescription>
               {deleting ? (
                 <>
-                  This will soft-delete <strong>{deleting.name}</strong>. You can re-add the email
-                  address to a new customer afterwards. This cannot be undone.
+                  This will remove <strong>{deleting.name}</strong> from your customer list. This
+                  cannot be undone.
                 </>
               ) : null}
             </DialogDescription>
           </DialogHeader>
+          {deleteError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {deleteError}
+            </p>
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleting(null)} disabled={isPending}>
               Cancel
