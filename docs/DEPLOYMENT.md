@@ -13,11 +13,20 @@ in your Vercel env. The current production URL is
 
 ## 1. Vercel project
 
-1. `vercel link` in the repo root (creates `.vercel/`).
-2. Import the project in the Vercel dashboard (Next.js auto-detected).
-3. Production environment variables - copy from `.env.example` and fill in
-   below. Set them on the **Production** + **Preview** environments as needed.
-4. `vercel --prod` to deploy. The build runs `next build` (Turbopack).
+1. Configure the existing Vercel project's **Root Directory** as `apps/web` and enable
+   inclusion of source files outside that directory. Keep the repository root as the
+   pnpm workspace/install root and use Node.js 24.
+2. Preserve hosted environment variables. `apps/web/.env.example` documents their
+   names; local ignored credentials are never uploaded as source.
+3. Use the package's `pnpm build` (`next build`) as the build command. The root pnpm
+   lockfile supplies workspace dependencies; Next traces files from the repository root.
+4. Create and inspect a preview deployment before switching production. Confirm
+   shared contracts resolve, public assets load, and all five cron routes remain configured.
+5. Coordinate the root-directory setting with this source migration. For rollback,
+   restore both the previous source revision and its previous root-directory setting.
+
+This refactor does not change hosted settings or promote a deployment. Existing
+Vercel project identity, domains, provider credentials and callback URLs stay intact.
 
 The Soletrade rebrand and app email sender were deployed on 24 October 2026
 to the existing `soletrade` project (Next.js / Node.js 24), deployment
@@ -32,8 +41,8 @@ for source verification and checks.
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY` - from your Supabase project settings.
 - `DATABASE_URL` - the **pooled** connection string (Transaction mode, port
-  6543). Apply migrations: `pnpm db:migrate` against the production DB (run
-  once from your machine with `DATABASE_URL` set, or via a Vercel build step).
+  6543). Apply migrations separately using the existing linked-project `pnpm db:push`
+  workflow. Never reset production or run migrations implicitly during the web build.
 - **Storage bucket:** create a bucket named `files` (or set
   `SUPABASE_STORAGE_BUCKET` to your chosen name). The Files platform (Phase 11b)
   uses the service-role key, so Storage RLS is **defense-in-depth** - workspace
@@ -95,23 +104,24 @@ has its own buckets, so the effective limit is `max × replica_count`. For prod:
 1. Create an Upstash Redis database (free tier is fine).
 2. Copy the REST URL + token into `UPSTASH_REDIS_REST_URL` and
    `UPSTASH_REDIS_REST_TOKEN`.
-3. When both are set, `src/server/rate-limit` uses `@upstash/ratelimit`
+3. When both are set, `apps/web/src/server/infrastructure/rate-limit` uses `@upstash/ratelimit`
    (fixed-window, shared across replicas). When unset, it falls back to the
    in-memory counter (dev only).
 
 ## 7. Cron jobs (Vercel Cron)
 
-`vercel.json` declares two daily crons (off-:00 minutes to avoid the fleet):
+`apps/web/vercel.json` preserves these schedules:
 
-- `17 0 * * *` → `/api/cron/invoice-overdue` - flips due `sent`/`viewed`
-  invoices to `overdue` and emails the customer.
-- `23 0 * * *` → `/api/cron/quote-expired` - flips `sent`/`viewed` quotes past
-  `valid_until` to `expired`.
+| Schedule | Route |
+| --- | --- |
+| `* * * * *` | `/api/cron/mobile` |
+| `17 0 * * *` | `/api/cron/invoice-overdue` |
+| `23 0 * * *` | `/api/cron/quote-expired` |
+| `31 0 * * *` | `/api/cron/credit-expired` |
+| `11 0 * * *` | `/api/cron/module-cancel-finalize` |
 
-Both routes authenticate via `CRON_SECRET` (`Authorization: Bearer <secret>` or
-`x-cron-secret`). Vercel Cron sends the header automatically when
-`CRON_SECRET` is set in your Vercel env. **Generate a strong random string** for
-`CRON_SECRET` and rotate it if it leaks. Without it the routes return 401/500.
+Preserve `CRON_SECRET`; Vercel sends it as a bearer token. All route paths and
+existing authentication behavior are unchanged.
 
 ## 8. First-deploy smoke test
 

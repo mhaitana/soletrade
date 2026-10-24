@@ -38,14 +38,14 @@ acceptance and store submissions are separate release steps.
 
 ```bash
 pnpm install
-cp .env.example .env.local
+cp apps/web/.env.example apps/web/.env.local
 pnpm db:start          # start local Supabase (Docker) - first run pulls images
 pnpm db:reset          # fresh disposable DB only: wipe, migrate and seed
-supabase status       # copy local connection values into .env.local manually
+supabase status       # copy local connection values into apps/web/.env.local manually
 pnpm dev              # http://localhost:3000
 ```
 
-Set `.env.local` manually from the values shown by `supabase status`; starting
+Set `apps/web/.env.local` manually from the values shown by `supabase status`; starting
 Supabase does not create this file. Configure the public Supabase URL and anon key,
 the server-only service-role key, and `DATABASE_URL` for database integration tests.
 Keep these local values in the ignored environment file. Modules assert their own
@@ -59,8 +59,9 @@ The project ships a local Supabase stack for development and for the
 ```bash
 pnpm db:start          # supabase start - API 56421, Postgres 56422, Studio 56423
 pnpm db:reset          # wipe + recreate local DB, then re-apply supabase/migrations
-pnpm db:types          # regenerate src/server/db/types.ts from the local schema
-pnpm test:ci           # runs unit + integration tests against the local DB
+pnpm db:types          # regenerate apps/web/src/server/infrastructure/db/types.ts from the local schema
+pnpm test:ci           # deterministic tests across all workspaces
+INTEGRATION_ENV_FILE=.env.integration pnpm test:integration # explicit local DB suites
 pnpm db:stop           # stop the local stack (data persists in Docker volumes)
 ```
 
@@ -68,9 +69,9 @@ The dedicated local ports are API/Auth **56421**, Postgres **56422**, Studio
 **56423**, and the development email inbox **56424**. Existing Docker data persists
 across stop/start; use `db:reset` only when intentionally recreating local data.
 
-Integration tests auto-skip when `DATABASE_URL` is unset, so `pnpm test:ci`
-stays green in environments without a DB (e.g. CI smoke checks). With the local
-stack running, they execute for real.
+Deterministic tests never load development credentials. Database and Stripe suites
+run only through `test:integration` and `test:stripe`, with `INTEGRATION_ENV_FILE`
+pointing to a disposable local test environment. See [testing](docs/TESTING.md).
 
 ### Seed data
 
@@ -99,16 +100,16 @@ linked remote, so these test users never reach production.
 
 ### End-to-end tests (Playwright)
 
-The `e2e/` directory contains Playwright specs that run against the local Next.js
+The `apps/web/e2e/` directory contains Playwright specs that run against the local Next.js
 dev server and the seeded Supabase database. The harness resets the DB once via
 `pnpm db:reset` before the suite starts, so every spec begins from the same known
 world.
 
 ```bash
 pnpm db:start            # start Supabase if it isn't already running
-pnpm test:e2e            # run all specs headless (Desktop + iPhone + Pixel + iPad)
-pnpm test:e2e:ui         # open the Playwright UI for debugging
-pnpm test:e2e:ci         # CI mode: no server reuse, single worker, 2 retries
+E2E_ALLOW_RESET=1 pnpm test:e2e # run all specs headless (Desktop + iPhone + Pixel + iPad)
+E2E_ALLOW_RESET=1 pnpm test:e2e:ui # open the Playwright UI for debugging
+E2E_ALLOW_RESET=1 pnpm test:e2e:ci # CI mode: no server reuse, single worker, 2 retries
 ```
 
 Requirements:
@@ -120,7 +121,7 @@ Requirements:
   adding the dependency).
 
 The default base URL is `http://localhost:3000`. Override it with the
-`PLAYWRIGHT_BASE_URL` environment variable or in `.env.local`.
+`PLAYWRIGHT_BASE_URL` environment variable or in `apps/web/.env.local`.
 
 ## Scripts
 
@@ -128,10 +129,10 @@ The default base URL is `http://localhost:3000`. Override it with the
 | ------------------- | ---------------------------------------- |
 | `pnpm dev`          | Start dev server                         |
 | `pnpm build`        | Production build                          |
-| `pnpm type-check`   | `tsc --noEmit`                           |
+| `pnpm type-check`   | All workspace type checks                           |
 | `pnpm lint`         | ESLint                                    |
-| `pnpm test`         | Vitest (watch)                            |
-| `pnpm test:ci`      | Vitest run (CI)                           |
+| `pnpm test`         | All workspace deterministic tests                            |
+| `pnpm test:ci`      | All workspace deterministic tests                           |
 | `pnpm format`       | Prettier write                            |
 | `pnpm check`        | type-check + lint + tests + format:check |
 | `pnpm test:e2e`     | Playwright E2E specs (headless)           |
@@ -142,26 +143,30 @@ The default base URL is `http://localhost:3000`. Override it with the
 | `pnpm db:status`    | Show local Supabase URLs + keys           |
 | `pnpm db:reset`     | Wipe + recreate local DB, re-apply migrations |
 | `pnpm db:push`      | Push local schema/migrations to the linked remote |
-| `pnpm db:types`     | Regenerate `src/server/db/types.ts` from the local schema |
+| `pnpm db:types`     | Regenerate `apps/web/src/server/infrastructure/db/types.ts` from the local schema |
 
 ## Project structure
 
-```
-src/
-├── app/                 # Next.js App Router (route groups: marketing, auth, app, api)
-├── platform/            # Reusable platform services (no module imports)
-├── modules/             # Business product logic (invoices, books, drive, quotes)
-├── shared/              # Generic UI + utilities (no business logic)
-│   ├── ui/              # shadcn primitives (vendored)
-│   ├── components/      # Shared app components (app-shell, theme, logo)
-│   ├── hooks/  lib/  utils/  constants/  types/
-├── server/              # Server-only infra (db, stripe, jobs, events, cache, security)
-└── tests/               # Test setup
+```text
+apps/web/                 Next.js application, backend, web assets and tests
+apps/mobile/              Expo application, native integrations and tests
+packages/contracts/       Platform-safe contracts and shared calculations
+packages/eslint-config/   Lint rules and runtime-cycle verification
+packages/typescript-config/ Common compiler settings
+supabase/                 Database configuration, migrations and local seed
+scripts/                  Repository tooling
+docs/                     Architecture, testing, deployment and archived plans
 ```
 
-**Boundaries:** `modules → platform → shared`. `platform` never imports `modules`.
-`shared` never imports app/module/platform code. Cross-module side effects go through
-the event bus in `server/events`, never direct module imports.
+Both applications use thin `src/app` framework routes, `src/application` composition,
+`src/features/<domain>` ownership, and app-local shared components/libraries.
+The web backend lives in `src/server` with application → domains → foundation →
+infrastructure dependencies. Browser-safe business rules live in `src/lib/domain`.
+
+See [architecture](docs/ARCHITECTURE.md), [testing](docs/TESTING.md), and the
+[deployment runbook](docs/DEPLOYMENT.md). Node 24.19.0 and pnpm 10.33.0 are pinned.
+`pnpm dev` starts web; `pnpm dev:all` starts web and mobile. `pnpm check` covers every
+workspace; `pnpm build` builds web and `pnpm mobile:export` checks both native bundles.
 
 ## Design system
 
@@ -172,7 +177,7 @@ Generated and persisted by the UI/UX Pro Max skill:
 - `design-system/soletrade/pages/public-invoice-quote.md` - public page overrides
 
 When building a page, check `pages/<page>.md` first; if it exists it overrides the
-Master. Design tokens are wired into `src/app/globals.css` as Tailwind v4 `@theme`
+Master. Design tokens are wired into `apps/web/src/app/globals.css` as Tailwind v4 `@theme`
 variables.
 
 ## Implementation phases
