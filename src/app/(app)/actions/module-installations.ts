@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  assertStripeAuthority,
+  getBillingAuthority,
+  isStoreAuthority,
+  BillingProviderError,
+} from "@/platform/billing/authority";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
 import { authorizeOrAudit } from "@/server/security";
@@ -40,6 +46,7 @@ export async function enableModuleAction(input: unknown): Promise<EnableModuleRe
   if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
 
   try {
+    await assertStripeAuthority(ctx.workspaceId);
     // A workspace without active billing can't add paid modules - surface a
     // start-billing prompt instead of hitting the orchestrator (which would
     // throw BillingNotStartedError anyway). `ensureSubscription` lazily creates
@@ -96,6 +103,10 @@ export async function previewAddModuleAction(input: unknown): Promise<AddModuleP
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
 
+  const authority = await getBillingAuthority(ctx.workspaceId);
+  if (isStoreAuthority(authority))
+    return { ok: false, error: new BillingProviderError(authority.provider).message };
+
   const sub = await ensureSubscription(ctx.workspaceId);
   if (sub.stripeSubscriptionId == null || sub.status !== "active" || !sub.billingInterval) {
     return { ok: false, error: START_BILLING_MSG };
@@ -142,6 +153,7 @@ export async function disableModuleAction(input: unknown): Promise<DisableModule
   if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
 
   try {
+    await assertStripeAuthority(ctx.workspaceId);
     // Permissive on billing state: a canceled/unbilled workspace with a stray
     // legacy module can still disable it locally. removeModuleFromSubscription
     // removes the Stripe item if one exists (returns null for legacy rows) and
@@ -171,6 +183,10 @@ export async function previewCancelModuleAction(
 
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
+
+  const authority = await getBillingAuthority(ctx.workspaceId);
+  if (isStoreAuthority(authority))
+    return { ok: false, error: new BillingProviderError(authority.provider).message };
 
   const sub = await getSubscription(ctx.workspaceId);
   const active = await getInstalledModules(ctx.workspaceId);
@@ -206,6 +222,7 @@ export async function cancelModuleAction(input: unknown): Promise<CancelModuleRe
   if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
 
   try {
+    await assertStripeAuthority(ctx.workspaceId);
     await removeModuleFromSubscription(
       ctx.workspaceId,
       parsed.data.moduleKey,
@@ -229,12 +246,17 @@ export type ModulesPageData = {
 /** Loader for the modules settings page. */
 export async function loadModulesPage(): Promise<ModulesPageData> {
   const ctx = await requireWorkspaceContext();
+  const authority = await getBillingAuthority(ctx.workspaceId);
   const rows = await getModuleInstallations(ctx.workspaceId);
   const installed = resolveActiveModules(rows);
   const pendingCancellations = rows
     .filter((r) => r.status === "active" && r.pendingCancellationAt && r.cancelledAt === null)
     .map((r) => ({ moduleKey: r.moduleKey, effectiveAt: r.pendingCancellationAt!.toISOString() }));
-  return { installed, pendingCancellations, canManage: authorize(ctx.role, "manage:module").ok };
+  return {
+    installed,
+    pendingCancellations,
+    canManage: !isStoreAuthority(authority) && authorize(ctx.role, "manage:module").ok,
+  };
 }
 
 export type UndoCancelModuleResult =
@@ -254,6 +276,7 @@ export async function undoCancelModuleAction(input: unknown): Promise<UndoCancel
   if (!(await authorizeOrAudit(ctx, "manage:module")).ok) return forbid();
 
   try {
+    await assertStripeAuthority(ctx.workspaceId);
     await clearPendingModuleCancellation(ctx.workspaceId, parsed.data);
     revalidatePath("/", "layout");
     return { ok: true, moduleKey: parsed.data };

@@ -15,14 +15,13 @@ import {
   listQuotes,
   sendQuote,
   updateQuote,
-  markQuoteConverted,
   type QuoteAcceptanceRow,
   type QuoteRow,
   type QuoteWithItems,
   type LineItemInput,
   type SectionInput,
 } from "@/modules/quotes";
-import { createInvoice, getInvoice } from "@/modules/invoices";
+import { convertQuoteToInvoice } from "@/app/_lib/quote-conversion";
 import type { QuoteStatus } from "@/server/db/enums";
 import { branded } from "@/shared/types/ids";
 import { getWorkspace } from "@/platform/workspaces";
@@ -242,18 +241,7 @@ export async function deleteQuoteAction(input: unknown): Promise<QuoteActionResu
 
 export type ConvertQuoteResult = { ok: true; invoiceId: string } | { ok: false; error: string };
 
-/**
- * Convert an accepted quote to a **draft** invoice (the merchant reviews/edits before
- * sending). Orchestration lives in the action layer (the composition root - it MAY import
- * multiple modules; the two services stay decoupled, never importing each other):
- *   1. `getQuote` (quotes service) - guard status === "accepted".
- *   2. `createInvoice` (invoices service) - build the draft from the quote's customer +
- *      line items + totals + tax rate.
- *   3. `getInvoice` (invoices service) - read the new invoice's number for the event metadata.
- *   4. `markQuoteConverted` (quotes service) - flip status + store `convertedInvoiceId` +
- *      fire `QuoteConvertedToInvoice`.
- * Returns `{ ok: true, invoiceId }` so the client navigates to the new draft invoice.
- */
+/** Convert once under the quote row lock; web and native share this operation. */
 export async function convertQuoteToInvoiceAction(input: unknown): Promise<ConvertQuoteResult> {
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid quote." };
@@ -261,47 +249,7 @@ export async function convertQuoteToInvoiceAction(input: unknown): Promise<Conve
   if (!(await authorizeOrAudit(ctx, "manage:quote")).ok) return forbid();
 
   try {
-    const quoteId = branded<"QuoteId">(parsed.data.quoteId);
-    const quote = await getQuote(ctx.workspaceId, quoteId);
-    if (!quote) return { ok: false, error: "Quote not found." };
-    if (quote.status !== "accepted") {
-      return { ok: false, error: "Only accepted quotes can be converted." };
-    }
-
-    const invoiceId = await createInvoice(
-      ctx.workspaceId,
-      {
-        customerId: quote.customerId,
-        issueDate: new Date(),
-        dueDate: null,
-        currency: quote.currency,
-        taxRate: quote.taxRate,
-        pricesIncludeTax: quote.pricesIncludeTax,
-        notes: `Converted from quote ${quote.number}.`,
-        lineItems: quote.lineItems.map((it) => ({
-          description: it.description,
-          quantity: it.quantity,
-          unitPriceCents: it.unitPriceCents,
-        })),
-      },
-      ctx.user.id,
-    );
-
-    const invoice = await getInvoice(ctx.workspaceId, invoiceId);
-    const invoiceNumber = invoice?.number ?? "";
-
-    const ok = await markQuoteConverted(
-      ctx.workspaceId,
-      quoteId,
-      invoiceId,
-      invoiceNumber,
-      ctx.user.id,
-    );
-    if (!ok) {
-      // The invoice was created but the quote was no longer accepted (race / concurrent
-      // convert). The merchant still has the draft invoice to review/send.
-      return { ok: true, invoiceId };
-    }
+    const invoiceId = await convertQuoteToInvoice(ctx, branded<"QuoteId">(parsed.data.quoteId));
 
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${parsed.data.quoteId}`);

@@ -1,4 +1,11 @@
 import "server-only";
+import {
+  assertStripeAuthority,
+  getBillingAuthority,
+  recordStripeCheckoutSession,
+  reserveStripeCheckout,
+  releaseStripeCheckout,
+} from "@/platform/billing/authority";
 import { getDataClient } from "@/server/db/client";
 import { unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import { getSubscription, ensureSubscription } from "@/platform/billing/subscriptions";
@@ -59,6 +66,7 @@ export async function ensureStripeCustomer(
   workspaceId: WorkspaceId,
   opts: { email?: string | null },
 ): Promise<string> {
+  await assertStripeAuthority(workspaceId, undefined, { allowExpiredStore: true });
   const current = await getSubscription(workspaceId);
   if (!current) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
   if (current.stripeCustomerId) return current.stripeCustomerId;
@@ -102,10 +110,15 @@ export async function createCheckoutSession(
     promotion?: CheckoutPromotion;
   },
 ): Promise<{ url: string; sessionId: string }> {
+  await assertStripeAuthority(workspaceId, undefined, { allowExpiredStore: true });
   if (opts.moduleKeys.length === 0) {
     throw new Error("Cannot start billing with no modules selected.");
   }
-  await ensureSubscription(workspaceId);
+  const current = await ensureSubscription(workspaceId);
+  if (current.stripeSubscriptionId && ["active", "past_due"].includes(current.status))
+    throw new Error(
+      "This workspace already has active web billing. Manage the existing subscription.",
+    );
   // Resolve price ids before any Stripe I/O (fail-fast on misconfigured env).
   const anchor = selectAnchor(opts.moduleKeys);
   if (!anchor) throw new Error("Failed to select an anchor module.");
@@ -125,28 +138,49 @@ export async function createCheckoutSession(
     ? { discounts: [{ promotion_code: opts.promotion.stripePromotionCodeId }] }
     : { allow_promotion_codes: opts.allowPromotionCodes ?? false };
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: lineItems,
-    client_reference_id: String(workspaceId),
-    ...promotionParams,
-    metadata: opts.promotion ? { promotionId: opts.promotion.id } : undefined,
-    subscription_data: {
-      metadata: {
-        workspaceId: String(workspaceId),
-        interval: opts.interval,
-        ...(opts.promotion ? { promotionId: opts.promotion.id } : {}),
+  const { reservationId, expiresAt } = await reserveStripeCheckout(workspaceId);
+  try {
+    const session = await stripe.checkout.sessions.create(
+      {
+        expires_at: expiresAt,
+        integration_identifier: `soletrade-web-${reservationId.replaceAll("-", "").slice(0, 8).replace(/[0-9]/g, "a")}`,
+        mode: "subscription",
+        customer: customerId,
+        line_items: lineItems,
+        client_reference_id: String(workspaceId),
+        ...promotionParams,
+        metadata: { reservationId, ...(opts.promotion ? { promotionId: opts.promotion.id } : {}) },
+        subscription_data: {
+          metadata: {
+            workspaceId: String(workspaceId),
+            interval: opts.interval,
+            reservationId,
+            ...(opts.promotion ? { promotionId: opts.promotion.id } : {}),
+          },
+        },
+        success_url: opts.successUrl,
+        cancel_url: opts.cancelUrl,
       },
-    },
-    success_url: opts.successUrl,
-    cancel_url: opts.cancelUrl,
-  });
+      { idempotencyKey: `checkout:${reservationId}` },
+    );
 
-  if (!session.url) {
-    throw new Error(`Stripe Checkout Session ${session.id} did not return a url.`);
+    await recordStripeCheckoutSession(workspaceId, reservationId, session.id);
+    if (!session.url) {
+      throw new Error(`Stripe Checkout Session ${session.id} did not return a url.`);
+    }
+    return { url: session.url, sessionId: session.id };
+  } catch (error) {
+    // A transport timeout may have created a payable session. Keep that reservation until
+    // expiry; definitive Stripe request/auth failures created no session and can release it.
+    const kind = error && typeof error === "object" && "type" in error ? String(error.type) : "";
+    if (
+      ["StripeInvalidRequestError", "StripeAuthenticationError", "StripePermissionError"].includes(
+        kind,
+      )
+    )
+      await releaseStripeCheckout(workspaceId, reservationId);
+    throw error;
   }
-  return { url: session.url, sessionId: session.id };
 }
 
 export interface AddItemResult {
@@ -171,8 +205,10 @@ export async function addModuleSubscriptionItem(
   workspaceId: WorkspaceId,
   moduleKey: ModuleKey,
 ): Promise<AddItemResult> {
+  await assertStripeAuthority(workspaceId);
   const sub = await getSubscription(workspaceId);
   if (!sub) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
+  await assertStripeAuthority(workspaceId, sub.stripeSubscriptionId);
   if (!sub.stripeSubscriptionId || sub.status !== "active") {
     throw new BillingNotStartedError();
   }
@@ -256,8 +292,10 @@ export async function removeModuleSubscriptionItem(
   workspaceId: WorkspaceId,
   moduleKey: ModuleKey,
 ): Promise<RemoveItemResult> {
+  await assertStripeAuthority(workspaceId);
   const sub = await getSubscription(workspaceId);
   if (!sub) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
+  await assertStripeAuthority(workspaceId, sub.stripeSubscriptionId);
   const interval = sub.billingInterval;
 
   const itemId = await getStoredItemId(workspaceId, moduleKey);
@@ -330,9 +368,11 @@ export async function refundToCard(
   workspaceId: WorkspaceId,
   amountCents: number,
 ): Promise<string | null> {
+  await assertStripeAuthority(workspaceId);
   if (amountCents <= 0) return null;
   const sub = await getSubscription(workspaceId);
   if (!sub || !sub.stripeCustomerId) return null;
+  await assertStripeAuthority(workspaceId, sub.stripeSubscriptionId);
   const stripe = getStripe();
   const charges = await stripe.charges.list({ customer: sub.stripeCustomerId, limit: 10 });
   // First paid charge with enough remaining balance to cover the refund.
@@ -364,8 +404,10 @@ export async function cancelSubscription(
   option: CancelSubscriptionOption = "immediate_credit",
   refundCents = 0,
 ): Promise<CancelSubscriptionResult> {
+  await assertStripeAuthority(workspaceId);
   const sub = await getSubscription(workspaceId);
   if (!sub) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
+  await assertStripeAuthority(workspaceId, sub.stripeSubscriptionId);
   if (!sub.stripeSubscriptionId || sub.status !== "active") {
     throw new BillingNotStartedError();
   }
@@ -411,8 +453,10 @@ export async function switchSubscriptionInterval(
   workspaceId: WorkspaceId,
   interval: Interval,
 ): Promise<void> {
+  await assertStripeAuthority(workspaceId);
   const sub = await getSubscription(workspaceId);
   if (!sub) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
+  await assertStripeAuthority(workspaceId, sub.stripeSubscriptionId);
   if (!sub.stripeSubscriptionId || sub.status !== "active") {
     throw new BillingNotStartedError();
   }
@@ -444,4 +488,36 @@ export async function switchSubscriptionInterval(
     proration_behavior: "none",
     metadata: { workspaceId: String(workspaceId), interval },
   });
+}
+
+/** Expire the payable session before freeing its authority; a completed purchase must reconcile. */
+export async function cancelPendingCheckout(workspaceId: WorkspaceId): Promise<void> {
+  const current = await getBillingAuthority(workspaceId);
+  if (
+    !current ||
+    current.provider !== "stripe" ||
+    current.status !== "incomplete" ||
+    !current.external_id.startsWith("checkout:")
+  )
+    throw new Error("No pending web checkout was found.");
+  const reservationId = current.external_id.slice("checkout:".length);
+  if (current.paid_through && new Date(current.paid_through).getTime() <= Date.now()) {
+    await releaseStripeCheckout(workspaceId, reservationId);
+    return;
+  }
+  if (!current.product_key.startsWith("cs_"))
+    throw new Error("Checkout is still being prepared. Try again shortly.");
+  const stripe = getStripe();
+  const session = await stripe.checkout.sessions.retrieve(current.product_key);
+  if (
+    session.client_reference_id !== workspaceId ||
+    session.metadata?.reservationId !== reservationId
+  )
+    throw new Error("Checkout does not match this workspace reservation.");
+  if (session.status === "complete" || session.subscription)
+    throw new Error("Checkout completed. Refresh billing while the purchase reconciles.");
+  if (session.status === "open") await stripe.checkout.sessions.expire(session.id);
+  else if (session.status !== "expired")
+    throw new Error("Checkout status is not yet settled. Try again shortly.");
+  await releaseStripeCheckout(workspaceId, reservationId);
 }

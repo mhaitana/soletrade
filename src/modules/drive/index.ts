@@ -119,6 +119,7 @@ function toEarningRow(r: EarningRaw): EarningRow {
 export interface TripInput {
   /** Slug from `drive-platforms`, validated. */
   platform: string;
+  vehicleId?: VehicleId | null;
   /** Integer meters (smallest unit), must be > 0. */
   distanceMeters: number;
   /** User-chosen trip date. */
@@ -133,6 +134,7 @@ export interface TripRow {
   id: DriveTripId;
   workspaceId: WorkspaceId;
   platform: string;
+  vehicleId?: VehicleId | null;
   distanceMeters: number;
   date: Date;
   purpose: string | null;
@@ -142,12 +144,13 @@ export interface TripRow {
 }
 
 const TRIP_COLUMNS =
-  "id, workspace_id, platform, distance_meters, date, purpose, notes, created_at, updated_at";
+  "id, workspace_id, platform, vehicle_id, distance_meters, date, purpose, notes, created_at, updated_at";
 
 interface TripRaw {
   id: string;
   workspace_id: string;
   platform: string;
+  vehicle_id?: string | null;
   distance_meters: number;
   date: string;
   purpose: string | null;
@@ -161,6 +164,7 @@ function toTripRow(r: TripRaw): TripRow {
     id: branded<"DriveTripId">(r.id),
     workspaceId: branded<"WorkspaceId">(r.workspace_id),
     platform: r.platform,
+    vehicleId: r.vehicle_id ? branded<"VehicleId">(r.vehicle_id) : null,
     distanceMeters: r.distance_meters,
     date: parsePgTimestamp(r.date),
     purpose: r.purpose,
@@ -195,6 +199,7 @@ export async function createEarning(
   workspaceId: WorkspaceId,
   input: EarningInput,
   actorId: UserId,
+  deterministicId?: DriveEarningId,
 ): Promise<DriveEarningId> {
   if (input.amountCents <= 0) throw new Error("Amount must be greater than 0.");
   assertPlatform(input.platform);
@@ -206,6 +211,7 @@ export async function createEarning(
     supabase
       .from("drive_earnings")
       .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
         workspace_id: workspaceId,
         platform: input.platform,
         amount_cents: input.amountCents,
@@ -251,6 +257,7 @@ export async function updateEarning(
   earningId: DriveEarningId,
   patch: EarningPatch,
   actorId: UserId,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   if (patch.platform !== undefined) assertPlatform(patch.platform);
   if (patch.amountCents !== undefined && patch.amountCents <= 0) {
@@ -262,13 +269,17 @@ export async function updateEarning(
   // `.update()` type rejects an `unknown` index signature.
   const set: {
     updated_at: string;
+    mobile_expected_updated_at?: string;
     platform?: string;
     amount_cents?: number;
     currency?: string;
     date?: string;
     description?: string;
     notes?: string | null;
-  } = { updated_at: new Date().toISOString() };
+  } = {
+    updated_at: new Date().toISOString(),
+    ...(expectedUpdatedAt !== undefined ? { mobile_expected_updated_at: expectedUpdatedAt } : {}),
+  };
   if (patch.platform !== undefined) set.platform = patch.platform;
   if (patch.amountCents !== undefined) set.amount_cents = patch.amountCents;
   if (patch.currency !== undefined) set.currency = patch.currency;
@@ -359,6 +370,7 @@ export async function listEarnings(
     dateFrom?: Date;
     /** Inclusive upper bound on `date`. */
     dateTo?: Date;
+    offset?: number;
     limit?: number;
   },
 ): Promise<EarningRow[]> {
@@ -380,7 +392,8 @@ export async function listEarnings(
     query
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(limit),
+      .order("id", { ascending: false })
+      .range(Math.max(0, opts?.offset ?? 0), Math.max(0, opts?.offset ?? 0) + limit - 1),
   );
   return rows.map((r) => toEarningRow(r as EarningRaw));
 }
@@ -413,9 +426,12 @@ export async function createTrip(
   workspaceId: WorkspaceId,
   input: TripInput,
   actorId: UserId,
+  deterministicId?: DriveTripId,
 ): Promise<DriveTripId> {
   if (input.distanceMeters <= 0) throw new Error("Distance must be greater than 0.");
   assertPlatform(input.platform);
+  if (input.vehicleId && !(await getVehicle(workspaceId, input.vehicleId)))
+    throw new Error("Vehicle not found in this workspace.");
 
   const [settings, workspace] = await Promise.all([
     getDriveSettings(workspaceId),
@@ -428,8 +444,10 @@ export async function createTrip(
     supabase
       .from("drive_trips")
       .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
         workspace_id: workspaceId,
         platform: input.platform,
+        vehicle_id: input.vehicleId ?? null,
         distance_meters: input.distanceMeters,
         date: input.date.toISOString(),
         purpose: input.purpose ?? null,
@@ -473,22 +491,31 @@ export async function updateTrip(
   tripId: DriveTripId,
   patch: TripPatch,
   actorId: UserId,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   if (patch.platform !== undefined) assertPlatform(patch.platform);
   if (patch.distanceMeters !== undefined && patch.distanceMeters <= 0) {
     throw new Error("Distance must be greater than 0.");
   }
 
+  if (patch.vehicleId && !(await getVehicle(workspaceId, patch.vehicleId)))
+    throw new Error("Vehicle not found in this workspace.");
   const supabase = getDataClient();
   const set: {
     updated_at: string;
+    mobile_expected_updated_at?: string;
     platform?: string;
+    vehicle_id?: VehicleId | null;
     distance_meters?: number;
     date?: string;
     purpose?: string | null;
     notes?: string | null;
-  } = { updated_at: new Date().toISOString() };
+  } = {
+    updated_at: new Date().toISOString(),
+    ...(expectedUpdatedAt !== undefined ? { mobile_expected_updated_at: expectedUpdatedAt } : {}),
+  };
   if (patch.platform !== undefined) set.platform = patch.platform;
+  if (patch.vehicleId !== undefined) set.vehicle_id = patch.vehicleId;
   if (patch.distanceMeters !== undefined) set.distance_meters = patch.distanceMeters;
   if (patch.date !== undefined) set.date = patch.date.toISOString();
   if (patch.purpose !== undefined) set.purpose = patch.purpose ?? null;
@@ -582,6 +609,7 @@ export async function listTrips(
     search?: string;
     dateFrom?: Date;
     dateTo?: Date;
+    offset?: number;
     limit?: number;
   },
 ): Promise<TripRow[]> {
@@ -600,7 +628,8 @@ export async function listTrips(
     query
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(limit),
+      .order("id", { ascending: false })
+      .range(Math.max(0, opts?.offset ?? 0), Math.max(0, opts?.offset ?? 0) + limit - 1),
   );
   return rows.map((r) => toTripRow(r as TripRaw));
 }
@@ -754,6 +783,7 @@ export async function createVehicle(
   workspaceId: WorkspaceId,
   input: VehicleInput,
   actorId: UserId,
+  deterministicId?: VehicleId,
 ): Promise<VehicleId> {
   if (!input.name.trim()) throw new Error("Vehicle name is required.");
   const supabase = getDataClient();
@@ -761,6 +791,7 @@ export async function createVehicle(
     supabase
       .from("vehicles")
       .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
         workspace_id: workspaceId,
         name: input.name.trim(),
         make: input.make ?? null,
@@ -791,17 +822,22 @@ export async function updateVehicle(
   vehicleId: VehicleId,
   patch: VehiclePatch,
   actorId: UserId,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   const supabase = getDataClient();
   const set: {
     updated_at: string;
+    mobile_expected_updated_at?: string;
     name?: string;
     make?: string | null;
     model?: string | null;
     year?: number | null;
     odometer_km?: number | null;
     active?: boolean;
-  } = { updated_at: new Date().toISOString() };
+  } = {
+    updated_at: new Date().toISOString(),
+    ...(expectedUpdatedAt !== undefined ? { mobile_expected_updated_at: expectedUpdatedAt } : {}),
+  };
   if (patch.name !== undefined) set.name = patch.name.trim();
   if (patch.make !== undefined) set.make = patch.make ?? null;
   if (patch.model !== undefined) set.model = patch.model ?? null;
@@ -974,6 +1010,7 @@ export async function createExpense(
   workspaceId: WorkspaceId,
   input: ExpenseInput,
   actorId: UserId,
+  deterministicId?: DriveExpenseId,
 ): Promise<DriveExpenseId> {
   if (input.amountCents <= 0) throw new Error("Amount must be greater than 0.");
   await assertVehicleInWorkspace(workspaceId, input.vehicleId);
@@ -985,6 +1022,7 @@ export async function createExpense(
     supabase
       .from("driver_vehicle_expenses")
       .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
         workspace_id: workspaceId,
         vehicle_id: input.vehicleId,
         type: input.type,
@@ -1036,6 +1074,7 @@ export async function updateExpense(
   expenseId: DriveExpenseId,
   patch: ExpensePatch,
   actorId: UserId,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   if (patch.amountCents !== undefined && patch.amountCents <= 0) {
     throw new Error("Amount must be greater than 0.");
@@ -1043,6 +1082,7 @@ export async function updateExpense(
   const supabase = getDataClient();
   const set: {
     updated_at: string;
+    mobile_expected_updated_at?: string;
     type?: VehicleExpenseType;
     amount_cents?: number;
     currency?: string;
@@ -1051,7 +1091,10 @@ export async function updateExpense(
     odometer_km?: number | null;
     notes?: string | null;
     receipt_file_id?: FileId | null;
-  } = { updated_at: new Date().toISOString() };
+  } = {
+    updated_at: new Date().toISOString(),
+    ...(expectedUpdatedAt !== undefined ? { mobile_expected_updated_at: expectedUpdatedAt } : {}),
+  };
   if (patch.type !== undefined) set.type = patch.type;
   if (patch.amountCents !== undefined) set.amount_cents = patch.amountCents;
   if (patch.currency !== undefined) set.currency = patch.currency;
@@ -1144,6 +1187,7 @@ export async function listExpenses(
     search?: string;
     dateFrom?: Date;
     dateTo?: Date;
+    offset?: number;
     limit?: number;
   },
 ): Promise<ExpenseRow[]> {
@@ -1166,7 +1210,8 @@ export async function listExpenses(
     query
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(limit),
+      .order("id", { ascending: false })
+      .range(Math.max(0, opts?.offset ?? 0), Math.max(0, opts?.offset ?? 0) + limit - 1),
   );
   return rows.map((r) => toExpenseRow(r as ExpenseRaw));
 }

@@ -36,7 +36,7 @@ export interface Conversation extends ConversationSummary {
 export async function listConversations(
   workspaceId: WorkspaceId,
   userId: UserId,
-  opts: { limit?: number } = {},
+  opts: { limit?: number; offset?: number } = {},
 ): Promise<ConversationSummary[]> {
   const supabase = getDataClient();
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
@@ -47,7 +47,8 @@ export async function listConversations(
       .eq("workspace_id", workspaceId)
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
-      .limit(limit),
+      .order("id", { ascending: false })
+      .range(Math.max(0, opts.offset ?? 0), Math.max(0, opts.offset ?? 0) + limit - 1),
   );
   return rows.map((r) => ({
     id: branded<"AiConversationId">(r.id),
@@ -106,6 +107,7 @@ export async function createConversation(
   workspaceId: WorkspaceId,
   userId: UserId,
   title?: string,
+  deterministicId?: AiConversationId,
 ): Promise<AiConversationId> {
   const supabase = getDataClient();
   const rows = await unwrap(
@@ -113,7 +115,12 @@ export async function createConversation(
       .from("ai_conversations")
       // `title` is NOT NULL with a default ("New conversation"); pass `undefined` (omitted
       // from the payload via JSON.stringify) so the DB default applies when no title given.
-      .insert({ workspace_id: workspaceId, user_id: userId, title: title ?? undefined })
+      .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
+        workspace_id: workspaceId,
+        user_id: userId,
+        title: title ?? undefined,
+      })
       .select("id"),
   );
   const row = rows[0];

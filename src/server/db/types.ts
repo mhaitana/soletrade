@@ -1,6 +1,77 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type Database = {
+type AddColumn<
+  T extends { Row: object; Insert: object; Update: object },
+  K extends string,
+  V,
+> = Omit<T, "Row" | "Insert" | "Update"> & {
+  Row: T["Row"] & Record<K, V>;
+  Insert: T["Insert"] & Partial<Record<K, V>>;
+  Update: T["Update"] & Partial<Record<K, V>>;
+};
+type FinancialTable =
+  | "customers"
+  | "invoices"
+  | "quotes"
+  | "book_transactions"
+  | "drive_earnings"
+  | "drive_trips"
+  | "vehicles"
+  | "driver_vehicle_expenses";
+type VersionedTables = {
+  [K in FinancialTable]: AddColumn<
+    GeneratedDatabase["public"]["Tables"][K],
+    "mobile_expected_updated_at",
+    string | null
+  >;
+};
+
+export type Database = Omit<GeneratedDatabase, "public"> & {
+  public: Omit<GeneratedDatabase["public"], "Tables" | "Functions"> & {
+    Tables: Omit<
+      GeneratedDatabase["public"]["Tables"],
+      "files" | "receipt_extractions" | "module_installations" | FinancialTable
+    > &
+      MobileTables &
+      VersionedTables & {
+        module_installations: AddColumn<
+          GeneratedDatabase["public"]["Tables"]["module_installations"],
+          "billing_contract_id",
+          string | null
+        >;
+        files: AddColumn<GeneratedDatabase["public"]["Tables"]["files"], "upload_status", string>;
+        receipt_extractions: AddColumn<
+          GeneratedDatabase["public"]["Tables"]["receipt_extractions"],
+          "processing",
+          boolean
+        >;
+        drive_trips: AddColumn<VersionedTables["drive_trips"], "vehicle_id", string | null>;
+        invoices: AddColumn<VersionedTables["invoices"], "source_quote_id", string | null>;
+      };
+    Functions: Omit<
+      GeneratedDatabase["public"]["Functions"],
+      "create_invoice_with_lines" | "create_quote_with_lines"
+    > &
+      MobileFunctions & {
+        create_invoice_with_lines: {
+          Args: GeneratedDatabase["public"]["Functions"]["create_invoice_with_lines"]["Args"] & {
+            p_id?: string;
+          };
+          Returns: string;
+        };
+        create_quote_with_lines: {
+          Args: GeneratedDatabase["public"]["Functions"]["create_quote_with_lines"]["Args"] & {
+            p_id?: string;
+          };
+          Returns: string;
+        };
+      };
+  };
+};
+
+import type { MobileTables, MobileFunctions } from "./mobile-types";
+
+type GeneratedDatabase = {
   graphql_public: {
     Tables: {
       [_ in never]: never;

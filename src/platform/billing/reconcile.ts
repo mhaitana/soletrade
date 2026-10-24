@@ -1,15 +1,17 @@
 import "server-only";
+import { acceptsStripeEvent, getBillingAuthority, projectStripeContract } from "./authority";
 import type Stripe from "stripe";
 import { getDataClient } from "@/server/db/client";
 import { unwrap, unwrapMaybe, unwrapVoid } from "@/server/db/helpers";
 import { getSubscription } from "@/platform/billing/subscriptions";
-import { enableModule, disableModule, getInstalledModules } from "@/platform/module-installations";
+import { getInstalledModules } from "@/platform/module-installations";
 import { grantCredit, refundCredit } from "@/platform/billing/credits";
 import { priceSubscription, prorateRefundCents } from "@/platform/billing/pricing";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import type { SubscriptionStatus, BillingInterval } from "@/server/db/enums";
-import type { ModuleKey } from "@/shared/constants/modules";
+import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
+import { buildPriceIdToModuleMap } from "@/server/stripe/prices";
 import type { Role } from "@/platform/billing/pricing";
 import { branded, type WorkspaceId } from "@/shared/types/ids";
 
@@ -82,18 +84,41 @@ export function mapCheckoutSessionToUpdate(
  */
 export async function reconcileFromCheckoutSession(
   session: Stripe.Checkout.Session,
-  payload: { interval: BillingInterval; items: CheckoutItem[] },
-): Promise<void> {
+  payload: { interval: BillingInterval; items: CheckoutItem[]; subscription?: Stripe.Subscription },
+): Promise<boolean> {
   const workspaceId = session.client_reference_id as WorkspaceId | null;
   if (!workspaceId) {
     console.error("[stripe] checkout.session.completed missing client_reference_id", {
       id: session.id,
     });
-    return;
+    return false;
   }
 
   const current = await getSubscription(workspaceId);
   if (!current) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
+  if (
+    !(await acceptsStripeEvent(
+      workspaceId,
+      String(session.subscription),
+      current.stripeSubscriptionId,
+      true,
+    ))
+  )
+    return false;
+
+  const projected = await projectStripeContract({
+    workspaceId,
+    externalId: String(session.subscription),
+    modules: payload.items.map((i) => i.moduleKey),
+    interval: payload.interval,
+    status: "active",
+    paidThrough: payload.subscription ? stripePaidThrough(payload.subscription) : null,
+    renews: !payload.subscription?.cancel_at_period_end,
+    checkout: true,
+    reservationId:
+      session.metadata?.reservationId ?? payload.subscription?.metadata?.reservationId ?? null,
+  });
+  if (!projected) return false;
 
   // Idempotency: skip if already reconciled to this checkout's subscription + interval.
   if (
@@ -101,7 +126,7 @@ export async function reconcileFromCheckoutSession(
     current.billingInterval === payload.interval &&
     current.status === "active"
   ) {
-    return;
+    return true;
   }
 
   const patch = mapCheckoutSessionToUpdate(session);
@@ -124,9 +149,33 @@ export async function reconcileFromCheckoutSession(
   if (!updated) throw new Error(`Failed to update subscription for workspace ${workspaceId}.`);
   const updatedId = branded<"SubscriptionId">(updated.id);
 
-  // Enable each chosen module locally with its subscription item id (actorless webhook upsert).
+  // Entitlements were projected under the authority row lock. Associate Stripe item IDs
+  // only with that same contract so a concurrent store switch cannot inherit stale items.
+  const authority = await getBillingAuthority(workspaceId);
   for (const item of payload.items) {
-    await enableModule(workspaceId, item.moduleKey, undefined, item.itemId);
+    if (authority?.provider === "stripe" && authority.external_id === String(session.subscription))
+      await unwrapVoid(
+        supabase
+          .from("module_installations")
+          .update({ stripe_subscription_item_id: item.itemId })
+          .eq("workspace_id", workspaceId)
+          .eq("module_key", item.moduleKey)
+          .eq("billing_contract_id", authority.id),
+      );
+    await publishEvent({
+      type: "ModuleEnabled",
+      workspaceId,
+      entityType: "module",
+      entityId: item.moduleKey,
+      metadata: { moduleKey: item.moduleKey },
+    });
+    await writeAudit({
+      workspaceId,
+      action: "module.enable",
+      targetType: "module",
+      targetId: item.moduleKey,
+      metadata: { moduleKey: item.moduleKey },
+    });
   }
 
   await publishEvent({
@@ -152,6 +201,7 @@ export async function reconcileFromCheckoutSession(
       source: "stripe.checkout.session.completed",
     },
   });
+  return true;
 }
 
 /**
@@ -169,6 +219,20 @@ export async function reconcileSubscription(stripeSub: Stripe.Subscription): Pro
   const newStatus = mapStripeStatusToLocal(stripeSub.status);
   const current = await getSubscription(workspaceId);
   if (!current) return;
+  if (!(await acceptsStripeEvent(workspaceId, stripeSub.id, current.stripeSubscriptionId))) return;
+  const modules = stripeModules(stripeSub) ?? (await getInstalledModules(workspaceId));
+  if (
+    !(await projectStripeContract({
+      workspaceId,
+      externalId: stripeSub.id,
+      modules,
+      interval: stripeInterval(stripeSub, current.billingInterval),
+      status: newStatus,
+      paidThrough: stripePaidThrough(stripeSub),
+      renews: !stripeSub.cancel_at_period_end,
+    }))
+  )
+    return;
   if (current.status === newStatus) return; // idempotent: no-op on no change
 
   const supabase = getDataClient();
@@ -210,8 +274,22 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
   }
   const current = await getSubscription(workspaceId);
   if (!current) return;
-  if (current.status === "canceled" && current.billingInterval === null) return; // idempotent
+  if (!(await acceptsStripeEvent(workspaceId, stripeSub.id, current.stripeSubscriptionId))) return;
 
+  const activeBefore = await getInstalledModules(workspaceId);
+  if (
+    !(await projectStripeContract({
+      workspaceId,
+      externalId: stripeSub.id,
+      modules: [],
+      interval: stripeInterval(stripeSub, current.billingInterval),
+      status: "canceled",
+      paidThrough: stripePaidThrough(stripeSub),
+      renews: false,
+    }))
+  )
+    return;
+  if (current.status === "canceled" && current.billingInterval === null) return; // idempotent
   const now = new Date();
   const refundedModuleKeys: ModuleKey[] = [];
   // Wave 1 cancellation engine (brief §10.6): the cancelOption stamped on the Stripe
@@ -229,7 +307,7 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
   // Per-module prorated refund (actorless - webhook). Only when we have the billing state
   // needed to compute the period; legacy rows missing interval/anchor get no refund.
   if (issueCreditRefunds) {
-    const active = await getInstalledModules(workspaceId);
+    const active = activeBefore;
     const breakdown = priceSubscription(active, current.billingInterval!);
     for (const m of breakdown.modules) {
       const refundCents = prorateRefundCents(
@@ -268,12 +346,6 @@ export async function markCanceled(stripeSub: Stripe.Subscription): Promise<void
       .update({ status: "canceled", billing_interval: null, updated_at: now.toISOString() })
       .eq("workspace_id", workspaceId),
   );
-
-  // Cascade-disable active modules (the subscription that billed them is gone).
-  const active = await getInstalledModules(workspaceId);
-  for (const key of active) {
-    await disableModule(workspaceId, key, undefined); // webhook has no actor
-  }
 
   await publishEvent({
     type: "SubscriptionChanged",
@@ -329,6 +401,17 @@ export async function recordInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
   );
   if (!sub) return; // customer not known to us (e.g. test/legacy)
   const workspaceId = branded<"WorkspaceId">(sub.workspace_id);
+  const current = await getSubscription(workspaceId);
+  const parentSubscription = invoice.parent?.subscription_details?.subscription;
+  const incomingId =
+    typeof parentSubscription === "string" ? parentSubscription : parentSubscription?.id;
+  if (
+    !incomingId ||
+    !current?.stripeSubscriptionId ||
+    !(await acceptsStripeEvent(workspaceId, incomingId, current.stripeSubscriptionId))
+  )
+    return;
+
   await writeAudit({
     workspaceId,
     action: "billing.invoice.paid",
@@ -366,4 +449,33 @@ export async function recordInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
       metadata: { source: "stripe.invoice.paid", invoiceId: invoice.id },
     });
   }
+}
+
+function stripePaidThrough(sub: Stripe.Subscription): string | null {
+  if (sub.status === "canceled")
+    return new Date((sub.ended_at ?? sub.canceled_at ?? Date.now() / 1000) * 1000).toISOString();
+  const end = Math.max(0, ...(sub.items?.data ?? []).map((item) => item.current_period_end ?? 0));
+  return end > 0 ? new Date(end * 1000).toISOString() : null;
+}
+function stripeInterval(
+  sub: Stripe.Subscription,
+  fallback: BillingInterval | null,
+): BillingInterval {
+  return sub.metadata?.interval === "annual" || sub.metadata?.interval === "monthly"
+    ? sub.metadata.interval
+    : (fallback ?? "monthly");
+}
+function stripeModules(sub: Stripe.Subscription): ModuleKey[] | null {
+  if (!sub.items?.data) return null;
+  const priceMap = buildPriceIdToModuleMap();
+  return [
+    ...new Set(
+      sub.items.data.flatMap((item) => {
+        const key = item.metadata?.moduleKey;
+        if (key && MODULE_KEYS.includes(key as ModuleKey)) return [key as ModuleKey];
+        const mapped = priceMap.get(item.price?.id);
+        return mapped ? [mapped.moduleKey] : [];
+      }),
+    ),
+  ];
 }

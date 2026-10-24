@@ -207,3 +207,15 @@ describe("cancellation engine - getCancellationOptions", () => {
     });
   });
 });
+
+it("offers no Stripe credit or refund options for a store-managed subscription", () => {
+  expect(
+    getCancellationOptions({
+      activeModules: ["books"],
+      interval: "monthly",
+      anchorBillingDate: ANCHOR,
+      now: ANCHOR,
+      provider: "apple",
+    }).options,
+  ).toEqual([]);
+});

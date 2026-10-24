@@ -1,0 +1,12 @@
+appId: au.com.soletrade.business
+name: Structured invoice validation preserves the unsaved form
+---
+- runFlow: 01-auth.yaml
+- openLink: soletrade://edit/invoices/new
+- assertVisible: New invoice
+- scrollUntilVisible:
+    element:
+      text: Save draft
+    direction: DOWN
+- tapOn: Save draft
+- assertVisible: Check description, quantity and price on item 1.

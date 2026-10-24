@@ -1,4 +1,12 @@
 import "server-only";
+import { getDataClient } from "@/server/db/client";
+import { unwrap } from "@/server/db/helpers";
+import {
+  assertStripeAuthority,
+  changeStripeModule,
+  getBillingAuthority,
+  isStoreAuthority,
+} from "./authority";
 import {
   addModuleSubscriptionItem,
   removeModuleSubscriptionItem,
@@ -8,8 +16,6 @@ import {
   BillingNotStartedError,
 } from "@/server/stripe/stripe-lifecycle";
 import {
-  enableModule,
-  disableModule,
   getInstalledModules,
   scheduleModuleCancellation,
   listPendingCancellationsDue,
@@ -58,6 +64,7 @@ export async function addModuleToSubscription(
   moduleKey: ModuleKey,
   actorId: UserId,
 ): Promise<AddModuleResult> {
+  await assertStripeAuthority(workspaceId);
   const sub = await getSubscription(workspaceId);
   if (!sub) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
 
@@ -76,7 +83,8 @@ export async function addModuleToSubscription(
     moduleKey,
   );
 
-  await enableModule(workspaceId, moduleKey, actorId, itemId);
+  await changeStripeModule(workspaceId, sub.stripeSubscriptionId!, moduleKey, true, itemId);
+  await moduleEvent(workspaceId, moduleKey, true, actorId);
 
   await writeAudit({
     workspaceId,
@@ -152,6 +160,7 @@ export async function removeModuleFromSubscription(
   actorId: UserId | undefined,
   option: CancelOption = "immediate_credit",
 ): Promise<RemoveModuleResult> {
+  await assertStripeAuthority(workspaceId);
   const sub = await getSubscription(workspaceId);
   const now = new Date();
   // Capture the active set BEFORE the disable so the refund can resolve the role.
@@ -195,7 +204,28 @@ export async function removeModuleFromSubscription(
     workspaceId,
     moduleKey,
   );
-  await disableModule(workspaceId, moduleKey, actorId);
+  if (sub?.stripeSubscriptionId)
+    await changeStripeModule(workspaceId, sub.stripeSubscriptionId, moduleKey, false);
+  else {
+    // Legacy unbilled cleanup only touches unowned installations; a store projection
+    // concurrently claiming the row makes this predicate match nothing.
+    if (await getBillingAuthority(workspaceId))
+      throw new Error("Billing authority changed. Refresh before changing modules.");
+    await unwrap(
+      getDataClient()
+        .from("module_installations")
+        .update({
+          status: "cancelled",
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("module_key", moduleKey)
+        .is("billing_contract_id", null)
+        .select("id"),
+    );
+  }
+  await moduleEvent(workspaceId, moduleKey, false, actorId);
 
   let stripeRefundId: string | null = null;
   if (option === "immediate_credit") {
@@ -281,6 +311,7 @@ export async function switchBillingInterval(
   interval: BillingInterval,
   actorId: UserId,
 ): Promise<void> {
+  await assertStripeAuthority(workspaceId);
   const sub = await getSubscription(workspaceId);
   if (!sub) throw new Error(`Subscription not found for workspace ${workspaceId}.`);
   const from = sub.billingInterval;
@@ -323,8 +354,12 @@ export async function finalizeModuleCancellations(now: Date = new Date()): Promi
   let count = 0;
   for (const row of due) {
     try {
+      if (isStoreAuthority(await getBillingAuthority(row.workspaceId))) continue;
+      const sub = await getSubscription(row.workspaceId);
+      if (!sub?.stripeSubscriptionId) continue;
       await removeModuleSubscriptionItem(row.workspaceId, row.moduleKey);
-      await disableModule(row.workspaceId, row.moduleKey);
+      await changeStripeModule(row.workspaceId, sub.stripeSubscriptionId, row.moduleKey, false);
+      await moduleEvent(row.workspaceId, row.moduleKey, false);
       await writeAudit({
         workspaceId: row.workspaceId,
         action: "module.cancel.finalized",
@@ -341,3 +376,27 @@ export async function finalizeModuleCancellations(now: Date = new Date()): Promi
 }
 
 export { BillingNotStartedError, cancelSubscription };
+
+async function moduleEvent(
+  workspaceId: WorkspaceId,
+  moduleKey: ModuleKey,
+  enabled: boolean,
+  actorId?: UserId,
+) {
+  await publishEvent({
+    type: enabled ? "ModuleEnabled" : "ModuleDisabled",
+    workspaceId,
+    actorUserId: actorId,
+    entityType: "module",
+    entityId: moduleKey,
+    metadata: { moduleKey },
+  });
+  await writeAudit({
+    workspaceId,
+    actorUserId: actorId,
+    action: enabled ? "module.enable" : "module.disable",
+    targetType: "module",
+    targetId: moduleKey,
+    metadata: { moduleKey },
+  });
+}

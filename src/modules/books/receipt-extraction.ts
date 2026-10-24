@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getDataClient } from "@/server/db/client";
 import {
   parsePgTimestamp,
+  rpc,
   unwrap,
   unwrapCount,
   unwrapMaybe,
@@ -18,6 +19,7 @@ import { consumeCredit } from "@/platform/billing/credits";
 import { publishEvent } from "@/server/events";
 import { writeAudit } from "@/platform/audit";
 import { env } from "@/shared/lib/env";
+import { isBookCategory } from "@/shared/constants/books-categories";
 import {
   branded,
   type BookTransactionId,
@@ -26,7 +28,6 @@ import {
   type UserId,
   type WorkspaceId,
 } from "@/shared/types/ids";
-import { createTransaction } from "./index";
 
 /**
  * Receipt extraction pipeline (Wave 2 - Books headline feature). Uploads a receipt to
@@ -122,6 +123,7 @@ export interface ExtractionRow {
   workspaceId: WorkspaceId;
   fileId: FileId;
   status: "pending" | "reviewed" | "applied" | "rejected";
+  processing: boolean;
   extractedData: ExtractedReceiptData | null;
   transactionId: BookTransactionId | null;
   errorMessage: string | null;
@@ -131,7 +133,7 @@ export interface ExtractionRow {
 }
 
 const EXTRACTION_COLUMNS =
-  "id, workspace_id, file_id, status, extracted_data, transaction_id, error_message, model_used, created_at, updated_at";
+  "id, workspace_id, file_id, status, processing, extracted_data, transaction_id, error_message, model_used, created_at, updated_at";
 
 /** Raw snake_case shape PostgREST returns for a `receipt_extractions` row. */
 interface ExtractionRaw {
@@ -139,6 +141,7 @@ interface ExtractionRaw {
   workspace_id: string;
   file_id: string;
   status: string;
+  processing: boolean;
   extracted_data: Json | null;
   transaction_id: string | null;
   error_message: string | null;
@@ -177,6 +180,7 @@ function toExtractionRow(r: ExtractionRaw): ExtractionRow {
     workspaceId: branded<"WorkspaceId">(r.workspace_id),
     fileId: branded<"FileId">(r.file_id),
     status: r.status as ExtractionRow["status"],
+    processing: r.processing ?? false,
     extractedData: r.extracted_data ? coerceExtractedData(r.extracted_data) : null,
     transactionId: r.transaction_id ? branded<"BookTransactionId">(r.transaction_id) : null,
     errorMessage: r.error_message,
@@ -196,7 +200,15 @@ export async function extractReceipt(
   workspaceId: WorkspaceId,
   fileId: FileId,
   actorId: UserId,
+  deterministicId?: ReceiptExtractionId,
 ): Promise<ReceiptExtractionId> {
+  const supabase = getDataClient();
+  // Claim before any credit or model work. An uncertain worker stays processing so a retry
+  // cannot charge or invoke OCR again; operators can reconcile that visible queue row.
+  if (deterministicId) {
+    const existing = await getExtraction(workspaceId, deterministicId);
+    if (existing) return deterministicId;
+  }
   const [file, workspace] = await Promise.all([
     getFile(workspaceId, fileId),
     getWorkspace(workspaceId),
@@ -204,20 +216,56 @@ export async function extractReceipt(
   if (!file) throw new Error("Receipt file not found in this workspace.");
   const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
 
-  const costCents = env.RECEIPT_EXTRACTION_COST_CENTS;
+  if (deterministicId) {
+    const claim = await supabase.from("receipt_extractions").insert({
+      id: deterministicId,
+      workspace_id: workspaceId,
+      file_id: fileId,
+      status: "pending",
+      processing: true,
+      model_used: isMockProvider() ? "mock" : env.AI_PROVIDER,
+      actor_user_id: actorId,
+    });
+    if (claim.error) {
+      const existing = await getExtraction(workspaceId, deterministicId);
+      if (existing) return deterministicId;
+      throw new Error(`Receipt claim failed: ${claim.error.message}`);
+    }
+  }
+  const billing = await (await import("@/platform/mobile/billing")).getMobileBilling(workspaceId);
+  const storeIncluded =
+    (billing.provider === "apple" || billing.provider === "google") &&
+    ["active", "grace", "canceled"].includes(billing.status) &&
+    Boolean(billing.paidThrough && new Date(billing.paidThrough).getTime() > Date.now());
+  const costCents = storeIncluded ? 0 : env.RECEIPT_EXTRACTION_COST_CENTS;
   if (costCents > 0) {
-    // First production caller of consumeCredit. Throws InsufficientCreditError on a low
-    // balance - let it propagate so the action can surface "insufficient credit".
-    await consumeCredit(
-      workspaceId,
-      {
-        amountCents: costCents,
-        reason: "receipt_extraction",
-        moduleKey: "books",
-        metadata: { fileId },
-      },
-      actorId,
-    );
+    try {
+      await consumeCredit(
+        workspaceId,
+        {
+          amountCents: costCents,
+          reason: "receipt_extraction",
+          moduleKey: "books",
+          metadata: { fileId },
+        },
+        actorId,
+      );
+    } catch (error) {
+      if (deterministicId)
+        await unwrapVoid(
+          supabase
+            .from("receipt_extractions")
+            .update({
+              processing: false,
+              status: "rejected",
+              error_message: "Unable to pay for receipt extraction.",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("workspace_id", workspaceId)
+            .eq("id", deterministicId),
+        );
+      throw error;
+    }
   }
 
   const modelUsed = isMockProvider() ? "mock" : env.AI_PROVIDER;
@@ -251,23 +299,27 @@ export async function extractReceipt(
     extracted = coerceExtractedData({});
   }
 
-  const supabase = getDataClient();
-  const rows = await unwrap(
-    supabase
-      .from("receipt_extractions")
-      .insert({
-        workspace_id: workspaceId,
-        file_id: fileId,
-        status: errorMessage ? "rejected" : "pending",
-        // jsonb column: cast the typed object to `Json` (Record<string,unknown> is not
-        // assignable to Json's object arm `{[key:string]:Json}`).
-        extracted_data: errorMessage ? null : (extracted as unknown as Json),
-        error_message: errorMessage,
-        model_used: modelUsed,
-        actor_user_id: actorId,
-      })
-      .select("id"),
-  );
+  const payload = {
+    workspace_id: workspaceId,
+    file_id: fileId,
+    status: errorMessage ? ("rejected" as const) : ("pending" as const),
+    processing: false,
+    extracted_data: errorMessage ? null : (extracted as unknown as Json),
+    error_message: errorMessage,
+    model_used: modelUsed,
+    actor_user_id: actorId,
+  };
+  const rows = deterministicId
+    ? await unwrap(
+        supabase
+          .from("receipt_extractions")
+          .update({ ...payload, updated_at: new Date().toISOString() })
+          .eq("workspace_id", workspaceId)
+          .eq("id", deterministicId)
+          .eq("processing", true)
+          .select("id"),
+      )
+    : await unwrap(supabase.from("receipt_extractions").insert(payload).select("id"));
   const row = rows[0];
   if (!row) throw new Error("Failed to create receipt extraction.");
   const id = branded<"ReceiptExtractionId">(row.id);
@@ -333,7 +385,11 @@ export async function applyExtraction(
   );
   if (!ext) throw new Error("Receipt extraction not found.");
   const row = ext as ExtractionRaw;
-  if (row.status === "applied") throw new Error("Receipt extraction already applied.");
+  if (row.status === "applied" && row.transaction_id)
+    return branded<"BookTransactionId">(row.transaction_id);
+  if (row.processing) throw new Error("Receipt extraction is still processing.");
+  if (row.status !== "pending" && row.status !== "reviewed")
+    throw new Error("Receipt extraction cannot be applied.");
   if (!row.extracted_data) throw new Error("Receipt extraction has no extracted data.");
 
   const data = coerceExtractedData(row.extracted_data);
@@ -343,44 +399,28 @@ export async function applyExtraction(
   const date = patch.date ?? safeDate(data.date) ?? new Date();
   const description = patch.description?.trim() || data.merchant || "Receipt";
   const category = patch.category ?? data.category;
+  if (!isBookCategory(type, category))
+    throw new Error(`Unknown category "${category}" for ${type} transactions.`);
 
-  const transactionId = await createTransaction(
-    workspaceId,
-    {
+  const { data: transactionId, error } = await rpc(supabase, "mobile_apply_receipt", {
+    p_workspace_id: workspaceId,
+    p_extraction_id: extractionId,
+    p_actor_id: actorId,
+    p_transaction: {
       type,
-      amountCents,
-      gstCents,
+      amount_cents: amountCents,
+      gst_cents: gstCents,
       currency: patch.currency ?? data.currency,
-      date,
+      date: date.toISOString(),
       description,
       category,
-      customerId: (patch.customerId as never) ?? null,
+      customer_id: patch.customerId ?? null,
       notes: patch.notes ?? null,
-      receiptFileId: branded<"FileId">(row.file_id),
     },
-    actorId,
-  );
-
-  await unwrapVoid(
-    supabase
-      .from("receipt_extractions")
-      .update({
-        status: "applied",
-        transaction_id: transactionId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", extractionId)
-      .eq("workspace_id", workspaceId),
-  );
-  await writeAudit({
-    workspaceId,
-    actorUserId: actorId,
-    action: "books.receipt.apply",
-    targetType: "receipt_extraction",
-    targetId: extractionId,
-    metadata: { transactionId, type, amountCents, category },
   });
-  return transactionId;
+  if (error || !transactionId)
+    throw new Error(error?.message ?? "Unable to apply receipt extraction.");
+  return branded<"BookTransactionId">(transactionId);
 }
 
 /** Reject an extraction (discard without creating a transaction). */
@@ -396,6 +436,8 @@ export async function rejectExtraction(
       .update({ status: "rejected", updated_at: new Date().toISOString() })
       .eq("id", extractionId)
       .eq("workspace_id", workspaceId)
+      .in("status", ["pending", "reviewed", "rejected"])
+      .eq("processing", false)
       .select("id"),
   );
   if (!rows[0]) throw new Error("Receipt extraction not found.");

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/shared/lib/supabase/server";
 import { branded, type UserId } from "@/shared/types/ids";
+import { getDataClient } from "@/server/db/client";
 
 export interface SessionUser {
   id: UserId;
@@ -23,6 +24,12 @@ async function resolveCurrentUser(): Promise<SessionUser | null> {
   const { data, error } = await supabase.auth.getClaims();
   const subject = data?.claims.sub;
   if (error || !subject) return null;
+  const { data: profile, error: profileError } = await getDataClient()
+    .from("users")
+    .select("deleted_at")
+    .eq("id", subject)
+    .maybeSingle();
+  if (profileError || profile?.deleted_at) return null;
   const email = data.claims.email;
   return {
     id: branded<"UserId">(subject),

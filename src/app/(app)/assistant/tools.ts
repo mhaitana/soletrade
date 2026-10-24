@@ -12,6 +12,7 @@ import {
   updateCustomer,
 } from "@/platform/customers";
 import { writeAudit } from "@/platform/audit";
+import { convertQuoteToInvoice } from "@/app/_lib/quote-conversion";
 import { listActivity } from "@/platform/activity";
 import { getWorkspace } from "@/platform/workspaces";
 import {
@@ -23,13 +24,7 @@ import {
   summarizeInvoices,
   voidInvoice,
 } from "@/modules/invoices";
-import {
-  createQuote,
-  getQuote,
-  listQuotes,
-  markQuoteConverted,
-  summarizeQuotes,
-} from "@/modules/quotes";
+import { createQuote, getQuote, listQuotes, summarizeQuotes } from "@/modules/quotes";
 import {
   createTransaction,
   deleteTransaction,
@@ -1419,9 +1414,8 @@ export function buildAssistantTools(
       });
     }
 
-    // 21. convertQuoteToInvoice - composite: get an accepted quote → create a draft
-    // invoice from its line items → mark the quote converted. Needs manage:quote +
-    // manage:invoice + both modules installed.
+    // 21. Conversion shares the same locked financial operation as web/native forms.
+    // Needs manage:quote + manage:invoice + both modules installed.
     if (
       hasModule("quotes") &&
       hasModule("invoices") &&
@@ -1445,46 +1439,15 @@ export function buildAssistantTools(
           if (!resolved) return { error: `Quote ${input.quoteNumber} not found.` };
           const quote = await getQuote(workspaceId, resolved.id);
           if (!quote) return { error: `Quote ${input.quoteNumber} not found.` };
-          if (quote.status !== "accepted") {
+          if (quote.status !== "accepted" && quote.status !== "converted") {
             return {
               error: `Quote ${input.quoteNumber} isn't accepted yet - the customer must accept it before it can be converted.`,
             };
           }
           try {
-            const invoiceId = await createInvoice(
-              workspaceId,
-              {
-                customerId: quote.customerId,
-                issueDate: new Date(),
-                currency: quote.currency,
-                taxRate: quote.taxRate,
-                notes: quote.notes ?? null,
-                lineItems: quote.lineItems.map((li) => ({
-                  description: li.description,
-                  quantity: li.quantity,
-                  unitPriceCents: li.unitPriceCents,
-                })),
-              },
-              user.id,
-            );
-            // createInvoice returns the new id; fetch the generated number for the
-            // quote-conversion audit trail (markQuoteConverted records it).
+            const invoiceId = await convertQuoteToInvoice(ctx, resolved.id);
             const invoice = await getInvoice(workspaceId, invoiceId);
             const invoiceNumber = invoice?.number ?? "";
-            const converted = await markQuoteConverted(
-              workspaceId,
-              resolved.id,
-              invoiceId,
-              invoiceNumber,
-              user.id,
-            );
-            if (!converted) {
-              // The invoice was created but the quote transition failed (e.g. it was
-              // converted by someone else in the race window). Surface honestly.
-              return {
-                error: `Quote ${input.quoteNumber} couldn't be marked converted (it may have been converted already). Invoice ${invoiceNumber || invoiceId} was created - review it in Invoices.`,
-              };
-            }
             return { invoiceId, invoiceNumber };
           } catch (err) {
             const message = err instanceof Error ? err.message : "";

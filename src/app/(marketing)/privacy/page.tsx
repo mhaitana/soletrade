@@ -5,7 +5,7 @@ export const metadata = { title: "Privacy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy" lastUpdated="July 2026">
+    <LegalPage title="Privacy" lastUpdated="25 October 2026">
       <LegalReviewNote />
 
       <LegalSection title="Information we collect">
@@ -30,6 +30,29 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
+      <LegalSection title="Mobile capture and precise location">
+        <p>
+          When you start a mileage shift, the mobile app records precise GPS samples, including in
+          the background until you stop or pause recording. Recording may be interrupted by your
+          device; review distance and any gaps before saving. Reviewed mileage summaries are shared
+          according to your workspace permissions.
+        </p>
+        <p>
+          Precise routes are private to the person who recorded them. Route syncing is off by
+          default and can be enabled in account preferences. Routes remain on your device or, when
+          enabled, in your private synced history until you delete them or close your account.
+          Turning syncing off stops new uploads; use Delete route history to remove earlier uploads.
+          Other devices apply deletions when they reconnect.
+        </p>
+        <p>
+          Drafts, receipt images and recording state can be stored on your device while offline.
+          Camera, photo library, notifications and biometric unlocking are optional device features.
+          Home-screen financial summaries are optional and show their last sync time. App and widget
+          data is cleared on sign-out or when revoked access is detected; an offline device receives
+          account changes when it reconnects.
+        </p>
+      </LegalSection>
+
       <LegalSection title="Data sharing and subprocessors">
         <p>
           We share data only with the third parties needed to operate the service, under terms that
@@ -40,6 +63,8 @@ export default function PrivacyPage() {
           <li>Stripe - payment processing and billing</li>
           <li>Resend - transactional email delivery</li>
           <li>Cloud AI providers - receipt extraction and the assistant, when enabled</li>
+          <li>Apple and Google - native subscription billing and platform services</li>
+          <li>Expo and Apple/Google notification services - device push delivery</li>
         </ul>
         <p>
           We may also disclose information when required by law or to protect our rights or the
@@ -49,9 +74,12 @@ export default function PrivacyPage() {
 
       <LegalSection title="Data retention">
         <p>
-          We retain your workspace data for as long as your account is active. After account
-          closure, we retain data as needed to comply with legal obligations and resolve disputes,
-          then delete it within a reasonable period.
+          We retain workspace data while the workspace is active. Account closure immediately
+          disables access. Personal data and content in closed workspaces is deleted within 30 days.
+          Continuing shared workspaces retain their business records with anonymised attribution.
+          Purchase references and minimal records needed to resolve billing disputes are retained
+          without your public profile. Provider backups expire under the provider’s normal retention
+          schedules.
         </p>
       </LegalSection>
 
@@ -71,6 +99,16 @@ export default function PrivacyPage() {
             support page
           </a>
           .
+        </p>
+      </LegalSection>
+      <LegalSection title="Delete your account">
+        <p>
+          Start an authenticated deletion request at{" "}
+          <a href="/delete-account" className="underline">
+            Delete your account
+          </a>{" "}
+          or from the mobile app. Export needed records and transfer or close owned workspaces
+          before confirming.
         </p>
       </LegalSection>
     </LegalPage>

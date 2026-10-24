@@ -1,0 +1,19 @@
+appId: au.com.soletrade.business
+name: Native tabs, business search and device settings
+---
+- runFlow: 01-auth.yaml
+- tapOn: Sales
+- assertVisible: Good relationships. Clear proposals. Paid invoices.
+- tapOn: Money
+- scrollUntilVisible:
+    element:
+      text: Transactions.*
+    direction: DOWN
+- tapOn: Drive
+- assertVisible: Start or review shift
+- tapOn: More
+- tapOn: Search
+- assertVisible: Search customers, invoices, quotes and more
+- back
+- tapOn: Device and privacy
+- assertVisible: Device & privacy

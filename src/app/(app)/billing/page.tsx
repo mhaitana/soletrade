@@ -6,6 +6,7 @@ import { MODULES } from "@/shared/constants/modules";
 import { brand } from "@/config/brand";
 import { formatCents } from "@/platform/billing";
 import { loadBillingOverview } from "./actions";
+import { PendingCheckoutActions } from "./pending-checkout-actions";
 import { BillingStartCard } from "./billing-start-card";
 import { BillingManageActions } from "./billing-manage-actions";
 import { parseSignupIntent } from "@/platform/billing/signup-intent";
@@ -40,6 +41,82 @@ export default async function BillingPage({
   }>;
 }) {
   const data = await loadBillingOverview();
+  if (data.pendingCheckout)
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
+        <Card>
+          <CardHeader>
+            <CardTitle>Web checkout pending</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <p>
+              A web checkout is open for this workspace. Finish that checkout or cancel it before
+              purchasing through another provider.
+            </p>
+            {data.paidThrough ? (
+              <p className="text-muted-foreground">
+                This checkout expires at {new Date(data.paidThrough).toLocaleString()}.
+              </p>
+            ) : null}
+            {data.canManage ? <PendingCheckoutActions /> : null}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  if (data.provider === "apple" || data.provider === "google") {
+    const name = data.provider === "apple" ? "Apple App Store" : "Google Play";
+    const manageUrl =
+      data.provider === "apple"
+        ? "https://apps.apple.com/account/subscriptions"
+        : "https://play.google.com/store/account/subscriptions";
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
+          <p className="text-sm text-muted-foreground">
+            Your subscription is managed through {name}.
+          </p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardDescription>Billing provider</CardDescription>
+            <CardTitle>
+              {name}{" "}
+              <Badge variant="secondary" className="capitalize">
+                {data.status}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <p>
+              {data.paidThrough
+                ? `Paid coverage through ${new Date(data.paidThrough).toLocaleDateString()}.`
+                : "Check your subscription in the store for coverage details."}
+            </p>
+            <p>
+              Manage your module bundle, renewal, cancellation and refund requests with the store
+              account used to purchase this subscription. Store payments do not create Soletrade
+              credit.
+            </p>
+            <Button asChild>
+              <a href={manageUrl}>Manage in {name}</a>
+            </Button>
+            <p className="text-muted-foreground">
+              Installed modules:{" "}
+              {data.installedModules.map((key) => MODULES[key].name).join(", ") || "None"}.
+            </p>
+          </CardContent>
+        </Card>
+        {!data.hasActiveBilling && data.canManage ? <BillingStartCard /> : null}
+        {!data.hasActiveBilling ? (
+          <p className="text-sm text-muted-foreground">
+            Store coverage has ended. You can renew through {name} or start web billing.
+          </p>
+        ) : null}
+      </div>
+    );
+  }
   const sp = await searchParams;
   const hasSetupIntent = Boolean(sp.modules || sp.interval || sp.promo || sp.coupon);
   const setupIntent = hasSetupIntent ? parseSignupIntent(sp) : undefined;

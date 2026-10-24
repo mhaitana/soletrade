@@ -1,6 +1,14 @@
 "use server";
 
 import { z } from "zod";
+import {
+  assertStripeAuthority,
+  getBillingAuthority,
+  isStoreAuthority,
+  hasStoreCoverage,
+  BillingProviderError,
+  type BillingProvider,
+} from "@/platform/billing/authority";
 import { revalidatePath } from "next/cache";
 import { requireWorkspaceContext } from "@/platform/context";
 import { authorize } from "@/platform/permissions";
@@ -22,7 +30,7 @@ import { getSubscription } from "@/platform/billing/subscriptions";
 import { MODULE_KEYS, type ModuleKey } from "@/shared/constants/modules";
 import type { BillingInterval } from "@/server/db/enums";
 import { env } from "@/shared/lib/env";
-import { createCheckoutSession } from "@/server/stripe/stripe-lifecycle";
+import { createCheckoutSession, cancelPendingCheckout } from "@/server/stripe/stripe-lifecycle";
 import { moduleRefundCents } from "@/platform/billing/pricing";
 import { resolveCheckoutPromotion } from "@/platform/billing/promotions";
 import {
@@ -32,6 +40,9 @@ import {
 } from "@/platform/billing/signup-intent";
 
 export interface BillingOverviewData {
+  provider: BillingProvider | null;
+  pendingCheckout: boolean;
+  paidThrough: string | null;
   /** null = billing not started yet (no Stripe subscription on the row). */
   billingInterval: BillingInterval | null;
   /** true when a Stripe subscription exists and the row is active. */
@@ -65,10 +76,14 @@ export async function loadBillingOverview(): Promise<BillingOverviewData> {
     throw new Error("You don't have permission to view billing.");
   }
 
-  const subscription = await ensureSubscription(ctx.workspaceId);
+  const [subscription, authority] = await Promise.all([
+    ensureSubscription(ctx.workspaceId),
+    getBillingAuthority(ctx.workspaceId),
+  ]);
+  const storeManaged = isStoreAuthority(authority);
   const [balanceCents, recentLedger, installedModules] = await Promise.all([
-    getCreditBalance(ctx.workspaceId),
-    listCreditLedger(ctx.workspaceId, { limit: 10 }),
+    storeManaged ? 0 : getCreditBalance(ctx.workspaceId),
+    storeManaged ? [] : listCreditLedger(ctx.workspaceId, { limit: 10 }),
     getInstalledModules(ctx.workspaceId),
   ]);
   const displayInterval: BillingInterval = subscription.billingInterval ?? "monthly";
@@ -77,9 +92,21 @@ export async function loadBillingOverview(): Promise<BillingOverviewData> {
     subscription.stripeSubscriptionId != null && subscription.status === "active";
 
   return {
-    billingInterval: subscription.billingInterval,
-    hasActiveBilling,
-    status: subscription.status,
+    pendingCheckout:
+      authority?.provider === "stripe" &&
+      authority.status === "incomplete" &&
+      authority.external_id.startsWith("checkout:"),
+    provider: (authority?.provider ??
+      (subscription.stripeSubscriptionId ? "stripe" : null)) as BillingProvider | null,
+    paidThrough: authority
+      ? ([authority.paid_through, authority.grace_until]
+          .filter((v): v is string => Boolean(v))
+          .sort()
+          .at(-1) ?? null)
+      : null,
+    billingInterval: storeManaged ? null : subscription.billingInterval,
+    hasActiveBilling: storeManaged ? hasStoreCoverage(authority) : hasActiveBilling,
+    status: authority?.status ?? subscription.status,
     anchorBillingDate: subscription.anchorBillingDate,
     balanceCents,
     currency: currentPricing.currency,
@@ -119,6 +146,7 @@ export async function startBillingCheckoutAction(
   }
   const appUrl = env.NEXT_PUBLIC_APP_URL;
   try {
+    await assertStripeAuthority(ctx.workspaceId, undefined, { allowExpiredStore: true });
     const promotionCode = normalizePromotionCode(parsed.data.promotionCode);
     const promotion = promotionCode
       ? ((await resolveCheckoutPromotion(promotionCode, {
@@ -170,6 +198,9 @@ export async function previewCancelSubscriptionAction(): Promise<CancelSubscript
   if (!(await authorizeOrAudit(ctx, "manage:billing")).ok) {
     return { ok: false, error: "You don't have permission to manage billing." };
   }
+  const authority = await getBillingAuthority(ctx.workspaceId);
+  if (isStoreAuthority(authority))
+    return { ok: false, error: new BillingProviderError(authority.provider).message };
   const sub = await getSubscription(ctx.workspaceId);
   if (!sub || !sub.stripeSubscriptionId || sub.status !== "active") {
     return { ok: false, error: "Billing has not started." };
@@ -208,6 +239,7 @@ export async function cancelSubscriptionAction(input: unknown): Promise<CancelSu
     return { ok: false, error: "Invalid cancellation option." };
   }
   try {
+    await assertStripeAuthority(ctx.workspaceId);
     const sub = await getSubscription(ctx.workspaceId);
     if (!sub || !sub.billingInterval || !sub.anchorBillingDate) {
       return { ok: false, error: "Billing has not started." };
@@ -255,6 +287,7 @@ export async function switchBillingIntervalAction(input: unknown): Promise<Switc
     return { ok: false, error: "Invalid interval." };
   }
   try {
+    await assertStripeAuthority(ctx.workspaceId);
     await switchBillingInterval(ctx.workspaceId, parsed.data, ctx.user.id);
     revalidatePath("/billing");
     return { ok: true, interval: parsed.data };
@@ -263,5 +296,23 @@ export async function switchBillingIntervalAction(input: unknown): Promise<Switc
       return { ok: false, error: "Billing has not started." };
     }
     return { ok: false, error: err instanceof Error ? err.message : "Failed to switch interval." };
+  }
+}
+
+export async function cancelPendingCheckoutAction(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const ctx = await requireWorkspaceContext();
+  if (!(await authorizeOrAudit(ctx, "manage:billing")).ok)
+    return { ok: false, error: "You do not have permission to manage billing." };
+  try {
+    await cancelPendingCheckout(ctx.workspaceId);
+    revalidatePath("/billing");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to cancel pending checkout.",
+    };
   }
 }

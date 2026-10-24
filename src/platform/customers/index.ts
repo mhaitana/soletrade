@@ -73,12 +73,14 @@ export async function createCustomer(
   workspaceId: WorkspaceId,
   input: CustomerInput,
   actorId: UserId,
+  deterministicId?: CustomerId,
 ): Promise<CustomerId> {
   const supabase = getDataClient();
   const rows = await unwrap(
     supabase
       .from("customers")
       .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
         workspace_id: workspaceId,
         name: input.name.trim(),
         email: normalizeEmail(input.email) ?? null,
@@ -105,7 +107,7 @@ export async function createCustomer(
 /** List active customers for a workspace, optionally filtered by a search term. */
 export async function listCustomers(
   workspaceId: WorkspaceId,
-  opts?: { search?: string; limit?: number },
+  opts?: { search?: string; offset?: number; limit?: number },
 ): Promise<CustomerRow[]> {
   const supabase = getDataClient();
   const limit = Math.min(opts?.limit ?? 100, 200);
@@ -122,7 +124,12 @@ export async function listCustomers(
     const term = pgQuote(`%${search}%`);
     query = query.or(`name.ilike.${term},email.ilike.${term},company.ilike.${term}`);
   }
-  const rows = await unwrap(query.order("created_at", { ascending: false }).limit(limit));
+  const rows = await unwrap(
+    query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(Math.max(0, opts?.offset ?? 0), Math.max(0, opts?.offset ?? 0) + limit - 1),
+  );
   return rows.map(toCustomerRow);
 }
 
@@ -181,6 +188,7 @@ export async function updateCustomer(
   customerId: CustomerId,
   patch: CustomerPatch,
   actorId: UserId,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   const supabase = getDataClient();
   // Explicit column-keyed shape (not a loose Record<string, unknown>) so the typed
@@ -188,12 +196,16 @@ export async function updateCustomer(
   // index signature. `updated_at` is always set; the rest are conditional on the patch.
   const set: {
     updated_at: string;
+    mobile_expected_updated_at?: string;
     name?: string;
     email?: string | null;
     phone?: string | null;
     company?: string | null;
     notes?: string | null;
-  } = { updated_at: new Date().toISOString() };
+  } = {
+    updated_at: new Date().toISOString(),
+    ...(expectedUpdatedAt !== undefined ? { mobile_expected_updated_at: expectedUpdatedAt } : {}),
+  };
   if (patch.name !== undefined) set.name = patch.name.trim();
   if (patch.email !== undefined) set.email = normalizeEmail(patch.email) ?? null;
   if (patch.phone !== undefined) set.phone = cleanOptional(patch.phone);

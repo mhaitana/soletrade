@@ -4,6 +4,9 @@
   "private": true,
   "description": "Soletrade - one workspace to run your business.",
   "scripts": {
+    "mobile:dev": "pnpm --filter @soletrade/mobile start",
+    "mobile:type-check": "pnpm --filter @soletrade/mobile type-check",
+    "mobile:test": "pnpm --filter @soletrade/mobile test --runInBand",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -34,6 +37,8 @@
     "@ai-sdk/anthropic": "^4.0.8",
     "@ai-sdk/openai": "^4.0.7",
     "@ai-sdk/react": "^4.0.16",
+    "@apple/app-store-server-library": "^3.1.0",
+    "@soletrade/contracts": "workspace:*",
     "@radix-ui/react-slot": "^1.3.0",
     "@react-pdf/renderer": "^4.5.1",
     "@stripe/react-stripe-js": "^6.7.0",
@@ -47,6 +52,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "google-auth-library": "^11.3.1",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
     "next-themes": "^0.4.6",
@@ -63,6 +69,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
     "@next/env": "^16.2.10",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
@@ -70,7 +77,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
-    "@types/react": "^19",
+    "@types/react": "^19.3.0",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^9",

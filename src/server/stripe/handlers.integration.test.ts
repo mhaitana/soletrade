@@ -195,6 +195,10 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
       amount_paid: 2250,
       currency: "aud",
       customer: `cus_test_${ws}`,
+      parent: {
+        type: "subscription_details",
+        subscription_details: { subscription: `sub_test_${ws}` },
+      },
     });
     await handleStripeEvent(event);
 
@@ -228,6 +232,10 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
       amount_paid: 2250,
       currency: "aud",
       customer: `cus_test_${ws}`,
+      parent: {
+        type: "subscription_details",
+        subscription_details: { subscription: `sub_test_${ws}` },
+      },
     });
     await handleStripeEvent(event);
 
@@ -252,6 +260,10 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
         amount_paid: 3000,
         currency: "aud",
         customer: `cus_test_${ws}`,
+        parent: {
+          type: "subscription_details",
+          subscription_details: { subscription: `sub_test_${ws}` },
+        },
       }),
     );
     // Second delivery: different event id, SAME invoice id - must NOT double-grant.
@@ -261,6 +273,10 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
         amount_paid: 3000,
         currency: "aud",
         customer: `cus_test_${ws}`,
+        parent: {
+          type: "subscription_details",
+          subscription_details: { subscription: `sub_test_${ws}` },
+        },
       }),
     );
 

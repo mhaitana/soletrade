@@ -127,7 +127,12 @@ async function reconcileCheckoutSession(session: Stripe.Checkout.Session): Promi
     if (!mapping) continue; // unrelated price - skip defensively
     items.push({ moduleKey: mapping.moduleKey, role: mapping.role, itemId: si.id });
   }
-  await reconcileFromCheckoutSession(session, { interval, items });
+  const applied = await reconcileFromCheckoutSession(session, {
+    interval,
+    items,
+    subscription: sub,
+  });
+  if (!applied) return;
 
   const promotionId = session.metadata?.promotionId;
   const workspaceId = session.client_reference_id;

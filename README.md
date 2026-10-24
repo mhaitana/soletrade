@@ -13,28 +13,43 @@ workspaces, billing, customers, files, activity, AI, permissions, and settings.
 ## Stack
 
 - **Framework:** Next.js 16 (App Router) · React 19
+- **Native:** Expo SDK 58 · React Native · Expo Router (iOS and Android)
 - **Language:** TypeScript (strict + `noUncheckedIndexedAccess`)
 - **Styling:** Tailwind CSS v4 · shadcn/ui (new-york · Radix)
 - **Data:** Supabase JS client (PostgREST) · PostgreSQL (Supabase) · Supabase CLI migrations
 - **Auth:** Supabase Auth
-- **Billing:** Stripe Billing (subscriptions, credit ledger)
+- **Billing:** Stripe Billing · verified App Store/Google Play contracts
 - **Email/SMS:** Resend · Twilio (optional)
-- **Tests:** Vitest · Testing Library · Playwright (later)
+- **Tests:** Vitest · Testing Library · Jest · Playwright · native Maestro journeys
 - **Package manager:** pnpm
+
+## Mobile app
+
+The native client lives in [`apps/mobile`](apps/mobile/README.md) and uses the
+Next.js `/api/v1` backend. Shared platform-safe contracts and calculations live in
+`packages/contracts`. Use a native development build for device integrations.
+
+See the [implementation and verification record](docs/mobile/IMPLEMENTATION.md)
+and [backend setup/release gates](docs/mobile/RELEASE.md) before enabling store
+purchases or running a release. Production migrations, signing, physical-device
+acceptance and store submissions are separate release steps.
 
 ## Getting started
 
 ```bash
 pnpm install
+cp .env.example .env.local
 pnpm db:start          # start local Supabase (Docker) - first run pulls images
-pnpm db:reset          # apply all Supabase migrations to the local Postgres
-pnpm dev               # http://localhost:3000
+pnpm db:reset          # fresh disposable DB only: wipe, migrate and seed
+supabase status       # copy local connection values into .env.local manually
+pnpm dev              # http://localhost:3000
 ```
 
-This drops a `.env.local` with the local Supabase connection values (see
-`supabase status` to refresh them after a `db:stop`/`db:start`). The app boots
-with defaults even without secrets - modules assert their own required secrets
-at their boundaries.
+Set `.env.local` manually from the values shown by `supabase status`; starting
+Supabase does not create this file. Configure the public Supabase URL and anon key,
+the server-only service-role key, and `DATABASE_URL` for database integration tests.
+Keep these local values in the ignored environment file. Modules assert their own
+required provider secrets at their boundaries.
 
 ### Local database & integration tests
 
@@ -42,12 +57,16 @@ The project ships a local Supabase stack for development and for the
 `DATABASE_URL`-gated integration tests (customers, activity). Workflow:
 
 ```bash
-pnpm db:start          # supabase start - Postgres + Auth + Studio on 54321–54323
+pnpm db:start          # supabase start - API 56421, Postgres 56422, Studio 56423
 pnpm db:reset          # wipe + recreate local DB, then re-apply supabase/migrations
 pnpm db:types          # regenerate src/server/db/types.ts from the local schema
 pnpm test:ci           # runs unit + integration tests against the local DB
 pnpm db:stop           # stop the local stack (data persists in Docker volumes)
 ```
+
+The dedicated local ports are API/Auth **56421**, Postgres **56422**, Studio
+**56423**, and the development email inbox **56424**. Existing Docker data persists
+across stop/start; use `db:reset` only when intentionally recreating local data.
 
 Integration tests auto-skip when `DATABASE_URL` is unset, so `pnpm test:ci`
 stays green in environments without a DB (e.g. CI smoke checks). With the local

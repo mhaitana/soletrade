@@ -25,4 +25,7 @@ jobs:
       - run: pnpm type-check
       - run: pnpm lint
       - run: pnpm test:ci
+      - run: pnpm mobile:type-check
+      - run: pnpm --filter @soletrade/mobile lint
+      - run: pnpm mobile:test
       - run: pnpm format:check

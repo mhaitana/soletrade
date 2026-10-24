@@ -41,7 +41,10 @@ const voidInvoiceMock = vi.fn();
 const markInvoicePaidMock = vi.fn();
 const getInvoiceMock = vi.fn();
 const getQuoteMock = vi.fn();
-const markQuoteConvertedMock = vi.fn();
+const convertQuoteAtomicMock = vi.fn();
+vi.mock("@/app/_lib/quote-conversion", () => ({
+  convertQuoteToInvoice: (...a: unknown[]) => convertQuoteAtomicMock(...a),
+}));
 // Books update/delete mocks.
 const updateTransactionMock = vi.fn();
 const deleteTransactionMock = vi.fn();
@@ -65,7 +68,6 @@ vi.mock("@/modules/quotes", () => ({
   summarizeQuotes: (...a: unknown[]) => summarizeQuotesMock(...a),
   createQuote: (...a: unknown[]) => createQuoteMock(...a),
   getQuote: (...a: unknown[]) => getQuoteMock(...a),
-  markQuoteConverted: (...a: unknown[]) => markQuoteConvertedMock(...a),
 }));
 vi.mock("@/modules/books", () => ({
   listTransactions: (...a: unknown[]) => listTransactionsMock(...a),
@@ -1194,7 +1196,7 @@ describe("buildAssistantTools - write tools", () => {
     expect(markInvoicePaidMock).toHaveBeenCalledWith(c.workspaceId, "inv-7", c.user.id);
   });
 
-  it("convertQuoteToInvoice creates an invoice from the accepted quote's line items and marks it converted", async () => {
+  it("convertQuoteToInvoice delegates canonical amounts and creation to the shared atomic operation", async () => {
     // resolveQuoteByNumber reuses listQuotes search then exact-matches.
     listQuotesMock.mockResolvedValue([
       { id: "quo-3", number: "QUO-2026-0003", status: "accepted" },
@@ -1213,7 +1215,7 @@ describe("buildAssistantTools - write tools", () => {
     });
     createInvoiceMock.mockResolvedValue("inv-new-id");
     getInvoiceMock.mockResolvedValue({ id: "inv-new-id", number: "INV-2026-0008" });
-    markQuoteConvertedMock.mockResolvedValue(true);
+    convertQuoteAtomicMock.mockResolvedValue("inv-new-id");
     const { buildAssistantTools } = await import("./tools");
     const c = ctx("owner");
     const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
@@ -1222,19 +1224,34 @@ describe("buildAssistantTools - write tools", () => {
       invoiceNumber: string;
     };
     expect(out).toEqual({ invoiceId: "inv-new-id", invoiceNumber: "INV-2026-0008" });
-    // createInvoice received the quote's customer + line items.
-    const [, invInput] = createInvoiceMock.mock.calls[0]!;
-    expect(invInput).toMatchObject({ customerId: "cust-amos", currency: "AUD", taxRate: 10 });
-    expect(invInput.lineItems).toHaveLength(2);
-    expect(invInput.issueDate).toBeInstanceOf(Date);
-    // markQuoteConverted received the new invoice id + number.
-    expect(markQuoteConvertedMock).toHaveBeenCalledWith(
-      c.workspaceId,
-      "quo-3",
-      "inv-new-id",
-      "INV-2026-0008",
-      c.user.id,
-    );
+    expect(convertQuoteAtomicMock).toHaveBeenCalledWith(c, "quo-3");
+    expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("convertQuoteToInvoice reconciles an already-converted quote through the same operation", async () => {
+    listQuotesMock.mockResolvedValue([
+      { id: "quo-3", number: "QUO-2026-0003", status: "converted" },
+    ]);
+    getQuoteMock.mockResolvedValue({
+      id: "quo-3",
+      status: "converted",
+      convertedInvoiceId: "inv-original",
+    });
+    convertQuoteAtomicMock.mockResolvedValue("inv-original");
+    getInvoiceMock.mockResolvedValue({ id: "inv-original", number: "INV-2026-0008" });
+    const { buildAssistantTools } = await import("./tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const input = { quoteNumber: "QUO-2026-0003" };
+    expect(await run(tools.convertQuoteToInvoice, input)).toEqual({
+      invoiceId: "inv-original",
+      invoiceNumber: "INV-2026-0008",
+    });
+    expect(await run(tools.convertQuoteToInvoice, input)).toEqual({
+      invoiceId: "inv-original",
+      invoiceNumber: "INV-2026-0008",
+    });
+    expect(convertQuoteAtomicMock).toHaveBeenCalledTimes(2);
+    expect(createInvoiceMock).not.toHaveBeenCalled();
   });
 
   it("convertQuoteToInvoice returns a friendly error when the quote isn't accepted yet", async () => {
@@ -1257,7 +1274,7 @@ describe("buildAssistantTools - write tools", () => {
     expect(out.error).toMatch(/isn't accepted yet/);
     // No invoice created for a non-accepted quote.
     expect(createInvoiceMock).not.toHaveBeenCalled();
-    expect(markQuoteConvertedMock).not.toHaveBeenCalled();
+    expect(convertQuoteAtomicMock).not.toHaveBeenCalled();
   });
 
   it("convertQuoteToInvoice returns a friendly error when the quote number isn't found", async () => {

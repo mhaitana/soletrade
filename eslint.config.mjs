@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "coverage/**",
+    "apps/mobile/**",
     "src/shared/ui/**", // shadcn primitives - vendored, do not lint
   ]),
   {

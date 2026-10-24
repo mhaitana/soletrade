@@ -247,6 +247,7 @@ export async function createInvoice(
   workspaceId: WorkspaceId,
   input: InvoiceInput,
   actorId: UserId,
+  deterministicId?: InvoiceId,
 ): Promise<InvoiceId> {
   if (input.lineItems.length === 0) throw new Error("An invoice needs at least one line item.");
   await assertCustomerInWorkspace(workspaceId, input.customerId ?? null);
@@ -274,6 +275,7 @@ export async function createInvoice(
     attempts += 1;
     number = await nextInvoiceNumber(workspaceId, year, invoicePrefix);
     const { data, error } = await rpc(supabase, "create_invoice_with_lines", {
+      ...(deterministicId ? { p_id: deterministicId } : {}),
       p_workspace_id: workspaceId,
       p_customer_id: input.customerId ?? null,
       p_number: number,
@@ -346,6 +348,7 @@ export async function updateInvoice(
   invoiceId: InvoiceId,
   patch: InvoicePatch,
   actorId: UserId,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   if (patch.lineItems !== undefined && patch.lineItems.length === 0) {
     throw new Error("An invoice needs at least one line item.");
@@ -401,6 +404,7 @@ export async function updateInvoice(
   // jsonb_populate_record (untouched columns keep their existing value), then optionally
   // replaces the line items. updated_at is set by the RPC, so it's omitted here.
   const set: Record<string, unknown> = {};
+  if (expectedUpdatedAt !== undefined) set.mobile_expected_updated_at = expectedUpdatedAt;
   if (patch.customerId !== undefined) set.customer_id = patch.customerId ?? null;
   if (patch.issueDate !== undefined) set.issue_date = patch.issueDate.toISOString();
   if (patch.dueDate !== undefined)
@@ -460,6 +464,8 @@ export async function listInvoices(
   opts?: {
     status?: InvoiceStatus;
     search?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
     customerId?: CustomerId;
     limit?: number;
     offset?: number;
@@ -469,6 +475,8 @@ export async function listInvoices(
   const limit = Math.min(opts?.limit ?? 100, 200);
   const offset = normalizeListOffset(opts?.offset);
   let query = supabase.from("invoices").select(INVOICE_COLUMNS).eq("workspace_id", workspaceId);
+  if (opts?.dateFrom) query = query.gte("issue_date", opts.dateFrom.toISOString());
+  if (opts?.dateTo) query = query.lte("issue_date", opts.dateTo.toISOString());
   if (opts?.status) query = query.eq("status", opts.status);
   if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
   const search = opts?.search?.trim();

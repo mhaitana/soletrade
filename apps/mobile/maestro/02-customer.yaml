@@ -1,0 +1,24 @@
+appId: au.com.soletrade.business
+name: Save and reopen a customer through the durable creation path
+---
+- runFlow: 01-auth.yaml
+- evalScript: ${output.customerName = 'Mobile QA ' + Date.now()}
+- tapOn: Sales
+- tapOn:
+    text: Customers.*
+- tapOn: New customer
+- tapOn: Name \*
+- inputText: ${output.customerName}
+- tapOn: Email
+- inputText: mobile-qa@example.com
+- hideKeyboard
+- tapOn: Save
+- extendedWaitUntil:
+    visible: ${output.customerName}
+    timeout: 30000
+- tapOn:
+    text: ${output.customerName}.*
+- scrollUntilVisible:
+    element:
+      text: Timeline
+    direction: DOWN

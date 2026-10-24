@@ -19,8 +19,14 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/tests/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}", "scripts/**/*.{test,spec}.ts"],
-    exclude: ["node_modules", ".next"],
+    include: [
+      "src/**/*.{test,spec}.{ts,tsx}",
+      "scripts/**/*.{test,spec}.ts",
+      "packages/contracts/src/**/*.test.ts",
+      "apps/mobile/src/offline/**/*.test.ts",
+      "apps/mobile/src/native/**/*.test.ts",
+    ],
+    exclude: ["**/node_modules/**", ".next/**"],
     coverage: {
       reporter: ["text", "html"],
       include: ["src/platform/**/*.ts", "src/modules/**/*.ts", "src/shared/lib/**/*.ts"],

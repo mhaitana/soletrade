@@ -331,6 +331,7 @@ export async function createQuote(
   workspaceId: WorkspaceId,
   input: QuoteInput,
   actorId: UserId,
+  deterministicId?: QuoteId,
 ): Promise<QuoteId> {
   if (input.lineItems.length === 0) throw new Error("A quote needs at least one line item.");
   await assertCustomerInWorkspace(workspaceId, input.customerId ?? null);
@@ -357,6 +358,7 @@ export async function createQuote(
     attempts += 1;
     number = await nextQuoteNumber(workspaceId, year, quotePrefix);
     const { data, error } = await rpc(supabase, "create_quote_with_lines", {
+      ...(deterministicId ? { p_id: deterministicId } : {}),
       p_workspace_id: workspaceId,
       p_customer_id: input.customerId ?? null,
       p_number: number,
@@ -427,6 +429,7 @@ export async function updateQuote(
   quoteId: QuoteId,
   patch: QuotePatch,
   actorId: UserId,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   if (patch.lineItems !== undefined && patch.lineItems.length === 0) {
     throw new Error("A quote needs at least one line item.");
@@ -478,6 +481,7 @@ export async function updateQuote(
   // jsonb_populate_record, then optionally replaces line items + sections. Pass `[]` to
   // clear sections; omit (null) to keep them. updated_at is set by the RPC, so omitted.
   const set: Record<string, unknown> = {};
+  if (expectedUpdatedAt !== undefined) set.mobile_expected_updated_at = expectedUpdatedAt;
   if (patch.customerId !== undefined) set.customer_id = patch.customerId ?? null;
   if (patch.issueDate !== undefined) set.issue_date = patch.issueDate.toISOString();
   if (patch.validUntil !== undefined)
@@ -541,6 +545,8 @@ export async function listQuotes(
   opts?: {
     status?: QuoteStatus;
     search?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
     customerId?: CustomerId;
     limit?: number;
     offset?: number;
@@ -550,6 +556,8 @@ export async function listQuotes(
   const limit = Math.min(opts?.limit ?? 100, 200);
   const offset = normalizeListOffset(opts?.offset);
   let query = supabase.from("quotes").select(QUOTE_COLUMNS).eq("workspace_id", workspaceId);
+  if (opts?.dateFrom) query = query.gte("issue_date", opts.dateFrom.toISOString());
+  if (opts?.dateTo) query = query.lte("issue_date", opts.dateTo.toISOString());
   if (opts?.status) query = query.eq("status", opts.status);
   if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
   const search = opts?.search?.trim();

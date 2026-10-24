@@ -1,3 +1,12 @@
+vi.mock("@/platform/billing/authority", () => ({
+  assertStripeAuthority: vi.fn().mockResolvedValue(null),
+  reserveStripeCheckout: vi.fn().mockResolvedValue({
+    reservationId: "11111111-1111-4111-8111-111111111111",
+    expiresAt: 2000000000,
+  }),
+  releaseStripeCheckout: vi.fn(),
+  recordStripeCheckoutSession: vi.fn(),
+}));
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**

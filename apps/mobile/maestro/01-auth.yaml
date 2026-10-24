@@ -1,0 +1,19 @@
+appId: au.com.soletrade.business
+name: Password sign-in and workspace home
+---
+- launchApp:
+    clearState: true
+- assertVisible: Welcome back
+- tapOn: Email
+- inputText: ${EMAIL}
+- tapOn: Password
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn: Sign in
+- extendedWaitUntil:
+    visible: Overview period
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: Needs attention
+    direction: DOWN

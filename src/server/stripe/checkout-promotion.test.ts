@@ -1,3 +1,12 @@
+vi.mock("@/platform/billing/authority", () => ({
+  assertStripeAuthority: vi.fn().mockResolvedValue(null),
+  reserveStripeCheckout: vi.fn().mockResolvedValue({
+    reservationId: "11111111-1111-4111-8111-111111111111",
+    expiresAt: 2000000000,
+  }),
+  releaseStripeCheckout: vi.fn(),
+  recordStripeCheckoutSession: vi.fn(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { checkoutCreate } = vi.hoisted(() => ({
@@ -66,15 +75,17 @@ describe("linked checkout promotion", () => {
       expect.objectContaining({
         customer: "cus_existing",
         discounts: [{ promotion_code: "promo_stripe_1" }],
-        metadata: { promotionId: "promotion-1" },
+        metadata: { reservationId: expect.any(String), promotionId: "promotion-1" },
         subscription_data: {
           metadata: {
             workspaceId: "ws_test",
             interval: "monthly",
+            reservationId: expect.any(String),
             promotionId: "promotion-1",
           },
         },
       }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(checkoutCreate.mock.calls[0]?.[0]).not.toHaveProperty("allow_promotion_codes");
   });
@@ -90,6 +101,7 @@ describe("linked checkout promotion", () => {
 
     expect(checkoutCreate).toHaveBeenCalledWith(
       expect.objectContaining({ allow_promotion_codes: true }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(checkoutCreate.mock.calls[0]?.[0]).not.toHaveProperty("discounts");
   });

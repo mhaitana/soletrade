@@ -55,6 +55,8 @@ export interface CancellationInput {
   interval: Interval | null;
   anchorBillingDate: Date | null;
   now: Date;
+  provider?: "stripe" | "apple" | "google" | null;
+  paidThrough?: Date | null;
 }
 
 /**
@@ -88,6 +90,10 @@ export function getCancellationOptions(input: CancellationInput): CancellationPr
   // is the only active module.
   const leavesZero = moduleKey === undefined || activeModules.length <= 1;
   const branch: "continuous" | "offboarding" = leavesZero ? "offboarding" : "continuous";
+
+  if (input.provider === "apple" || input.provider === "google") {
+    return { branch, periodEnd: input.paidThrough ?? null, options: [] };
+  }
 
   // No active billing → only the keep option (= just disable locally, amount 0).
   if (!interval || !anchorBillingDate) {

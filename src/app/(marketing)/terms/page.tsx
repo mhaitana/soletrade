@@ -5,7 +5,7 @@ export const metadata = { title: "Terms" };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of service" lastUpdated="July 2026">
+    <LegalPage title="Terms of service" lastUpdated="25 October 2026">
       <LegalReviewNote />
 
       <LegalSection title="The service">
@@ -53,6 +53,27 @@ export default function TermsPage() {
           {brand.companyName} owns the service and its branding. You retain all rights to the
           content and documents you create. You grant us the limited right to process that content
           solely to provide the service to you.
+        </p>
+      </LegalSection>
+      <LegalSection title="Mobile subscriptions">
+        <p>
+          Subscriptions purchased through the App Store or Google Play are billed and managed by
+          that provider. The price and billing period shown in the store purchase sheet apply. Store
+          prices may differ from web prices. Renewals, changes, cancellations, refunds and
+          promotional offers follow the original purchase provider’s terms and displayed effective
+          dates.
+        </p>
+        <p>
+          Store purchases grant workspace access and do not create a monetary credit balance. Web
+          credits and Stripe promotions cannot pay for store renewals. A store subscription is
+          linked to one workspace and its original purchaser; access is shared through that
+          workspace’s membership permissions. Avoid purchasing a second subscription for an already
+          covered workspace.
+        </p>
+        <p>
+          The credit and prorated refund arrangements described above apply to eligible web
+          subscriptions. They do not promise an automatic refund of an App Store or Google Play
+          charge. Cancel store renewal with the provider even when requesting account deletion.
         </p>
       </LegalSection>
 

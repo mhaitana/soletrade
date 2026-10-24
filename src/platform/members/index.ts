@@ -59,14 +59,37 @@ export async function inviteMember(
   email: string,
   role: WorkspaceRole,
   inviterId: UserId,
+  deterministicId?: WorkspaceInvitationId,
 ): Promise<InvitationResult> {
   const supabase = getDataClient();
+  const recover = async (): Promise<InvitationResult | null> => {
+    if (!deterministicId) return null;
+    const row = await unwrapMaybe(
+      supabase
+        .from("workspace_invitations")
+        .select("id,token,expires_at")
+        .eq("id", deterministicId)
+        .eq("workspace_id", workspaceId)
+        .eq("invited_by_user_id", inviterId)
+        .maybeSingle(),
+    );
+    return row
+      ? {
+          invitationId: branded<"WorkspaceInvitationId">(row.id),
+          token: row.token,
+          expiresAt: parsePgTimestamp(row.expires_at),
+        }
+      : null;
+  };
+  const existing = await recover();
+  if (existing) return existing;
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
   const rows = await unwrap(
     supabase
       .from("workspace_invitations")
       .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
         workspace_id: workspaceId,
         email: email.toLowerCase(),
         role,
@@ -76,9 +99,17 @@ export async function inviteMember(
         expires_at: expiresAt.toISOString(),
       })
       .select("id"),
-  );
+  ).catch(async (error) => {
+    const existing = await recover();
+    if (existing) return [{ id: existing.invitationId }];
+    throw error;
+  });
   const row = rows[0];
   if (!row) throw new Error("Failed to create invitation");
+  if (deterministicId && row.id === deterministicId) {
+    const actual = await recover();
+    if (actual && actual.token !== token) return actual;
+  }
   await publishEvent({
     type: "MemberInvited",
     workspaceId,

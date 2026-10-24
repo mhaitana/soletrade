@@ -268,6 +268,7 @@ export async function createTransaction(
   workspaceId: WorkspaceId,
   input: TransactionInput,
   actorId?: UserId,
+  deterministicId?: BookTransactionId,
 ): Promise<BookTransactionId> {
   if (input.amountCents <= 0) throw new Error("Amount must be greater than 0.");
   assertCategoryForType(input.type, input.category);
@@ -284,6 +285,7 @@ export async function createTransaction(
     supabase
       .from("book_transactions")
       .insert({
+        ...(deterministicId ? { id: deterministicId } : {}),
         workspace_id: workspaceId,
         type: input.type,
         amount_cents: input.amountCents,
@@ -364,6 +366,7 @@ export async function updateTransaction(
   patch: TransactionPatch,
   actorId?: UserId,
   opts?: SourceSyncOptions,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
   await assertTransactionIsEditable(workspaceId, txId, opts);
   if (patch.type !== undefined && patch.category !== undefined) {
@@ -400,6 +403,7 @@ export async function updateTransaction(
   // matching the original Drizzle update set.
   const set: {
     updated_at: string;
+    mobile_expected_updated_at?: string;
     type?: BookType;
     amount_cents?: number;
     gst_cents?: number;
@@ -410,7 +414,10 @@ export async function updateTransaction(
     customer_id?: CustomerId | null;
     notes?: string | null;
     receipt_file_id?: FileId | null;
-  } = { updated_at: new Date().toISOString() };
+  } = {
+    updated_at: new Date().toISOString(),
+    ...(expectedUpdatedAt !== undefined ? { mobile_expected_updated_at: expectedUpdatedAt } : {}),
+  };
   if (patch.type !== undefined) set.type = patch.type;
   if (patch.amountCents !== undefined) set.amount_cents = patch.amountCents;
   if (patch.gstCents !== undefined) set.gst_cents = patch.gstCents;
@@ -495,12 +502,14 @@ export async function listTransactions(
   workspaceId: WorkspaceId,
   opts?: {
     type?: BookType;
+    category?: string;
     search?: string;
     customerId?: CustomerId;
     /** Inclusive lower bound on `date` (transaction date). */
     dateFrom?: Date;
     /** Inclusive upper bound on `date`. */
     dateTo?: Date;
+    offset?: number;
     limit?: number;
   },
 ): Promise<TransactionRow[]> {
@@ -512,6 +521,7 @@ export async function listTransactions(
     .from("book_transactions")
     .select(TRANSACTION_COLUMNS)
     .eq("workspace_id", workspaceId);
+  if (opts?.category) query = query.eq("category", opts.category);
   if (opts?.type) query = query.eq("type", opts.type);
   if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
   // `date` is `timestamp without time zone`; pass ISO-with-Z (UTC) for the bounds -
@@ -549,7 +559,8 @@ export async function listTransactions(
     query
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(limit),
+      .order("id", { ascending: false })
+      .range(Math.max(0, opts?.offset ?? 0), Math.max(0, opts?.offset ?? 0) + limit - 1),
   );
   return rows.map((r) => toTransactionRow(r as TransactionRaw));
 }

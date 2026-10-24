@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { tryWorkspaceContext } from "@/platform/context";
+import { requireMobileContext } from "@/platform/mobile/http";
 import { getInstalledModules } from "@/platform/module-installations";
 import {
   appendMessage,
@@ -114,7 +115,9 @@ function toUIMessages(messages: { role: "user" | "assistant"; content: string }[
 
 export async function POST(request: Request): Promise<Response> {
   // 1. Resolve context without redirecting (route handlers can't redirect).
-  const ctx = await tryWorkspaceContext();
+  const ctx = request.headers.has("authorization")
+    ? await requireMobileContext(request, request.headers.get("x-workspace-id") ?? "")
+    : await tryWorkspaceContext();
   if (!ctx) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
