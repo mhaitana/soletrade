@@ -11,7 +11,7 @@ describe("brand config", () => {
     expect(brand.productName).toBe("Soletrade");
   });
 
-  it("exposes the visual wordmark for the logo/email/PDF lockup", () => {
+  it("retains the parent wordmark for existing email/PDF headers", () => {
     expect(brand.wordmark).toBe("soletrade");
   });
 

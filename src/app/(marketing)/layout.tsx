@@ -9,8 +9,11 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
-        <div className="hidden min-[360px]:block">
+        <div className="hidden sm:block">
           <Logo />
+        </div>
+        <div className="hidden min-[360px]:block sm:hidden">
+          <Logo variant="compact" />
         </div>
         <div className="min-[360px]:hidden">
           <Logo variant="mark" />

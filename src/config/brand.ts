@@ -16,11 +16,11 @@
  * issuer on merchant documents). Product-facing surfaces use `productName`; merchant document
  * fallbacks use `productName`, never `companyName`.
  *
- * `productName` ("Soletrade") is the prose product name - metadata titles, email body,
- * Stripe product names, the hero/legal eyebrow, "Powered by" footers. `wordmark` ("soletrade")
- * is the **visual logo lockup** - the `Logo` full variant and the email/PDF brand headers render
- * this, not the product name. `shortProductName` ("Business") is the in-app compact label and
- * the manifest short_name.
+ * `productName` ("Soletrade") names the product in UI lockups, metadata, email copy,
+ * Stripe products and "Powered by" footers. The shared `Logo` pairs the HB mark with this
+ * name or `shortProductName` ("Business") for compact app surfaces. `wordmark` ("soletrade")
+ * remains the parent wordmark used by existing email/PDF headers. The manifest also uses
+ * `shortProductName` as its short_name.
  */
 export const brand = {
   companyName: "Matt Haitana",

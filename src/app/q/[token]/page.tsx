@@ -55,7 +55,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
     <div className="min-h-dvh bg-[#F8FAFC] text-foreground">
       <div className="mx-auto max-w-md px-4 py-6 sm:py-10">
         {/* Top bar: issuing business dominant (left), status badge right. Soletrade stays subtle
-            (the `h` mark only) so it doesn't compete with the merchant's brand. */}
+            (the HB mark only) so it doesn't compete with the merchant's brand. */}
         <header className="mb-6 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <Logo variant="mark" href={null} className="shrink-0" />

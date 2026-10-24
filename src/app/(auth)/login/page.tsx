@@ -15,7 +15,7 @@ export default async function LoginPage({
   return (
     <div className="mx-auto max-w-sm rounded-lg border border-border bg-card p-8">
       <div className="flex flex-col items-center text-center">
-        <Logo href={null} />
+        <Logo href={null} className="text-lg" />
         <h1 className="mt-6 text-xl font-semibold">Sign in to your workspace</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Enter your credentials, or use a magic link.

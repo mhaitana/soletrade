@@ -2,18 +2,26 @@ import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import { Logo } from "@/shared/components/logo";
 import { brand } from "@/config/brand";
+import { pwaBrand } from "@/config/pwa";
 
 /**
- * The Logo lockup is context-aware: `full` shows the `soletrade` wordmark on external
- * surfaces, `compact` shows the short `Business` label in-app, and `mark` shows only the `h`
- * on public invoice/quote pages where the issuing merchant is the dominant brand. The prose
- * product name (`Soletrade`) is never rendered by the Logo.
+ * Product lockups share the installed app's HB artwork. Full labels name the product,
+ * compact labels fit the app shell, and mark-only links remain accessible.
  */
 describe("Logo", () => {
-  it("renders the wordmark in the `full` variant", () => {
-    const { getByText } = render(<Logo variant="full" href={null} />);
-    expect(getByText(brand.wordmark)).toBeTruthy();
-    expect(getByText("soletrade")).toBeTruthy();
+  it("renders the product name in the `full` variant", () => {
+    const { getByText, queryByText } = render(<Logo variant="full" href={null} />);
+    expect(getByText("Soletrade")).toBeTruthy();
+    expect(queryByText("soletrade")).toBeNull();
+  });
+
+  it("uses the installed app's HB artwork with reserved image dimensions", () => {
+    const { container } = render(<Logo variant="full" href={null} />);
+    const image = container.querySelector("img");
+    expect(image).toHaveAttribute("src", pwaBrand.icons.standard192);
+    expect(image).toHaveAttribute("width", "32");
+    expect(image).toHaveAttribute("height", "32");
+    expect(image).toHaveAttribute("alt", "");
   });
 
   it("renders the short product label in the `compact` variant", () => {
@@ -21,17 +29,16 @@ describe("Logo", () => {
     expect(getByText(brand.shortProductName)).toBeTruthy();
   });
 
-  it("renders only the `h` mark in the `mark` variant (no wordmark)", () => {
-    const { queryByText, container } = render(<Logo variant="mark" href={null} />);
-    expect(queryByText(brand.wordmark)).toBeNull();
+  it("gives a mark-only link an accessible product name", () => {
+    const { getByRole, queryByText } = render(<Logo variant="mark" href="/dashboard" />);
+    expect(getByRole("link", { name: "Soletrade" })).toHaveAttribute("href", "/dashboard");
+    expect(queryByText(brand.productName)).toBeNull();
     expect(queryByText(brand.shortProductName)).toBeNull();
-    // No wordmark - just the mark.
-    expect(container.textContent).toContain("h");
   });
 
   it("defaults to the `full` variant", () => {
     const { getByText } = render(<Logo href={null} />);
-    expect(getByText(brand.wordmark)).toBeTruthy();
+    expect(getByText(brand.productName)).toBeTruthy();
   });
 
   it("wraps the lockup in a link when href is provided", () => {

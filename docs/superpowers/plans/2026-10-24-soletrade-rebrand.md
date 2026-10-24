@@ -96,3 +96,9 @@ The deployed source came from an isolated copy of the reviewed, uncommitted work
 - Remote production `NEXT_PUBLIC_APP_URL` was already `https://business.soletrade.example`, `EMAIL_FROM` remained `support@soletrade.example`, and `RESEND_API_KEY` was present without reading its value. The deployed Resend client formats the sender as `Soletrade <support@soletrade.example>`.
 - No runtime error or fatal logs were returned for this deployment in the 15-minute lookback at verification. The log-drains endpoint returned 404, so drain status was unavailable.
 - No emails were sent, migrations run or environment values changed during this deployment.
+
+## Subsequent HB application lockup
+
+The owner subsequently requested the HB branding for the in-app logo and account screens. This supersedes the earlier decision to retain the parent wordmark in full shared UI logos: the shared `Logo` now pairs the installed app's HB artwork with `Soletrade`, or `Business` in compact layouts. Mark-only document branding stays visually secondary to the merchant.
+
+Matt Haitana remains the parent company in publisher metadata and copyright, including a visible copyright line on login and signup. The existing `brand.wordmark` value remains `soletrade` for email/PDF headers. The mobile marketing header uses the compact product lockup to accommodate the longer full name.

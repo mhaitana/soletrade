@@ -1,19 +1,15 @@
 import Link from "next/link";
+import Image from "next/image";
 import { cn } from "@/shared/lib/utils";
 import { brand } from "@/config/brand";
+import { pwaBrand } from "@/config/pwa";
 
 /**
- * Product brand lockup: the `h` mark + wordmark.
+ * Product lockup using the same HB artwork as the installed app.
  *
- * `variant` controls what renders alongside the `h` mark:
- *  - `full`    - `soletrade` wordmark (external: marketing, auth, onboarding, error/not-found, invite)
- *  - `compact` - `Business` short label (in-app sidebar/mobile sheet, where the mark is already visible)
- *  - `mark`    - `h` mark only        (public invoice/quote pages, where the issuing merchant is the
- *               dominant brand and Soletrade must stay subtle/secondary)
- *
- * The full lockup uses `brand.wordmark` (`soletrade`); the compact label uses
- * `brand.shortProductName` (`Business`). The prose product name (`Soletrade`) is NOT
- * rendered here - it lives in titles, metadata, and body copy.
+ * Full labels name Soletrade, compact labels use Business in the app shell,
+ * and mark-only variants keep merchant branding dominant on public documents.
+ * Matt Haitana remains the parent company in copyright and publisher metadata.
  */
 export type LogoVariant = "full" | "compact" | "mark";
 
@@ -27,7 +23,7 @@ export function Logo({
   variant?: LogoVariant;
 }) {
   const wordmark =
-    variant === "full" ? brand.wordmark : variant === "compact" ? brand.shortProductName : null;
+    variant === "full" ? brand.productName : variant === "compact" ? brand.shortProductName : null;
   const content = (
     <span
       className={cn(
@@ -36,14 +32,23 @@ export function Logo({
         className,
       )}
     >
-      <span
-        aria-hidden
-        className="grid size-7 shrink-0 place-items-center rounded-md bg-primary text-sm font-bold text-primary-foreground"
-      >
-        h
-      </span>
-      {wordmark ? <span>{wordmark}</span> : null}
+      <Image
+        src={pwaBrand.icons.standard192}
+        alt=""
+        width={32}
+        height={32}
+        className="size-8 shrink-0"
+        loading="eager"
+        unoptimized
+      />
+      {wordmark ? <span className="whitespace-nowrap">{wordmark}</span> : null}
     </span>
   );
-  return href ? <Link href={href}>{content}</Link> : content;
+  return href ? (
+    <Link href={href} aria-label={brand.productName}>
+      {content}
+    </Link>
+  ) : (
+    content
+  );
 }
