@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/shared/ui/button";
 import { ArrowRight, FileText, BookOpen, Car, Receipt } from "lucide-react";
 import { brand } from "@/config/brand";
+import { InstalledAppRedirect } from "./installed-app-redirect";
 
 const modules = [
   { name: "Invoices", desc: "Fast business billing for freelancers.", icon: Receipt },
@@ -13,6 +14,7 @@ const modules = [
 export default function MarketingPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-20 md:px-8 md:py-32">
+      <InstalledAppRedirect />
       <section className="flex flex-col items-center text-center">
         <p className="text-sm font-medium text-brand-blue">{brand.productName}</p>
         <h1 className="mt-4 max-w-2xl text-balance text-4xl font-semibold tracking-tight md:text-5xl">
