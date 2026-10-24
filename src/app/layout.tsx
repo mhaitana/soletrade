@@ -7,6 +7,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { brand } from "@/config/brand";
 import { urls } from "@/config/urls";
 import { ServiceWorkerRegister } from "./service-worker-register";
+import { getAppleWebAppMetadata, pwaBrand } from "@/config/pwa";
 
 const fontSans = Inter({
   variable: "--font-sans",
@@ -31,13 +32,14 @@ export const metadata: Metadata = {
   creator: brand.companyName,
   publisher: brand.companyName,
   manifest: "/api/manifest",
+  appleWebApp: getAppleWebAppMetadata(),
   icons: {
     icon: [
-      { url: "/icons/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/icons/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: pwaBrand.icons.favicon16, sizes: "16x16", type: "image/png" },
+      { url: pwaBrand.icons.favicon32, sizes: "32x32", type: "image/png" },
     ],
-    apple: { url: "/icons/apple-touch-icon.png", sizes: "180x180" },
-    shortcut: { url: "/icons/icon-192x192.png" },
+    apple: { url: pwaBrand.icons.appleTouch, sizes: "180x180" },
+    shortcut: { url: pwaBrand.icons.standard192 },
   },
   openGraph: {
     type: "website",
@@ -56,8 +58,8 @@ export const metadata: Metadata = {
 // Tint the mobile browser chrome to match the app background per theme.
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1220" },
+    { media: "(prefers-color-scheme: light)", color: pwaBrand.background },
+    { media: "(prefers-color-scheme: dark)", color: pwaBrand.darkBackground },
   ],
 };
 

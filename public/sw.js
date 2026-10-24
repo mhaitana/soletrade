@@ -9,7 +9,7 @@
  * - Never cache API routes, public token pages, or Stripe scripts.
  */
 
-const STATIC_CACHE = "soletrade-static-v1";
+const STATIC_CACHE = "soletrade-static-v2";
 const APP_SHELL = "/";
 const OFFLINE_PAGE = "/offline";
 
@@ -17,10 +17,10 @@ const PRECACHE_ASSETS = [
   APP_SHELL,
   OFFLINE_PAGE,
   "/login",
-  "/icons/icon-192x192.png",
-  "/icons/icon-512x512.png",
-  "/icons/icon-512x512-maskable.png",
-  "/icons/apple-touch-icon.png",
+  "/icons/soletrade-v1/icon-192x192.png",
+  "/icons/soletrade-v1/icon-512x512.png",
+  "/icons/soletrade-v1/icon-512x512-maskable.png",
+  "/icons/soletrade-v1/apple-touch-icon.png",
 ];
 
 const NEVER_CACHE = ["/api/", "/i/", "/q/", "/invite/", "/auth/", "/stripe/", "/db/"];

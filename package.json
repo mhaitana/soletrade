@@ -28,7 +28,7 @@
     "stripe:setup": "tsx scripts/stripe-setup.ts",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/stripe/webhooks",
     "branding:check": "tsx scripts/check-branding.ts",
-    "icons:generate": "tsx scripts/generate-pwa-icons.ts"
+    "icons:generate": "node --import tsx scripts/generate-pwa-icons.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",

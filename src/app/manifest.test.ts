@@ -39,8 +39,8 @@ describe("web app manifest", () => {
   });
 
   it("uses light-mode brand colors so splash screens match public pages", () => {
-    expect(m.background_color).toBe("#f8fafc");
-    expect(m.theme_color).toBe("#f8fafc");
+    expect(m.background_color).toBe("#fafaf9");
+    expect(m.theme_color).toBe("#fafaf9");
   });
 
   it("declares business categories and no native related applications", () => {
@@ -54,7 +54,7 @@ describe("web app manifest", () => {
 
     const maskable = m.icons?.find((icon) => icon.purpose === "maskable");
     expect(maskable).toBeDefined();
-    expect(maskable?.src).toBe("/icons/icon-512x512-maskable.png");
+    expect(maskable?.src).toBe("/icons/soletrade-v1/icon-512x512-maskable.png");
   });
 
   it("includes shortcuts for the primary merchant workflows", () => {

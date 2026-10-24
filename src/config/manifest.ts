@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
 import { brand } from "@/config/brand";
+import { pwaBrand } from "@/config/pwa";
 
 /**
  * PWA web app manifest data. Sourced from central brand config so the product name
- * lives in one place. This object is served by `/manifest.webmanifest` and can also
+ * lives in one place. This object is served by `/api/manifest` and can also
  * be used in tests.
  *
  * `short_name` is the contextual in-app label (visible on the home-screen icon
@@ -24,23 +25,23 @@ export function getManifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     lang: "en",
     dir: "ltr",
-    background_color: "#f8fafc",
-    theme_color: "#f8fafc",
+    background_color: pwaBrand.background,
+    theme_color: pwaBrand.background,
     categories: ["business", "finance", "productivity"],
     prefer_related_applications: false,
     icons: [
       {
-        src: "/icons/icon-192x192.png",
+        src: pwaBrand.icons.standard192,
         sizes: "192x192",
         type: "image/png",
       },
       {
-        src: "/icons/icon-512x512.png",
+        src: pwaBrand.icons.standard512,
         sizes: "512x512",
         type: "image/png",
       },
       {
-        src: "/icons/icon-512x512-maskable.png",
+        src: pwaBrand.icons.maskable512,
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
@@ -52,28 +53,28 @@ export function getManifest(): MetadataRoute.Manifest {
         short_name: "Dashboard",
         description: "Open the workspace dashboard",
         url: "/dashboard",
-        icons: [{ src: "/icons/icon-192x192.png", sizes: "192x192" }],
+        icons: [{ src: pwaBrand.icons.standard192, sizes: "192x192" }],
       },
       {
         name: "New invoice",
         short_name: "Invoice",
         description: "Create a new invoice",
         url: "/invoices/new",
-        icons: [{ src: "/icons/icon-192x192.png", sizes: "192x192" }],
+        icons: [{ src: pwaBrand.icons.standard192, sizes: "192x192" }],
       },
       {
         name: "New quote",
         short_name: "Quote",
         description: "Create a new quote",
         url: "/quotes/new",
-        icons: [{ src: "/icons/icon-192x192.png", sizes: "192x192" }],
+        icons: [{ src: pwaBrand.icons.standard192, sizes: "192x192" }],
       },
       {
         name: "Books",
         short_name: "Books",
         description: "Open bookkeeping",
         url: "/books",
-        icons: [{ src: "/icons/icon-192x192.png", sizes: "192x192" }],
+        icons: [{ src: pwaBrand.icons.standard192, sizes: "192x192" }],
       },
     ],
   };
