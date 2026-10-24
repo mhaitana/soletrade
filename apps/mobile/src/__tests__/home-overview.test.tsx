@@ -76,6 +76,13 @@ jest.mock("@/components/ui", () => {
         <Text>{trailing}</Text>
       </View>
     ),
+    KpiTile: ({ label, value }: any) => (
+      <View>
+        <Text>{label}</Text>
+        <Text>{value}</Text>
+      </View>
+    ),
+    StatusPill: ({ label }: any) => <Text>{label}</Text>,
     NavRow: ({ title, subtitle, href }: any) => (
       <View accessibilityLabel={href}>
         <Text>{title}</Text>

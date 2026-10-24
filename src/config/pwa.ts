@@ -5,10 +5,10 @@ const assetBase = "/icons/soletrade-v1";
 
 export const pwaBrand = {
   assetBase,
-  background: "#fafaf9",
-  darkBackground: "#0c0a09",
-  ink: "#1c1917",
-  accent: "#60a5fa",
+  background: "#F9F8F6",
+  darkBackground: "#0A0A09",
+  ink: "#141413",
+  accent: "#1D4ED8",
   icons: {
     standard192: `${assetBase}/icon-192x192.png`,
     standard512: `${assetBase}/icon-512x512.png`,

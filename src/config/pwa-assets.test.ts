@@ -31,7 +31,12 @@ describe("installed app branding assets", () => {
       for (let x = 0; x < info.width; x++) {
         const i = (y * info.width + x) * info.channels;
         if (data[i + 3] !== 255) transparentPixels++;
-        if (data[i] === 28 && data[i + 1] === 25 && data[i + 2] === 23) continue;
+        // Match background pixel: legacy #1c1917 (28, 25, 23) or obsidian #141413 (20, 20, 19).
+        if (
+          (data[i] === 28 && data[i + 1] === 25 && data[i + 2] === 23) ||
+          (data[i] === 20 && data[i + 1] === 20 && data[i + 2] === 19)
+        )
+          continue;
         markPixels++;
         if (Math.hypot(x + 0.5 - info.width / 2, y + 0.5 - info.height / 2) > radius) {
           unsafePixels++;

@@ -16,6 +16,7 @@ import {
   NavRow,
   Row,
   Screen,
+  StatusPill,
   Toggle,
   formatMoney,
   human,
@@ -60,7 +61,6 @@ export function entitySubtitle(entity: Entity) {
     entity.role,
     entity.actorFullName ?? entity.actorEmail,
     entity.company,
-    entity.status,
     entity.category ? human(String(entity.category)) : null,
     entity.date
       ? new Date(String(entity.date)).toLocaleDateString("en-AU")
@@ -70,6 +70,16 @@ export function entitySubtitle(entity: Entity) {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function statusVariant(status?: string): "success" | "warning" | "danger" | "accent" | "neutral" {
+  if (!status) return "neutral";
+  const s = status.toLowerCase();
+  if (s === "paid" || s === "accepted" || s === "synced" || s === "active") return "success";
+  if (s === "overdue" || s === "declined" || s === "void" || s === "rejected" || s === "blocked") return "danger";
+  if (s === "sent" || s === "viewed") return "accent";
+  if (s === "pending" || s === "due soon") return "warning";
+  return "neutral";
 }
 export function ResourceListScreen() {
   const { resource: encoded, status: initialStatus } = useLocalSearchParams<{
@@ -375,28 +385,37 @@ export function ResourceListScreen() {
       data={rows}
       keyExtractor={(item) => item.id}
       ListHeaderComponent={header}
-      renderItem={({ item }) => (
-        <View>
-          <Row
-            title={entityTitle(item)}
-            subtitle={entitySubtitle(item)}
-            trailing={
-              item.totalCents != null || item.amountCents != null
-                ? formatMoney(item.totalCents ?? item.amountCents, String(item.currency ?? "AUD"))
-                : "›"
-            }
-            onPress={
-              ["activity", "audit", "invitations"].includes(resource)
-                ? undefined
-                : resource === "notifications"
-                  ? () => {
-                      void request(`${base}/${item.id}/read`, { method: "POST", body: {} })
-                        .then(() => state.refresh())
-                        .catch((error) => Alert.alert("Could not mark read", String(error)));
-                    }
-                  : () => router.push(detailHref(resource, item.id) as never)
-            }
+      renderItem={({ item }) => {
+        const hasStatus = Boolean(item.status);
+        const pill = hasStatus ? (
+          <StatusPill
+            label={human(String(item.status))}
+            variant={statusVariant(String(item.status))}
           />
+        ) : undefined;
+        return (
+          <View>
+            <Row
+              title={entityTitle(item)}
+              subtitle={entitySubtitle(item)}
+              badge={pill}
+              trailing={
+                item.totalCents != null || item.amountCents != null
+                  ? formatMoney(item.totalCents ?? item.amountCents, String(item.currency ?? "AUD"))
+                  : "›"
+              }
+              onPress={
+                ["activity", "audit", "invitations"].includes(resource)
+                  ? undefined
+                  : resource === "notifications"
+                    ? () => {
+                        void request(`${base}/${item.id}/read`, { method: "POST", body: {} })
+                          .then(() => state.refresh())
+                          .catch((error) => Alert.alert("Could not mark read", String(error)));
+                      }
+                    : () => router.push(detailHref(resource, item.id) as never)
+              }
+            />
           {["activity", "audit"].includes(resource) && <EventDetails entity={item} />}
           {resource === "invitations" && (
             <>
@@ -430,7 +449,8 @@ export function ResourceListScreen() {
             </>
           )}
         </View>
-      )}
+        );
+      }}
       ListEmptyComponent={
         state.loading ? (
           <Loading />

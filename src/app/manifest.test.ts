@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getManifest } from "@/config/manifest";
 import { brand } from "@/config/brand";
+import { pwaBrand } from "@/config/pwa";
 
 /**
  * The PWA manifest is generated from central brand config, so the product name lives in
@@ -39,8 +40,8 @@ describe("web app manifest", () => {
   });
 
   it("uses light-mode brand colors so splash screens match public pages", () => {
-    expect(m.background_color).toBe("#fafaf9");
-    expect(m.theme_color).toBe("#fafaf9");
+    expect(m.background_color).toBe(pwaBrand.background);
+    expect(m.theme_color).toBe(pwaBrand.background);
   });
 
   it("declares business categories and no native related applications", () => {

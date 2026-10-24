@@ -26,8 +26,8 @@ export default async function SignupPage({
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl min-w-0 overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-col items-center border-b border-border px-5 py-5 text-center sm:px-10 sm:py-7">
+    <div className="mx-auto w-full max-w-5xl min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs">
+      <div className="flex flex-col items-center border-b border-border/80 px-5 py-5 text-center sm:px-10 sm:py-7">
         <Logo href={null} className="text-lg" />
         <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-brand-blue sm:mt-5">
           Build your workspace

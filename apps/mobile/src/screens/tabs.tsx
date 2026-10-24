@@ -1,9 +1,10 @@
 import type { MobileHomeOverview } from "@soletrade/contracts";
 import { useEffect, useState } from "react";
+import { View, Text } from "react-native";
 import { router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Host, FieldGroup, ListItem, Text as NativeText, RNHostView } from "@expo/ui";
-import { useTheme } from "@/theme";
+import { radius, spacing, typography, useTheme } from "@/theme";
 import { SummaryView } from "@/components/trends";
 import { periodDates, periodOptions } from "@/lib/periods";
 import {
@@ -12,6 +13,7 @@ import {
   Copy,
   ErrorNotice,
   Group,
+  KpiTile,
   Loading,
   NavRow,
   Row,
@@ -112,13 +114,16 @@ export function HomeScreen() {
               {state.syncedAt ? ` · Last synced ${new Date(state.syncedAt).toLocaleString()}` : ""}
             </Copy>
             <Group title="At a glance">
-              {overview.kpis.slice(0, 4).map((item) => (
-                <Row
-                  key={item.id}
-                  title={item.label}
-                  trailing={formatMoney(item.cents, overview.currency)}
-                />
-              ))}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+                {overview.kpis.slice(0, 4).map((item) => (
+                  <View key={item.id} style={{ width: "48%", minWidth: 140, flexGrow: 1 }}>
+                    <KpiTile
+                      label={item.label}
+                      value={formatMoney(item.cents, overview.currency)}
+                    />
+                  </View>
+                ))}
+              </View>
               {!overview.kpis.length && (
                 <Copy muted>No financial activity is available for your workspace role.</Copy>
               )}
@@ -219,10 +224,23 @@ function ModuleSummary({ module }: { module: "books" | "drive" }) {
 export function SalesScreen() {
   const { bootstrap } = useSession();
   const modules = bootstrap?.activeWorkspace?.modules ?? [];
+  const caps = bootstrap?.activeWorkspace?.capabilities ?? [];
   return (
     <Screen>
       <Copy variant="title">Sales</Copy>
       <Copy muted>Good relationships. Clear proposals. Paid invoices.</Copy>
+      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+        {modules.includes("quotes") && caps.includes("manage:quote") && (
+          <View style={{ flex: 1 }}>
+            <Action title="Create quote" onPress={() => router.push("/edit/quotes/new")} />
+          </View>
+        )}
+        {modules.includes("invoices") && caps.includes("manage:invoice") && (
+          <View style={{ flex: 1 }}>
+            <Action title="Create invoice" onPress={() => router.push("/edit/invoices/new")} />
+          </View>
+        )}
+      </View>
       <Group>
         <NavRow
           title="Customers"
@@ -271,6 +289,9 @@ export function MoneyScreen() {
     <Screen>
       <Copy variant="title">Money</Copy>
       <Copy muted>A clear view of what comes in and goes out.</Copy>
+      {bootstrap.activeWorkspace.capabilities.includes("manage:books") && (
+        <Action title="Capture receipt" onPress={() => router.push("/feature/receipt")} />
+      )}
       <ModuleSummary module="books" />
       <Group>
         <NavRow title="Transactions" href={listHref("books/transactions")} />
@@ -374,6 +395,26 @@ export function MoreScreen() {
   ];
   return (
     <Host seedColor={theme.accent} style={{ flex: 1 }}>
+      <View
+        style={{
+          margin: spacing.md,
+          marginBottom: spacing.xs,
+          padding: spacing.md,
+          borderRadius: radius.md,
+          borderCurve: "continuous",
+          backgroundColor: theme.surface,
+          borderColor: theme.line,
+          borderWidth: 1,
+          gap: spacing.xs,
+        }}
+      >
+        <Text style={[typography.headline, { color: theme.text }]}>
+          {bootstrap?.activeWorkspace?.name ?? "Workspace"}
+        </Text>
+        <Text style={[typography.caption, { color: theme.muted }]}>
+          {bootstrap?.user.fullName ?? "User"} · Role: {bootstrap?.activeWorkspace?.role ?? "member"}
+        </Text>
+      </View>
       <FieldGroup>
         <FieldGroup.Section title="Your business">
           {work.map((item) => (

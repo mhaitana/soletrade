@@ -8,129 +8,101 @@
 
 **Project:** Soletrade
 **Category:** Business workspace (B2B SaaS - solo traders, freelancers, gig operators)
-**Direction:** Neutral Pro - ink-on-warm-white, flat, hairline, data-dense
+**Direction:** Editorial Precision (Uber × Airbnb) - Obsidian ink authority, deep cobalt accent, warm alabaster canvas, continuous squircle radii, 3-tier ambient paper depth
 
 ---
 
-## Direction rationale
+## Direction Rationale
 
-The product is a B2B invoicing / books / quotes / gig-earnings tool. The aesthetic is **Vercel/Geist + Square-dashboard**:
-calm, precise, high-information-density, flat. No decorative color, no card shadows, hairline borders only. One
-restrained accent (blue) for links/focus/interactive; emerald is semantic-only (paid/success). Numerics render in
-JetBrains Mono so amounts and document numbers align and read as "data".
+The product is a modern business operating system bringing invoices, books, quotes, receipts, mileage, and earnings together.
+The aesthetic is **Editorial Precision (Uber × Airbnb)**:
+- **Uber Base Design System (Operational Precision):** Obsidian ink authority (`#141413` light / `#F5F4F0` dark), tactile telemetry, semantic status pills, high-density financial numerics in `JetBrains Mono tabular-nums`.
+- **Airbnb Design Language System (Warm Editorial Hospitality):** Warm alabaster canvas (`#F9F8F6`), continuous squircle curves, layered ambient depth (`--shadow-xs`, `--shadow-md`, `--shadow-xl`), and refined Deep Cobalt (`#1D4ED8` light / `#3B82F6` dark).
 
 ## Color Palette
 
-| Role | Hex (light) | CSS Variable |
-|------|-------------|--------------|
-| Background | `#FAFAF9` (stone-50) | `--color-background` |
-| Foreground (ink) | `#1C1917` (stone-900) | `--color-foreground` |
-| Card / paper | `#FFFFFF` | `--color-card` |
-| Primary (ink) | `#1C1917` | `--color-primary` |
-| On Primary | `#FAFAF9` | `--color-primary-foreground` |
-| Muted surface | `#F5F4F1` (stone-100) | `--color-muted` |
-| Muted text | `#57534E` (stone-600) | `--color-muted-foreground` |
-| Border (hairline) | `#E7E5E4` (stone-200) | `--color-border` |
-| Accent (single) | `#2563EB` (blue-600) | `--color-brand-blue` |
-| Ring / focus | `#2563EB` | `--color-ring` |
-| Success / paid | `#059669` (emerald-600) - **semantic only** | `--color-success` |
-| Warning | `#EA580C` (orange-600) - **semantic only** | `--color-warning` |
-| Destructive | `#DC2626` (red-600) | `--color-destructive` |
-
-**Dark mode** is warm-tinted stone (`#0C0A09` bg, `#E7E5E4` fg, inverted ink primary). Defined in `globals.css :root`/`.dark`.
+| Role | Hex (light) | Hex (dark) | CSS Variable |
+|------|-------------|------------|--------------|
+| Canvas Background | `#F9F8F6` | `#0A0A09` | `--color-background` |
+| Foreground (Ink) | `#141413` | `#F5F4F0` | `--color-foreground` |
+| Card / Paper | `#FFFFFF` | `#141413` | `--color-card` |
+| Muted Surface / Tile | `#F2F0EC` | `#1E1D1B` | `--color-muted` |
+| Muted Text | `#65625C` | `#A39E93` | `--color-muted-foreground` |
+| Primary CTA (Ink) | `#141413` | `#F5F4F0` | `--color-primary` |
+| On Primary | `#FFFFFF` | `#141413` | `--color-primary-foreground` |
+| Deep Cobalt Accent | `#1D4ED8` | `#3B82F6` | `--color-brand-blue` |
+| Accent Tint | `#EFF6FF` | `#172554` | `--color-accent` |
+| Border (Architectural) | `#E6E4DF` | `#262522` | `--color-border` |
+| Success / Paid | `#059669` | `#34D399` | `--color-success` |
+| Warning / Review | `#D97706` | `#FBBF24` | `--color-warning` |
+| Destructive / Overdue | `#E11D48` | `#FB7185` | `--color-destructive` |
 
 **Color rules**
-- One accent. `--color-brand-blue` is the *only* non-semantic accent - links, focus rings, interactive highlights.
-- Emerald/amber/red are **semantic**: paid, warning, destructive/overdue. Never decorative.
-- Status badges use tinted variants (`bg-success/10 text-success`), not saturated fills. Always icon + text, never color alone.
-- No raw hex in components - use tokens. No `bg-white`/`bg-[#...]` on app or public surfaces (use `bg-card`).
+- Primary CTAs and critical headers use obsidian ink.
+- Deep Cobalt (`--color-brand-blue`) is reserved for interactive focus rings, interactive text links, and `hAI` assistant sparks.
+- Success, warning, and destructive are strictly semantic.
+- Status badges use semantic tinted variants (`bg-success/10 text-success border border-success/20`).
+- No raw hex in components - use CSS tokens.
 
 ## Typography
 
 - **Sans:** Inter (loaded via `next/font` as `--font-sans`).
-- **Mono:** JetBrains Mono (loaded as `--font-mono`) - used for **numerics**: KPI values, table money/amount columns, document numbers, audit codes, prefix previews.
-- **Body:** Inter 14px base (16px mobile). Line-height 1.5.
-- **Headings:** Inter 600/700 - page title 24px (`text-2xl`), section 16px (`text-base font-semibold`), card title 14px.
-- **Type scale:** 12 14 16 18 24 30.
-- **Numbers:** `font-mono tabular-nums` on amount/quantity cells and KPI values; Inter `tabular-nums` for inline body numbers.
+- **Mono:** JetBrains Mono (loaded as `--font-mono`) - used for **numerics**: KPI values, table money/amount columns, document numbers, audit codes, and mileage figures with `tabular-nums`.
+- **Body:** Inter 14px base (`16px` on mobile for iOS tap-zoom prevention). Line-height 1.5.
+- **Headings:** Inter 600/700 - page title 24px (`text-2xl font-semibold tracking-tight`), section 16px (`text-base font-semibold`), card title 14px.
+- **Type scale:** 12, 14, 16, 18, 24, 30.
 
-## Spacing (4/8 rhythm)
+## Radius & Elevation Scale
 
-`--space-xs` 4px · `--space-sm` 8px · `--space-md` 16px · `--space-lg` 24px · `--space-xl` 32px · `--space-2xl` 48px · `--space-3xl` 64px.
-
-## Radius & Elevation
-
-- `--radius: 0.5rem` (8px). Scale: sm 0.3 · md 0.4 · lg 1.0 · xl 1.4 · 2xl 1.8 (× `--radius`).
-- **No card shadows.** Cards are `rounded-xl border border-border bg-card` - flat, hairline only.
-- **Overlays only** (Dialog, Sheet, DropdownMenu, Popover) keep a single `shadow-lg` for elevation separation from the flat surface layer.
+- **Radius:**
+  - `rounded-lg` (10px): Inputs, buttons, segmented controls.
+  - `rounded-xl` (12-14px): Popovers, dropdown menus.
+  - `rounded-2xl` (16px): Bento cards, dashboard panels, data table containers.
+  - `rounded-3xl` (22px): Hero preview cards, public payment sheets, modal dialogs.
+  - `rounded-full` (9999px): Badges, telemetry pills, floating quick-actions.
+- **Elevation (3-tier ambient paper depth):**
+  - `--shadow-xs`: `0 1px 2px rgba(20, 20, 19, 0.04), 0 0 0 1px var(--border)` (resting cards, table containers).
+  - `--shadow-md`: `0 8px 24px -4px rgba(20, 20, 19, 0.08), 0 2px 6px -1px rgba(20, 20, 19, 0.04)` (interactive hover, flyouts).
+  - `--shadow-xl`: `0 20px 40px -12px rgba(20, 20, 19, 0.16)` (floating dialogs, sheets, bottom drawers).
 
 ## Component Specs
 
 ### Buttons
-- **Primary (default):** `bg-primary text-primary-foreground` (ink) · `h-9 px-4` · `rounded-md` · 200ms color transition · hover `bg-primary/90`. No shadow.
-- **Outline:** `border border-border bg-background hover:bg-muted` - hairline, flat.
-- **Destructive:** `bg-destructive text-white` - reserved for delete/void/irreversible.
-- **Ghost / Link:** link variant uses `text-brand-blue underline-offset-4 hover:underline`.
-- One primary CTA per screen; secondary actions visually subordinate.
+- **Primary:** `bg-primary text-primary-foreground` (obsidian ink) · `h-10 px-4` · `rounded-lg font-medium` · `active:scale-[0.99] transition-all` · hover `bg-primary/90`.
+- **Large CTA:** `h-12 px-7 rounded-xl text-base font-semibold`.
+- **Outline:** `border border-border bg-card hover:bg-muted text-foreground` with `shadow-xs`.
+- **Destructive:** `bg-destructive text-white hover:bg-destructive/90`.
+- **Ghost / Link:** `text-brand-blue underline-offset-4 hover:underline`.
+- Mobile tap targets must maintain minimum `min-h-11` (44px).
 
 ### Cards
-- `rounded-xl border border-border bg-card` - **no shadow**. No lift on hover (layout-shift-avoid).
-- Optional hover: subtle `hover:bg-muted/40` (color only, no transform).
+- `rounded-2xl border border-border/80 bg-card p-6 shadow-xs transition-shadow hover:shadow-md`.
 
 ### Inputs
-- `h-9 rounded-md border border-input bg-transparent` - no shadow.
-- Focus: `border-ring ring-[3px] ring-ring/40` (blue accent ring).
+- `h-10 rounded-lg border border-input bg-card px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40`.
+
+### Segmented Controls
+- Airbnb-style slider: container `rounded-xl bg-muted p-1 border border-border/40`.
+- Active item: `rounded-lg bg-card text-foreground shadow-xs font-medium`.
 
 ### Tables (use `<DataTable>` primitive)
-- Hairline container `rounded-lg border border-border`, header `bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground`, divided rows, `hover:bg-muted/40`.
+- Container: `rounded-2xl border border-border bg-card shadow-xs overflow-x-auto`.
+- Header: `bg-muted/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80`.
 - Numeric columns: `text-right font-mono tabular-nums`.
 
-### Lists (use `<ListRows>` primitive)
-- `rounded-lg border border-border divide-y divide-border` - flat.
-
-### Badges
-- Tinted status variants: `success` (`bg-success/10 text-success border-success/20`), `warning`, `destructive`.
-- `outline` for neutral; `secondary` for draft; `link` uses `text-brand-blue`.
-
-### Modals / Sheets
-- `shadow-lg` (overlays only). Backdrop `rgba(0,0,0,0.5)` + `backdrop-blur-sm`.
-
-## Style Guidelines
-
-**Style:** Minimalism / Neutral Pro (data-dense, flat, hairline)
-**Keywords:** calm, precise, ink-on-paper, high-density, flat, hairline, mono numerics, single accent
-**Effects:** 150–250ms color transitions only. No scale/translate hovers. No card shadows. Generous whitespace between sections; tight density within tables.
-
-## Page Pattern (marketing landing)
-
-**Pattern Name:** Minimal Single Column
-- **Conversion:** Single primary CTA ("Get started"). Large headline. Lots of whitespace. No nav clutter.
-- **Section Order:** 1. Hero headline + one-line description + primary CTA, 2. Module grid (flat hairline cards), 3. (optional) one-line social proof, 4. Footer.
+### Badges & Status Pills
+- High-visibility pill: `rounded-full px-2.5 py-0.5 text-xs font-medium`.
+- Tinted status variants:
+  - Paid/Accepted: `bg-success/10 text-success border border-success/20`.
+  - Pending/Warning: `bg-warning/10 text-warning border border-warning/20`.
+  - Overdue/Declined: `bg-destructive/10 text-destructive border border-destructive/20`.
+  - Draft/Neutral: `bg-muted text-muted-foreground border border-border`.
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ **Card shadows** - flat hairline only (overlays excepted).
-- ❌ **Multi-accent color** - one blue accent; emerald/amber/red are semantic only.
-- ❌ **Raw hex / `bg-white` / `bg-[#...]`** on app or public surfaces - use tokens.
-- ❌ **Saturated status badges** - use tinted variants.
-- ❌ **Layout-shifting hovers** (scale/translate) - color/background only.
-- ❌ **Emojis as icons** - Lucide SVG only.
-- ❌ **Missing `cursor-pointer`** on clickable elements.
-- ❌ **Low contrast text** - 4.5:1 minimum (test dark mode separately).
-- ❌ **Instant state changes** - 150–300ms transitions.
-- ❌ **Invisible focus states** - blue `ring-ring/40` ring required.
-- ❌ **Decorative-only motion** - motion must convey state change; respect `prefers-reduced-motion`.
-
-## Pre-Delivery Checklist
-
-- [ ] No emojis as icons (Lucide SVG).
-- [ ] No card shadows (hairline only).
-- [ ] No raw hex in components (tokens only).
-- [ ] Single accent + semantic colors only.
-- [ ] Numerics in JetBrains Mono where specified.
-- [ ] Focus rings visible (blue, 2–3px).
-- [ ] Contrast 4.5:1 in both light and dark.
-- [ ] `prefers-reduced-motion` respected.
-- [ ] Responsive at 375 / 768 / 1024 / 1440.
-- [ ] No content hidden behind fixed navbars; safe-area padding on mobile bottom nav.
-- [ ] No horizontal scroll on mobile.
+- ❌ Harsh 1px-only wireframes with zero paper elevation.
+- ❌ Saturated, fluorescent badge fills without tinted backgrounds.
+- ❌ Low-contrast text below 4.5:1 ratio.
+- ❌ Generic royal blue or purple accents; use Deep Cobalt (`#1D4ED8` / `#3B82F6`).
+- ❌ Raw hex values in components - strictly use CSS variables/tokens.
+- ❌ Missing `tabular-nums` or non-mono fonts on financial/mileage figures.

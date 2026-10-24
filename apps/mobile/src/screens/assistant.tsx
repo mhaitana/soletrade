@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { View, Text, Pressable } from "react-native";
 import { router } from "expo-router";
 import * as Crypto from "expo-crypto";
 import type { CollectionPage } from "@soletrade/contracts";
@@ -13,6 +14,7 @@ import {
   Screen,
   Toggle,
 } from "@/components/ui";
+import { radius, spacing, useTheme } from "@/theme";
 import { prepareAssistantTurn, type AssistantTurn } from "@/lib/assistant-turn";
 import { authenticatedFetch } from "@/lib/api";
 import { useResource, useWorkspacePath } from "@/lib/resources";
@@ -46,6 +48,7 @@ export function parseStreamLine(line: string): Record<string, unknown> | null {
 }
 export function AssistantScreen() {
   const { request, workspaceId } = useSession();
+  const theme = useTheme();
   const base = useWorkspacePath("assistant/conversations");
   const conversations = useResource<CollectionPage<Conversation>>(base);
   const [selected, setSelected] = useState("");
@@ -226,16 +229,144 @@ export function AssistantScreen() {
             detail.data && (
               <>
                 <Group title={detail.data.title}>
-                  {detail.data.messages.map((message, index) => (
-                    <Group key={index} title={message.role === "user" ? "You" : "hAI"}>
-                      <Copy>{message.content}</Copy>
-                    </Group>
-                  ))}
-                  {answer && (
-                    <Group title="hAI">
-                      <Copy>{answer}</Copy>
-                    </Group>
+                  {detail.data.messages.length === 0 && !answer && (
+                    <View style={{ gap: spacing.sm, paddingVertical: spacing.xs }}>
+                      <Copy variant="caption" muted>
+                        Quick starter questions:
+                      </Copy>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+                        {[
+                          "Summarize this month's revenue",
+                          "Who has overdue invoices?",
+                          "Draft a quote for customer",
+                          "What is my mileage deduction?",
+                        ].map((prompt) => (
+                          <Pressable
+                            key={prompt}
+                            accessibilityRole="button"
+                            accessibilityLabel={prompt}
+                            onPress={() => setText(prompt)}
+                            style={{
+                              paddingHorizontal: spacing.md,
+                              paddingVertical: spacing.xs + 2,
+                              borderRadius: radius.pill,
+                              backgroundColor: theme.surfaceSubtle,
+                              borderWidth: 1,
+                              borderColor: theme.line,
+                            }}
+                          >
+                            <Text style={{ fontSize: 13, color: theme.text, fontWeight: "500" }}>
+                              {prompt}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
                   )}
+                  {detail.data.messages.map((message, index) => {
+                    const isUser = message.role === "user";
+                    return (
+                      <View
+                        key={index}
+                        style={{
+                          alignSelf: isUser ? "flex-end" : "flex-start",
+                          maxWidth: "88%",
+                          backgroundColor: isUser ? theme.tint : theme.surface,
+                          borderColor: isUser ? theme.accent + "33" : theme.line,
+                          borderWidth: 1,
+                          borderRadius: radius.md,
+                          padding: spacing.md,
+                          gap: spacing.xs,
+                        }}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+                          {!isUser && (
+                            <View
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 5,
+                                backgroundColor: theme.primary,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: theme.primaryForeground,
+                                  fontSize: 10,
+                                  fontWeight: "800",
+                                }}
+                              >
+                                h
+                              </Text>
+                            </View>
+                          )}
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: "700",
+                              color: isUser ? theme.accent : theme.text,
+                              textTransform: "uppercase",
+                              letterSpacing: 0.5,
+                            }}
+                          >
+                            {isUser ? "You" : "hAI"}
+                          </Text>
+                        </View>
+                        <Copy>{message.content}</Copy>
+                      </View>
+                    );
+                  })}
+                  {answer ? (
+                    <View
+                      style={{
+                        alignSelf: "flex-start",
+                        maxWidth: "88%",
+                        backgroundColor: theme.surface,
+                        borderColor: theme.line,
+                        borderWidth: 1,
+                        borderRadius: radius.md,
+                        padding: spacing.md,
+                        gap: spacing.xs,
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+                        <View
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 5,
+                            backgroundColor: theme.primary,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: theme.primaryForeground,
+                              fontSize: 10,
+                              fontWeight: "800",
+                            }}
+                          >
+                            h
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: theme.text,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.5,
+                          }}
+                        >
+                          hAI
+                        </Text>
+                      </View>
+                      <Copy>{answer}</Copy>
+                    </View>
+                  ) : null}
                 </Group>
                 <Group title="Conversation settings">
                   <Toggle

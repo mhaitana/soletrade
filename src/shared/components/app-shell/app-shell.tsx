@@ -94,9 +94,9 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:px-4 max-md:py-3",
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:px-4 max-md:py-3",
               active
-                ? "bg-muted text-foreground"
+                ? "bg-foreground text-background shadow-xs font-semibold"
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
             )}
           >
@@ -109,7 +109,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
       <Link
         href="/settings/modules"
         onClick={onNavigate}
-        className="mt-1 flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:px-4 max-md:py-3"
+        className="mt-1 flex items-center gap-3 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:px-4 max-md:py-3"
       >
         <Plus className="size-4 shrink-0" aria-hidden />
         <span>Add module</span>
@@ -143,7 +143,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
   return (
     <nav
       aria-label="Mobile primary"
-      className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-border/80 bg-background/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {pinned.map((item) => {
         const active = isActive(pathname, item.href);

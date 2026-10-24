@@ -45,17 +45,21 @@ export function TrendChart({
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
                 style={{
-                  height: spacing.sm,
-                  backgroundColor: theme.tint,
-                  borderRadius: radius.sm,
+                  height: 10,
+                  backgroundColor: theme.surfaceSubtle,
+                  borderRadius: radius.pill,
                   overflow: "hidden",
+                  padding: 1.5,
+                  borderColor: theme.line,
+                  borderWidth: 1,
                 }}
               >
                 <View
                   style={{
                     height: "100%",
-                    width: `${Math.max(1, (Math.abs(value) / maximum) * 100)}%`,
+                    width: `${Math.max(2, (Math.abs(value) / maximum) * 100)}%`,
                     backgroundColor: value < 0 ? theme.danger : theme.accent,
+                    borderRadius: radius.pill,
                   }}
                 />
               </View>

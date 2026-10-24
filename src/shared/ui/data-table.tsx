@@ -5,9 +5,9 @@ import { cn } from "@/shared/lib/utils";
 /**
  * <DataTable> - shared presentational wrapper for the list/detail tables that
  * were copy-pasted across invoices, quotes, books, drive, and the billing
- * ledger. Encapsulates the Neutral Pro table chrome: hairline container,
- * uppercase muted header, divided rows, hover state. Numeric columns render in
- * JetBrains Mono with tabular figures and right alignment so amounts line up.
+ * ledger. Encapsulates the Editorial Precision table chrome: rounded-2xl container,
+ * ambient shadow-xs, uppercase muted header, divided rows, hover state. Numeric
+ * columns render in JetBrains Mono with tabular figures and right alignment so amounts line up.
  *
  * Presentational only - callers own cell content (including any links) via the
  * `cell` callback, so this stays an RSC and never needs client JS.
@@ -45,19 +45,19 @@ export function DataTable<T>({
   return (
     <div
       className={cn(
-        "overflow-x-auto rounded-lg border border-border",
+        "overflow-x-auto rounded-2xl border border-border bg-card shadow-xs",
         className,
       )}
     >
       <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="border-b border-border bg-muted/40 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
           <tr>
             {columns.map((col, i) => (
               <th
                 key={i}
                 scope="col"
                 className={cn(
-                  "px-4 py-2.5 font-medium",
+                  "px-4 py-3 font-semibold",
                   col.numeric && "text-right font-mono",
                   col.className,
                 )}
@@ -71,13 +71,13 @@ export function DataTable<T>({
           {rows.map((row, index) => (
             <tr
               key={rowKey(row, index)}
-              className="transition-colors hover:bg-muted/40"
+              className="transition-colors hover:bg-muted/30"
             >
               {columns.map((col, i) => (
                 <td
                   key={i}
                   className={cn(
-                    "px-4 py-3 align-middle",
+                    "px-4 py-3.5 align-middle",
                     col.numeric && "text-right font-mono tabular-nums",
                     col.className,
                   )}

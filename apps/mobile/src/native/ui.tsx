@@ -1,18 +1,20 @@
 import React from "react";
-import { ScrollView, Text, TextInput, View, useColorScheme } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { Button, Host } from "@expo/ui";
+import { radius, spacing, typography, useTheme } from "@/theme";
+
 export function NativePage({ title, children }: { title: string; children: React.ReactNode }) {
-  const dark = useColorScheme() === "dark";
+  const theme = useTheme();
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
       contentInsetAdjustmentBehavior="automatic"
-      style={{ flex: 1, backgroundColor: dark ? "#131b23" : "#f7f5f0" }}
+      style={{ flex: 1, backgroundColor: theme.background }}
       contentContainerStyle={{
-        padding: 20,
-        gap: 16,
-        paddingBottom: 80,
-        backgroundColor: dark ? "#131b23" : "#f7f5f0",
+        padding: spacing.md + 4,
+        gap: spacing.md,
+        paddingBottom: spacing.xxl + 32,
+        backgroundColor: theme.background,
         flexGrow: 1,
         maxWidth: 820,
         width: "100%",
@@ -21,7 +23,7 @@ export function NativePage({ title, children }: { title: string; children: React
     >
       <Text
         accessibilityRole="header"
-        style={{ fontSize: 28, fontWeight: "700", color: dark ? "#fafafa" : "#192b3c" }}
+        style={[typography.title, { color: theme.text }]}
       >
         {title}
       </Text>
@@ -29,22 +31,27 @@ export function NativePage({ title, children }: { title: string; children: React
     </ScrollView>
   );
 }
+
 export function Note({ children, error = false }: { children: React.ReactNode; error?: boolean }) {
-  const dark = useColorScheme() === "dark";
+  const theme = useTheme();
   return (
     <Text
       accessibilityRole={error ? "alert" : "text"}
       selectable
-      style={{
-        fontSize: 16,
-        lineHeight: 24,
-        color: error ? (dark ? "#ffb4ab" : "#9f2424") : dark ? "#dce3e9" : "#405367",
-      }}
+      style={[
+        typography.body,
+        {
+          fontSize: 15,
+          lineHeight: 22,
+          color: error ? theme.danger : theme.muted,
+        },
+      ]}
     >
       {children}
     </Text>
   );
 }
+
 export function Action({
   title,
   onPress,
@@ -54,14 +61,20 @@ export function Action({
   onPress: () => void;
   disabled?: boolean;
 }) {
+  const theme = useTheme();
   return (
-    <Host matchContents={{ vertical: true }} style={{ width: "100%", minHeight: 48 }}>
+    <Host
+      seedColor={theme.primary}
+      matchContents={{ vertical: true }}
+      style={{ width: "100%", minHeight: 48 }}
+    >
       <Button disabled={disabled} onPress={onPress}>
         {title}
       </Button>
     </Host>
   );
 }
+
 export function Field({
   label,
   value,
@@ -73,24 +86,30 @@ export function Field({
   onChange: (value: string) => void;
   numeric?: boolean;
 }) {
-  const dark = useColorScheme() === "dark";
+  const theme = useTheme();
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: spacing.xs }}>
       <Note>{label}</Note>
       <TextInput
         accessibilityLabel={label}
         value={value}
         onChangeText={onChange}
         keyboardType={numeric ? "decimal-pad" : "default"}
-        style={{
-          borderWidth: 1,
-          borderColor: "#8195a7",
-          borderRadius: 10,
-          padding: 12,
-          fontSize: 17,
-          color: dark ? "#fff" : "#142b40",
-          minHeight: 48,
-        }}
+        placeholderTextColor={theme.muted}
+        style={[
+          typography.body,
+          {
+            borderWidth: 1,
+            borderColor: theme.line,
+            borderRadius: radius.sm,
+            borderCurve: "continuous",
+            backgroundColor: theme.surfaceSubtle,
+            padding: spacing.md,
+            fontSize: 16,
+            color: theme.text,
+            minHeight: 48,
+          },
+        ]}
       />
     </View>
   );

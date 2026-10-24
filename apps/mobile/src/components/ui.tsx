@@ -28,6 +28,7 @@ export function Copy({
     </Text>
   );
 }
+
 export function Screen({ children }: { children: React.ReactNode }) {
   const theme = useTheme();
   return (
@@ -48,6 +49,7 @@ export function Screen({ children }: { children: React.ReactNode }) {
     </ScrollView>
   );
 }
+
 export function Group({ title, children }: { title?: string; children: React.ReactNode }) {
   const theme = useTheme();
   return (
@@ -58,6 +60,8 @@ export function Group({ title, children }: { title?: string; children: React.Rea
           backgroundColor: theme.surface,
           borderRadius: radius.md,
           borderCurve: "continuous",
+          borderWidth: 1,
+          borderColor: theme.line,
           padding: spacing.md,
           gap: spacing.md,
         }}
@@ -67,6 +71,7 @@ export function Group({ title, children }: { title?: string; children: React.Rea
     </View>
   );
 }
+
 export function Action({
   title,
   onPress,
@@ -83,7 +88,7 @@ export function Action({
   const theme = useTheme();
   return (
     <Host
-      seedColor={theme.accent}
+      seedColor={secondary ? theme.accent : theme.primary}
       matchContents={{ vertical: true }}
       style={{ width: "100%", minHeight: 44 }}
     >
@@ -97,6 +102,7 @@ export function Action({
     </Host>
   );
 }
+
 export function Field({
   label,
   error,
@@ -104,8 +110,8 @@ export function Field({
 }: TextInputProps & { label: string; error?: string }) {
   const theme = useTheme();
   return (
-    <View style={{ gap: spacing.sm }}>
-      <Copy variant="caption">{label}</Copy>
+    <View style={{ gap: spacing.xs }}>
+      <Copy variant="caption" muted>{label}</Copy>
       <TextInput
         {...props}
         accessibilityLabel={label}
@@ -114,8 +120,12 @@ export function Field({
           typography.body,
           {
             color: theme.text,
-            borderBottomColor: error ? theme.danger : theme.line,
-            borderBottomWidth: 1,
+            backgroundColor: theme.surfaceSubtle,
+            borderColor: error ? theme.danger : theme.line,
+            borderWidth: 1,
+            borderRadius: radius.sm,
+            borderCurve: "continuous",
+            paddingHorizontal: spacing.md,
             paddingVertical: spacing.sm,
             minHeight: 44,
           },
@@ -126,6 +136,7 @@ export function Field({
     </View>
   );
 }
+
 export function Choice({
   label,
   value,
@@ -138,6 +149,52 @@ export function Choice({
   onChange: (value: string) => void;
 }) {
   const theme = useTheme();
+
+  // If 6 or fewer options, render modern scrollable filter pills
+  if (options.length <= 6) {
+    return (
+      <View style={{ gap: spacing.xs }}>
+        <Copy variant="caption" muted>{label}</Copy>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: spacing.xs, paddingVertical: 2 }}
+        >
+          {options.map((option) => {
+            const selected = option.value === value;
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="button"
+                accessibilityLabel={option.label}
+                accessibilityState={{ selected }}
+                onPress={() => onChange(option.value)}
+                style={{
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: spacing.xs + 2,
+                  borderRadius: radius.pill,
+                  backgroundColor: selected ? theme.primary : theme.surfaceSubtle,
+                  borderWidth: 1,
+                  borderColor: selected ? theme.primary : theme.line,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: selected ? "600" : "500",
+                    color: selected ? theme.primaryForeground : theme.text,
+                  }}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <View style={{ gap: spacing.xs }}>
       <Copy variant="caption">{label}</Copy>
@@ -155,6 +212,7 @@ export function Choice({
     </View>
   );
 }
+
 export function Toggle({
   label,
   value,
@@ -175,6 +233,7 @@ export function Toggle({
     </Host>
   );
 }
+
 export function Row({
   title,
   subtitle,
@@ -222,6 +281,7 @@ export function Row({
     <View style={style}>{body}</View>
   );
 }
+
 export function ErrorNotice({ message, retry }: { message: string; retry?: () => void }) {
   const theme = useTheme();
   return (
@@ -231,6 +291,7 @@ export function ErrorNotice({ message, retry }: { message: string; retry?: () =>
     </View>
   );
 }
+
 export function Loading() {
   const theme = useTheme();
   return (
@@ -240,6 +301,7 @@ export function Loading() {
     </View>
   );
 }
+
 export function Empty({
   title,
   detail,
@@ -257,6 +319,7 @@ export function Empty({
     </Group>
   );
 }
+
 export function NavRow({
   title,
   subtitle,
@@ -275,11 +338,111 @@ export function NavRow({
     />
   );
 }
+
+export function StatusPill({
+  label,
+  variant = "neutral",
+}: {
+  label: string;
+  variant?: "success" | "warning" | "danger" | "neutral" | "accent";
+}) {
+  const theme = useTheme();
+  const styles = {
+    success: { bg: theme.successTint, text: theme.success, border: theme.success + "33" },
+    warning: { bg: theme.warningTint, text: theme.warning, border: theme.warning + "33" },
+    danger: { bg: theme.destructiveTint, text: theme.danger, border: theme.danger + "33" },
+    accent: { bg: theme.tint, text: theme.accent, border: theme.accent + "33" },
+    neutral: { bg: theme.surfaceSubtle, text: theme.muted, border: theme.line },
+  }[variant];
+
+  return (
+    <View
+      style={{
+        paddingHorizontal: spacing.sm + 2,
+        paddingVertical: 3,
+        borderRadius: radius.pill,
+        backgroundColor: styles.bg,
+        borderWidth: 1,
+        borderColor: styles.border,
+        alignSelf: "flex-start",
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 11,
+          fontWeight: "600",
+          color: styles.text,
+          letterSpacing: 0.2,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+export function KpiTile({
+  label,
+  value,
+  delta,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  delta?: string;
+  onPress?: () => void;
+}) {
+  const theme = useTheme();
+  const content = (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: theme.surface,
+        borderColor: theme.line,
+        borderWidth: 1,
+        borderRadius: radius.md,
+        borderCurve: "continuous",
+        padding: spacing.md,
+        gap: spacing.xs,
+        justifyContent: "space-between",
+        minHeight: 96,
+      }}
+    >
+      <Text style={[typography.caption, { color: theme.muted }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={[typography.metric, { color: theme.text }]} numberOfLines={1}>
+        {value}
+      </Text>
+      {delta ? (
+        <View style={{ alignSelf: "flex-start", marginTop: 2 }}>
+          <StatusPill label={delta} variant="success" />
+        </View>
+      ) : null}
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value}`}
+        onPress={onPress}
+        style={({ pressed }) => [{ flex: 1, opacity: pressed ? 0.7 : 1 }]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+  return content;
+}
+
 export function formatMoney(cents: unknown, currency = "AUD") {
   return new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(
     Number(cents ?? 0) / 100,
   );
 }
+
 export function human(value: string) {
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")

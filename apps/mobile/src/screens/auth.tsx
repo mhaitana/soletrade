@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert } from "react-native";
+import { Alert, View, Text } from "react-native";
 import * as Linking from "expo-linking";
 import * as Crypto from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
@@ -9,10 +9,12 @@ import type { CollectionPage, MobileWorkspace } from "@soletrade/contracts";
 import { configured, supabase } from "@/lib/supabase";
 import { internalDestination } from "@/lib/navigation-intent";
 import { useSession } from "@/lib/session";
+import { radius, spacing, typography, useTheme } from "@/theme";
 
 export function SignInScreen() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const destination = internalDestination(returnTo);
+  const theme = useTheme();
   const [mode, setMode] = useState<"password" | "magic" | "signup">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,6 +69,33 @@ export function SignInScreen() {
   };
   return (
     <Screen>
+      <View style={{ alignItems: "center", gap: spacing.xs, marginVertical: spacing.sm }}>
+        <View
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: radius.md,
+            borderCurve: "continuous",
+            backgroundColor: theme.primary,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text
+            style={{
+              color: theme.primaryForeground,
+              fontSize: 22,
+              fontWeight: "900",
+              letterSpacing: -0.5,
+            }}
+          >
+            HB
+          </Text>
+        </View>
+        <Text style={[typography.headline, { color: theme.text, marginTop: spacing.xs }]}>
+          Soletrade
+        </Text>
+      </View>
       <Copy variant="hero">Your business,{"\n"}in your pocket.</Copy>
       <Copy muted>Invoices, money and the road ahead. Together in Soletrade.</Copy>
       <Group title={mode === "signup" ? "Create your account" : "Welcome back"}>

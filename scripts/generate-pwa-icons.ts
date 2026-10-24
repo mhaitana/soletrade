@@ -125,6 +125,17 @@ async function main() {
 
   await createFavicon(sources.standard);
   await createSplashScreens(sources.standard);
+
+  // Render unified mobile app icon (1024x1024)
+  const mobileIconPath = path.resolve(process.cwd(), "apps/mobile/assets/icon.png");
+  try {
+    const mobileIcon = await sharp(sources.standard).resize(1024, 1024).png().toBuffer();
+    await fs.mkdir(path.dirname(mobileIconPath), { recursive: true });
+    await fs.writeFile(mobileIconPath, mobileIcon);
+    console.log("Generated apps/mobile/assets/icon.png");
+  } catch (err) {
+    console.warn("Could not write mobile icon:", err);
+  }
 }
 
 main().catch((error) => {

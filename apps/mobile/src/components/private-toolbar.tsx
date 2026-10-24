@@ -4,7 +4,8 @@ import { Button, Host, Text as NativeText } from "@expo/ui";
 import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { MobileModule } from "@soletrade/contracts";
 import { contextualCreate } from "@/lib/global-actions";
-import { spacing, useTheme } from "@/theme";
+import { radius, spacing, useTheme } from "@/theme";
+
 type ToolbarProps = {
   workspaceName: string;
   pathname: string;
@@ -15,6 +16,7 @@ type ToolbarProps = {
   leftInset?: number;
   rightInset?: number;
 };
+
 /** Session-free navigation chrome, shown only inside the verified workspace's app lock. */
 export function PrivateToolbar({
   workspaceName,
@@ -31,6 +33,7 @@ export function PrivateToolbar({
   const open = (href: string) => {
     if (pathname !== href) onNavigate(href);
   };
+
   return (
     <View
       testID="private-toolbar"
@@ -60,16 +63,35 @@ export function PrivateToolbar({
             minWidth: 62,
             flexDirection: "row",
             alignItems: "center",
-            gap: spacing.xs,
+            gap: spacing.xs + 2,
           }}
         >
-          <Text
+          {/* Refined Obsidian HB Monogram Badge */}
+          <View
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
-            style={{ color: theme.accent, fontSize: 20, fontWeight: "800" }}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: radius.sm - 2,
+              borderCurve: "continuous",
+              backgroundColor: theme.primary,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            H
-          </Text>
+            <Text
+              style={{
+                color: theme.primaryForeground,
+                fontSize: 12,
+                fontWeight: "900",
+                letterSpacing: -0.4,
+              }}
+            >
+              HB
+            </Text>
+          </View>
+
           <Host
             seedColor={theme.accent}
             matchContents={{ vertical: true }}
@@ -87,6 +109,7 @@ export function PrivateToolbar({
             </Button>
           </Host>
         </View>
+
         <ToolbarButton label="Search" width={54} onPress={() => open("/search")} />
         <ToolbarButton label="hAI" width={44} onPress={() => open("/assistant")} />
         {create && (
@@ -101,6 +124,7 @@ export function PrivateToolbar({
     </View>
   );
 }
+
 function ToolbarButton({
   label,
   width,
@@ -115,7 +139,7 @@ function ToolbarButton({
   const theme = useTheme();
   return (
     <Host
-      seedColor={theme.accent}
+      seedColor={primary ? theme.primary : theme.accent}
       matchContents={{ vertical: true }}
       style={{ width, minHeight: 44 }}
     >
@@ -139,6 +163,7 @@ function ToolbarButton({
     </Host>
   );
 }
+
 export function PrivateAppFrame({
   children,
   ...props

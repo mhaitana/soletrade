@@ -13,7 +13,7 @@ export default async function LoginPage({
   const error = sp.error === "auth" ? "The sign-in link was invalid or expired." : null;
 
   return (
-    <div className="mx-auto max-w-sm rounded-lg border border-border bg-card p-8">
+    <div className="mx-auto max-w-sm rounded-2xl border border-border/80 bg-card p-8 sm:p-10 shadow-xs">
       <div className="flex flex-col items-center text-center">
         <Logo href={null} className="text-lg" />
         <h1 className="mt-6 text-xl font-semibold">Sign in to your workspace</h1>

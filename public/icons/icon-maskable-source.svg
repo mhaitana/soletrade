@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#1c1917"/>
-  <path fill="#fafaf9" d="M112 160h38v76h57v-76h38v192h-38v-80h-57v80h-38z"/>
-  <path fill="#60a5fa" fill-rule="evenodd" d="M266 160h61c40 0 64 20 64 51 0 20-10 35-27 42 23 7 36 24 36 45 0 33-27 54-69 54h-65V160zm38 35v43h20c18 0 28-8 28-22s-10-21-28-21h-20zm0 76v46h24c21 0 32-8 32-23s-11-23-32-23h-24z"/>
+  <defs>
+    <linearGradient id="brand-cobalt" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1D4ED8"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#141413"/>
+  <path fill="#F9F8F6" d="M112 160h38v76h57v-76h38v192h-38v-80h-57v80h-38z"/>
+  <path fill="url(#brand-cobalt)" fill-rule="evenodd" d="M266 160h61c40 0 64 20 64 51 0 20-10 35-27 42 23 7 36 24 36 45 0 33-27 54-69 54h-65V160zm38 35v43h20c18 0 28-8 28-22s-10-21-28-21h-20zm0 76v46h24c21 0 32-8 32-23s-11-23-32-23h-24z"/>
 </svg>
