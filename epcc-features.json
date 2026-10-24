@@ -2,11 +2,7 @@
   "_warning": "Feature definitions are IMMUTABLE after planning approval. Only passes, status, and subtasks[].status may be modified after approval.",
   "_planApproved": true,
   "_planApprovedAt": "2026-07-20T15:05:00Z",
-  "_modifiableFields": [
-    "passes",
-    "status",
-    "subtasks[].status"
-  ],
+  "_modifiableFields": ["passes", "status", "subtasks[].status"],
   "validation": {
     "planTasks": 34,
     "mappedToFeatures": 34,
@@ -268,12 +264,8 @@
       "description": "Create storage-state fixtures for each seeded role (owner, admin, accountant, employee, readonly) and helpers for switching workspace and selecting seeded entities.",
       "priority": "P0",
       "implementationOrder": 7,
-      "dependencies": [
-        "INFRA-001"
-      ],
-      "blockedBy": [
-        "INFRA-001"
-      ],
+      "dependencies": ["INFRA-001"],
+      "blockedBy": ["INFRA-001"],
       "estimatedHours": 4,
       "planReference": "EPCC_PLAN.md#phase-7-playwright-auth-fixtures",
       "status": "verified",
@@ -311,14 +303,8 @@
       "description": "Implement seed-data-driven end-to-end specs covering login/dashboard, create-and-send invoice, accept quote, create books transaction, and invite member.",
       "priority": "P1",
       "implementationOrder": 8,
-      "dependencies": [
-        "INFRA-001",
-        "INFRA-002"
-      ],
-      "blockedBy": [
-        "INFRA-001",
-        "INFRA-002"
-      ],
+      "dependencies": ["INFRA-001", "INFRA-002"],
+      "blockedBy": ["INFRA-001", "INFRA-002"],
       "estimatedHours": 6,
       "planReference": "EPCC_PLAN.md#phase-8-core-e2e-smoke-flows",
       "status": "verified",
@@ -366,12 +352,8 @@
       "description": "Add a minimal network-first service worker registered from a client component, with a static /offline fallback, after PWA manifest installability is verified.",
       "priority": "P1",
       "implementationOrder": 9,
-      "dependencies": [
-        "F001"
-      ],
-      "blockedBy": [
-        "F001"
-      ],
+      "dependencies": ["F001"],
+      "blockedBy": ["F001"],
       "estimatedHours": 5.5,
       "planReference": "EPCC_PLAN.md#phase-9-service-worker-follow-up-phase",
       "status": "verified",

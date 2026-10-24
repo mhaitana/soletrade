@@ -1,9 +1,9 @@
 @AGENTS.md
 
-# Soletrade Workspace - project notes
+# Soletrade - project notes
 
 ## What this is
-The Soletrade Workspace SaaS monolith (repo: `soletrade`): a workspace-first, multi-module
+The Soletrade SaaS monolith (repo: `soletrade`): a workspace-first, multi-module
 product (Invoices, Books, Drive, Quotes) sharing one auth, billing, customer, file, activity,
 and AI foundation. Product branding lives in `src/config/brand.ts`; deployment URLs in
 `src/config/urls.ts` (no hard-coded production domain). See `design-system/soletrade/MASTER.md`

@@ -2,10 +2,10 @@
 //
 // Flags occurrences of the old product names in src TS/TSX files so a future edit doesn't
 // silently reintroduce pre-rebrand branding. Customer-facing brand strings must come from
-// src/config/brand.ts (product: "Soletrade Workspace", company: "Matt Haitana").
+// src/config/brand.ts (product: "Soletrade", company: "Matt Haitana").
 //
-// Flagged phrases (case-insensitive): the old "soletrade OS" product name and the legacy
-// "soletrade suite" product form. The valid repository/package slug `soletrade` is NEVER
+// Flagged phrases (case-insensitive): the old "soletrade OS", "soletrade Workspace" and legacy
+// "soletrade suite" product forms. The valid repository/package slug `soletrade` is NEVER
 // flagged (hyphenated, not a customer-facing brand), nor is the bare word "suite" (test
 // suites, third-party tooling).
 //
@@ -18,7 +18,7 @@ const ROOT = process.cwd();
 const SRC = join(ROOT, "src");
 
 // Case-insensitive deprecated phrases. The repo slug `soletrade` is excluded per-line below.
-const DEPRECATED = ["soletrade os", "soletradeos", "soletrade suite"];
+const DEPRECATED = ["soletrade os", "soletradeos", "soletrade suite", "soletrade workspace"];
 
 // Files to scan: TS/TSX under src/ (code + UI - the customer-facing surface). Docs are excluded
 // because migration runbooks legitimately reference the old name when describing what to update.
@@ -64,7 +64,7 @@ if (hits.length > 0) {
     console.error(`  ${h.file}:${h.line}: ${h.text}`);
   }
   console.error(
-    `\n${hits.length} hit(s). Replace with "Soletrade Workspace" (product) or "Matt Haitana" (company).`,
+    `\n${hits.length} hit(s). Replace with "Soletrade" (product) or "Matt Haitana" (company).`,
   );
   process.exit(1);
 }

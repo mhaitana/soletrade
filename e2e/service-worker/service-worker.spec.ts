@@ -18,6 +18,6 @@ test.describe("service worker / offline fallback", () => {
     const response = await request.get("/sw.js");
     expect(response.status()).toBe(200);
     const text = await response.text();
-    expect(text).toContain("Minimal service worker for Soletrade Workspace");
+    expect(text).toContain("Minimal service worker for Soletrade");
   });
 });

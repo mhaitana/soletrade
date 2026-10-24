@@ -1,6 +1,6 @@
-# Implement Soletrade Workspace Admin Area
+# Implement Soletrade Admin Area
 
-You are working in the `soletrade` repository for **Soletrade Workspace**, a multi-tenant SaaS platform by **Matt Haitana**.
+You are working in the `soletrade` repository for **Soletrade**, a multi-tenant SaaS platform by **Matt Haitana**.
 
 Implement a secure internal administration area for managing:
 
@@ -47,7 +47,7 @@ Use the following terms consistently:
 
 | Concept | Preferred term |
 |---|---|
-| Public product | Soletrade Workspace |
+| Public product | Soletrade |
 | Company | Matt Haitana |
 | Customer account | Workspace |
 | Customer user | Member |
@@ -1392,7 +1392,7 @@ The admin area should be:
 - Responsive
 - Clearly distinct from the customer app
 - Safe for high-impact actions
-- Consistent with Soletrade Workspace branding
+- Consistent with Soletrade branding
 
 Required patterns:
 

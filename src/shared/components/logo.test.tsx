@@ -5,9 +5,9 @@ import { brand } from "@/config/brand";
 
 /**
  * The Logo lockup is context-aware: `full` shows the `soletrade` wordmark on external
- * surfaces, `compact` shows the short `Workspace` label in-app, and `mark` shows only the `h`
+ * surfaces, `compact` shows the short `Business` label in-app, and `mark` shows only the `h`
  * on public invoice/quote pages where the issuing merchant is the dominant brand. The prose
- * product name (`Soletrade Workspace`) is never rendered by the Logo.
+ * product name (`Soletrade`) is never rendered by the Logo.
  */
 describe("Logo", () => {
   it("renders the wordmark in the `full` variant", () => {

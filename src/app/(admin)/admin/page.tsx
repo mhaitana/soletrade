@@ -1,6 +1,7 @@
 import "server-only";
 import * as React from "react";
 import Link from "next/link";
+import { brand } from "@/config/brand";
 import {
   Building2,
   Users,
@@ -94,7 +95,7 @@ export default async function AdminDashboardPage() {
       <AdminPageHeader
         icon={Activity}
         title="Platform Operational Dashboard"
-        subtitle="Live operational health, subscription state, and support metrics for Soletrade Workspace."
+        subtitle={`Live operational health, subscription state, and support metrics for ${brand.productName}.`}
         action={<StatusBadge status={healthState.label} className="px-3 py-1" />}
       />
 

@@ -1,5 +1,6 @@
 import "server-only";
 import * as React from "react";
+import { brand } from "@/config/brand";
 import { requireAdminContext } from "@/platform/admin/services/admin-auth";
 import { getActiveSupportAccessSession } from "@/platform/admin/services/admin-support-access";
 import { AdminShell } from "@/platform/admin/components/admin-shell";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Soletrade Operations | Internal Admin Area",
-  description: "Secure internal operations area for Soletrade Workspace platform administration.",
+  description: `Secure internal operations area for ${brand.productName} platform administration.`,
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

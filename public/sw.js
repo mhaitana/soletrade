@@ -1,5 +1,5 @@
 /**
- * Minimal service worker for Soletrade Workspace.
+ * Minimal service worker for Soletrade.
  *
  * Strategy:
  * - Precache build-specific static assets from /_next/static/*.

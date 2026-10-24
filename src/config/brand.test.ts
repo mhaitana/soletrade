@@ -8,7 +8,7 @@ import { brand } from "@/config/brand";
  */
 describe("brand config", () => {
   it("exposes the public product name", () => {
-    expect(brand.productName).toBe("Soletrade Workspace");
+    expect(brand.productName).toBe("Soletrade");
   });
 
   it("exposes the visual wordmark for the logo/email/PDF lockup", () => {
@@ -16,7 +16,7 @@ describe("brand config", () => {
   });
 
   it("exposes the short in-app product label", () => {
-    expect(brand.shortProductName).toBe("Workspace");
+    expect(brand.shortProductName).toBe("Business");
   });
 
   it("exposes the company name (distinct from the product)", () => {
@@ -42,6 +42,7 @@ describe("brand config", () => {
     const json = JSON.stringify(brand).toLowerCase();
     expect(json).not.toContain("soletrade os");
     expect(json).not.toContain("soletradeos");
+    expect(json).not.toContain("soletrade workspace");
     // "soletrade suite" (the deprecated product form) must not appear - only the
     // hyphenated repo slug `soletrade` is valid, and that has no space.
     expect(json).not.toContain("soletrade suite");

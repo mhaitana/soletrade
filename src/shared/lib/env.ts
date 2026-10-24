@@ -69,6 +69,7 @@ const envSchema = z.object({
 
   // Email (Resend)
   RESEND_API_KEY: z.string().optional(),
+  // Bare sender address; the email client adds the product display name from brand config.
   EMAIL_FROM: z.string().email().optional(),
   // Support contact address shown on the public /support page. Optional - when unset,
   // the page degrades to a neutral contact line instead of a broken mailto.

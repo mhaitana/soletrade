@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearEmailClientForTest,
   sendEmail,
@@ -106,5 +106,44 @@ describe("sendEmail", () => {
     expect(captured).toMatchObject({
       attachments: [{ filename: "INV-2026-0001.pdf", content: "JVBERi0=" }],
     });
+  });
+
+  it("uses the product sender name while preserving the configured email address", async () => {
+    const resendSend = vi.fn().mockResolvedValue({ data: { id: "re_branded" }, error: null });
+    vi.resetModules();
+    vi.doMock("resend", () => ({
+      Resend: class {
+        emails = { send: resendSend };
+      },
+    }));
+    vi.doMock("@/shared/lib/env", () => ({
+      env: {
+        RESEND_API_KEY: "test-key",
+        EMAIL_FROM: "support@soletrade.example",
+      },
+    }));
+
+    try {
+      const { sendEmail: sendConfiguredEmail } = await import("./index");
+      const result = await sendConfiguredEmail({
+        to: "customer@example.com",
+        subject: "Invoice",
+        html: "<p>Your invoice</p>",
+        text: "Your invoice",
+      });
+
+      expect(result).toEqual({ ok: true, id: "re_branded" });
+      expect(resendSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: "Soletrade <support@soletrade.example>",
+          to: "customer@example.com",
+          subject: "Invoice",
+        }),
+      );
+    } finally {
+      vi.doUnmock("resend");
+      vi.doUnmock("@/shared/lib/env");
+      vi.resetModules();
+    }
   });
 });

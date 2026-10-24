@@ -7,12 +7,12 @@ import { brand } from "@/config/brand";
  *
  * `variant` controls what renders alongside the `h` mark:
  *  - `full`    - `soletrade` wordmark (external: marketing, auth, onboarding, error/not-found, invite)
- *  - `compact` - `Workspace` short label (in-app sidebar/mobile sheet, where the mark is already visible)
+ *  - `compact` - `Business` short label (in-app sidebar/mobile sheet, where the mark is already visible)
  *  - `mark`    - `h` mark only        (public invoice/quote pages, where the issuing merchant is the
  *               dominant brand and Soletrade must stay subtle/secondary)
  *
  * The full lockup uses `brand.wordmark` (`soletrade`); the compact label uses
- * `brand.shortProductName` (`Workspace`). The prose product name (`Soletrade Workspace`) is NOT
+ * `brand.shortProductName` (`Business`). The prose product name (`Soletrade`) is NOT
  * rendered here - it lives in titles, metadata, and body copy.
  */
 export type LogoVariant = "full" | "compact" | "mark";

@@ -1,6 +1,7 @@
 import "server-only";
 import * as React from "react";
 import Link from "next/link";
+import { brand } from "@/config/brand";
 import { notFound } from "next/navigation";
 import { ArrowLeft, User, ShieldAlert, Lock } from "lucide-react";
 import { requireAdminContext } from "@/platform/admin/services/admin-auth";
@@ -74,7 +75,7 @@ export default async function AdminUserDetailPage({
               Customer Business Content Protected
             </div>
             <p className="leading-relaxed text-warning/80">
-              In accordance with Soletrade Workspace Principle #3 and #4, customer invoices, quotes,
+              In accordance with {brand.productName} Principle #3 and #4, customer invoices, quotes,
               accounting transactions, files, and AI conversations are inaccessible from this view.
               To inspect business content, the customer must grant an explicit time-limited Support
               Access Session.

@@ -1,6 +1,6 @@
-# Deployment runbook - soletrade Workspace
+# Deployment runbook - Soletrade
 
-This is the operator-side checklist for taking soletrade Workspace from local
+This is the operator-side checklist for taking Soletrade from local
 dev to a production deploy on Vercel. The app is designed to boot without secrets
 (modules assert their own required secrets at their boundary), so you can deploy
 first and wire services incrementally - but every external integration below is
@@ -8,8 +8,8 @@ required for full functionality.
 
 The production application domain is **not hard-coded** - set `NEXT_PUBLIC_APP_URL`
 (plus `NEXT_PUBLIC_MARKETING_URL` / `_SUPPORT_URL` / `_PRIVACY_URL` / `_TERMS_URL`)
-in your Vercel env. The app deploys equally to `app.soletrade.example`,
-`workspace.soletrade.example`, or `workspace.soletrade.example` - whichever you configure.
+in your Vercel env. The current production URL is
+`https://business.soletrade.example`; use the configured domain for each environment.
 
 ## 1. Vercel project
 
@@ -18,6 +18,14 @@ in your Vercel env. The app deploys equally to `app.soletrade.example`,
 3. Production environment variables - copy from `.env.example` and fill in
    below. Set them on the **Production** + **Preview** environments as needed.
 4. `vercel --prod` to deploy. The build runs `next build` (Turbopack).
+
+The Soletrade rebrand and app email sender were deployed on 24 October 2026
+to the existing `soletrade` project (Next.js / Node.js 24), deployment
+`dpl_BhWSjdFvfHMvL8gHviTpZxGaBbLK`. After staged checks, the deployment was promoted
+and its `business.soletrade.example` alias mapping completed. Public home, login and
+pricing pages and the app manifest verified the new name; Matt Haitana remains the
+parent brand. See the [deployment record](superpowers/plans/2026-10-24-soletrade-rebrand.md#authorised-production-deployment)
+for source verification and checks.
 
 ## 2. Supabase (auth + database + storage)
 
@@ -45,18 +53,28 @@ in your Vercel env. The app deploys equally to `app.soletrade.example`,
    `checkout.session.completed`, `invoice.paid`, `customer.subscription.updated`,
    `customer.subscription.deleted`. Copy the signing secret. (For local testing:
    `pnpm stripe:listen` forwards to `localhost:3000/api/stripe/webhooks`.)
-   **Branding follow-up:** the 4 Stripe products were created with display name
-   `soletrade OS - <module>`. Update each product's display name to
-   `soletrade Workspace - <module>` and set the statement descriptor to `SOLETRADELABS`
-   (shortened `SOLETRADE`) in the Stripe Dashboard - `pnpm stripe:setup` only renames
-   *newly* created products (it reuses existing ones by metadata slug
-   `soletrade-<module>`). Product/price ids are unchanged.
+   **Product branding:** the 4 module products in both live and test mode were renamed to
+   `Soletrade - <Module>` on 24 October 2026. See the
+   [verified rename record](research/2026-10-24-stripe-product-renames.md).
+   `pnpm stripe:setup` uses the current brand for new products and reuses existing ones by
+   metadata slug `soletrade-<module>` without renaming them. Future rebrands require a
+   separate Product `name` update. Preserve product/price IDs, metadata, subscriptions and
+   existing statement descriptors when changing display names.
 
 ## 4. Resend (email)
 
 - `RESEND_API_KEY` - from your Resend dashboard.
-- `EMAIL_FROM` - a verified sender, e.g. `soletrade Workspace <noreply@soletrade.example>`.
+- `EMAIL_FROM` - the bare verified sender address, currently `support@soletrade.example`.
+  Keep this value as an email address; the app adds the product display name from
+  `brand.productName`, sending as `Soletrade <support@soletrade.example>`.
   Verify the sending domain in Resend first (add the DNS records they show you).
+- Supabase signup and sign-in emails use Auth's separate SMTP sender settings. On
+  24 October 2026, the hosted project `oqzbzifuliwgfzogmorl` was updated to send as
+  `Soletrade <support@soletrade.example>`, preserving its existing address and
+  SMTP configuration. A full dashboard reload verified the saved sender name and
+  address; custom SMTP remains enabled and no Auth hooks are configured. This hosted
+  setting is live without an app deployment. The app's separate Resend sender change
+  went live in the production deployment recorded above and does not control Auth's sender.
 - Email is best-effort: a Resend outage never blocks an invoice send (handlers
   are isolated by the event bus). When unset, `sendEmail` returns
   `not-configured` and the app keeps working.

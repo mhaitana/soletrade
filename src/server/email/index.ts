@@ -1,5 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
+import { brand } from "@/config/brand";
 import { env } from "@/shared/lib/env";
 
 /**
@@ -47,7 +48,7 @@ class ResendClient implements EmailClient {
   private readonly from: string;
   constructor(apiKey: string, from: string) {
     this.resend = new Resend(apiKey);
-    this.from = from;
+    this.from = `${brand.productName} <${from}>`;
   }
   async send(payload: EmailPayload): Promise<{ id?: string } | null> {
     const { data, error } = await this.resend.emails.send({
