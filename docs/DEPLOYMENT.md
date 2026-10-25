@@ -13,20 +13,35 @@ in your Vercel env. The current production URL is
 
 ## 1. Vercel project
 
-1. Configure the existing Vercel project's **Root Directory** as `apps/web` and enable
-   inclusion of source files outside that directory. Keep the repository root as the
-   pnpm workspace/install root and use Node.js 24.
+1. Keep the existing Vercel project's **Root Directory** set to `apps/web`, with
+   inclusion of source files outside that directory enabled. The repository root is
+   the pnpm workspace/install root; the project uses Node.js 24.
 2. Preserve hosted environment variables. `apps/web/.env.example` documents their
    names; local ignored credentials are never uploaded as source.
 3. Use the package's `pnpm build` (`next build`) as the build command. The root pnpm
    lockfile supplies workspace dependencies; Next traces files from the repository root.
 4. Create and inspect a preview deployment before switching production. Confirm
    shared contracts resolve, public assets load, and all five cron routes remain configured.
-5. Coordinate the root-directory setting with this source migration. For rollback,
-   restore both the previous source revision and its previous root-directory setting.
+5. For a rebuilt rollback to pre-monorepo source, restore the project's Root Directory
+   to the repository root along with that source revision. An existing immutable
+   deployment can be rolled back without rebuilding. Restore `apps/web` before building
+   current `main` again.
 
-This refactor does not change hosted settings or promote a deployment. Existing
-Vercel project identity, domains, provider credentials and callback URLs stay intact.
+The monorepo production cutover completed on **25 October 2026** in the existing
+`soletrade` project under `soletrade`. The refactor was merged into `main`,
+the settings above were applied, and Vercel's Git integration deployed release commit
+`1d3125183f90380a2d8062a34801914aa04960dc` as
+[`dpl_FgQ1tAihg5718SzeV5eMqCDU17JN`](https://vercel.com/soletrade/soletrade/FgQ1tAihg5718SzeV5eMqCDU17JN).
+The deployment reached `READY` and was verified at
+[business.soletrade.example](https://business.soletrade.example).
+
+[Release CI](https://github.com/soletrade/soletrade/actions/runs/40159874785)
+passed the frozen install, full checks (1,020 tests), web build and iOS/Android
+exports. Hosted smoke checks passed, and the post-deployment error/fatal log scan
+found no entries for the release. Project identity, domains, provider credentials,
+callback URLs and all five cron schedules were preserved; no database migrations
+were run. See the [completed cutover record](superpowers/plans/2026-10-25-monorepo-restructure.md#production-cutover---25-october-2026)
+for verification details and test limitations.
 
 The Soletrade rebrand and app email sender were deployed on 24 October 2026
 to the existing `soletrade` project (Next.js / Node.js 24), deployment
@@ -83,7 +98,7 @@ for source verification and checks.
   SMTP configuration. A full dashboard reload verified the saved sender name and
   address; custom SMTP remains enabled and no Auth hooks are configured. This hosted
   setting is live without an app deployment. The app's separate Resend sender change
-  went live in the production deployment recorded above and does not control Auth's sender.
+  went live in the 24 October rebrand deployment and does not control Auth's sender.
 - Email is best-effort: a Resend outage never blocks an invoice send (handlers
   are isolated by the event bus). When unset, `sendEmail` returns
   `not-configured` and the app keeps working.
@@ -112,12 +127,12 @@ has its own buckets, so the effective limit is `max × replica_count`. For prod:
 
 `apps/web/vercel.json` preserves these schedules:
 
-| Schedule | Route |
-| --- | --- |
-| `* * * * *` | `/api/cron/mobile` |
-| `17 0 * * *` | `/api/cron/invoice-overdue` |
-| `23 0 * * *` | `/api/cron/quote-expired` |
-| `31 0 * * *` | `/api/cron/credit-expired` |
+| Schedule     | Route                              |
+| ------------ | ---------------------------------- |
+| `* * * * *`  | `/api/cron/mobile`                 |
+| `17 0 * * *` | `/api/cron/invoice-overdue`        |
+| `23 0 * * *` | `/api/cron/quote-expired`          |
+| `31 0 * * *` | `/api/cron/credit-expired`         |
 | `11 0 * * *` | `/api/cron/module-cancel-finalize` |
 
 Preserve `CRON_SECRET`; Vercel sends it as a bearer token. All route paths and
