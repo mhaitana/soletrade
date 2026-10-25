@@ -43,6 +43,7 @@ import { publishEvent } from "@/server/infrastructure/events";
 import { writeAudit } from "@/server/foundation/audit";
 import { getWorkspace } from "@/server/foundation/workspaces";
 import { isDrivePlatform } from "@/config/drive-platforms";
+import { MAX_EARNINGS_BATCH_SIZE } from "@/lib/domain/drive/constants";
 import type { VehicleExpenseType } from "@/lib/domain/database-enums";
 import type { DriveSummary as DriveSummaryResult } from "@/lib/domain/drive/calc";
 import {
@@ -225,6 +226,83 @@ export async function createEarning(
     metadata: { platform: input.platform, amountCents: input.amountCents },
   });
   return id;
+}
+
+const earningsBatchSchema = z
+  .array(
+    z.object({
+      platform: z.string().trim().refine(isDrivePlatform, "Pick a valid platform."),
+      amountCents: z.number().int().min(1, "Amount must be greater than 0.").max(2_147_483_647),
+      currency: z.string().trim().length(3).optional(),
+      date: z.date(),
+      description: z.string().trim().min(1, "Description is required.").max(280),
+      notes: z.string().trim().max(2000).nullable().optional(),
+    }),
+  )
+  .min(1, "Add at least one earning.")
+  .max(MAX_EARNINGS_BATCH_SIZE, `Save no more than ${MAX_EARNINGS_BATCH_SIZE} earnings at once.`);
+
+/** Save all earnings and their trigger-maintained Books mirrors in one transaction. */
+export async function createEarnings(
+  workspaceId: WorkspaceId,
+  inputs: readonly EarningInput[],
+  actorId: UserId,
+): Promise<DriveEarningId[]> {
+  // Validate the complete batch before any database call, including non-action callers.
+  const earnings = earningsBatchSchema.parse(inputs);
+  const workspace = await getWorkspace(workspaceId);
+  const defaultCurrency = workspace?.defaultCurrency ?? "AUD";
+  const rows = await unwrap(
+    getDataClient()
+      .from("drive_earnings")
+      .insert(
+        earnings.map((earning) => ({
+          workspace_id: workspaceId,
+          platform: earning.platform,
+          amount_cents: earning.amountCents,
+          currency: earning.currency ?? defaultCurrency,
+          date: earning.date.toISOString(),
+          description: earning.description,
+          notes: earning.notes ?? null,
+        })),
+      )
+      .select("id, platform, amount_cents, currency, date, description"),
+  );
+
+  await Promise.all(
+    rows.map(async (row) => {
+      await publishEvent({
+        type: "DriveEarningsLogged",
+        workspaceId,
+        actorUserId: actorId,
+        entityType: "drive_earning",
+        entityId: row.id,
+        metadata: {
+          platform: row.platform,
+          amountCents: row.amount_cents,
+          currency: row.currency,
+          date: parsePgTimestamp(row.date),
+          description: row.description,
+        },
+      });
+      try {
+        await writeAudit({
+          workspaceId,
+          actorUserId: actorId,
+          action: "drive.earning.create",
+          targetType: "drive_earning",
+          targetId: row.id,
+          metadata: { platform: row.platform, amountCents: row.amount_cents },
+        });
+      } catch (err) {
+        // The financial rows already committed. Reporting failure would invite a duplicate
+        // retry, so retain the successful save and report the audit failure to server logs.
+        console.error(`[drive] Failed to audit saved earning ${row.id}:`, err);
+      }
+    }),
+  );
+
+  return rows.map((row) => branded<"DriveEarningId">(row.id));
 }
 
 /** Update an earning (workspace-isolated). Throws if not found. No event (silent edit). */

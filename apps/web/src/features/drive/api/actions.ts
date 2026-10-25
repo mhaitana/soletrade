@@ -9,6 +9,7 @@ import { authorizeOrAudit } from "@/server/application/auth/authorization/index"
 import { isModuleEnabled } from "@/server/foundation/module-installations/index";
 import {
   createEarning,
+  createEarnings,
   createTrip,
   deleteEarning,
   deleteTrip,
@@ -22,6 +23,7 @@ import {
   updateTrip,
 } from "@/server/domains/drive/index";
 import type { EarningInput, EarningRow, TripInput, TripRow } from "@/lib/domain/drive/types";
+import { MAX_EARNINGS_BATCH_SIZE } from "@/lib/domain/drive/constants";
 import type { DriveSummary, WeeklyDrivePoint } from "@/lib/domain/drive/calc";
 import { type Period, parsePeriod, periodRange } from "@/utils/periods";
 import { isDrivePlatform } from "@/config/drive-platforms";
@@ -82,6 +84,59 @@ export async function createEarningAction(input: unknown): Promise<CreateEarning
     return { ok: true, earningId: id };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to log earning." };
+  }
+}
+
+const createEarningsSchema = z.object({
+  earnings: z
+    .array(
+      createEarningSchema.extend({
+        amountCents: createEarningSchema.shape.amountCents.max(
+          2_147_483_647,
+          "Amount is too large.",
+        ),
+      }),
+    )
+    .min(1, "Add at least one earning.")
+    .max(MAX_EARNINGS_BATCH_SIZE, `Save no more than ${MAX_EARNINGS_BATCH_SIZE} earnings at once.`),
+});
+
+export type CreateEarningsResult =
+  | { ok: true; earningIds: string[] }
+  | { ok: false; error: string; fieldErrors?: Record<string, string[]>; unconfirmed?: boolean };
+
+export async function createEarningsAction(input: unknown): Promise<CreateEarningsResult> {
+  const parsed = createEarningsSchema.safeParse(input);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join(".") || "earnings";
+      (fieldErrors[key] ??= []).push(issue.message);
+    }
+    return { ok: false, error: "Please fix the highlighted fields.", fieldErrors };
+  }
+
+  const ctx = await requireWorkspaceContext();
+  if (!(await authorizeOrAudit(ctx, "manage:drive")).ok) return forbid();
+
+  try {
+    const earningIds = await createEarnings(
+      ctx.workspaceId,
+      parsed.data.earnings.map((earning) => ({ ...earning, notes: earning.notes ?? null })),
+      ctx.user.id,
+    );
+    revalidatePath("/drive");
+    revalidatePath("/books");
+    revalidatePath("/dashboard");
+    return { ok: true, earningIds };
+  } catch (err) {
+    console.error("[drive] Failed to confirm earnings batch:", err);
+    return {
+      ok: false,
+      unconfirmed: true,
+      error:
+        "We couldn’t confirm whether these earnings were saved. Check your earnings before trying again to avoid duplicates.",
+    };
   }
 }
 
