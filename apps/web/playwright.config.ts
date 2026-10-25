@@ -1,5 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import { parseEnv } from "node:util";
+import { prepareE2EEnvironment } from "./scripts/lib/e2e-environment";
+import { repositoryRoot, webRoot } from "./e2e/setup/paths";
+
+const file = process.env.E2E_ENV_FILE;
+if (!file) throw new Error("Set E2E_ENV_FILE to a disposable local test environment file.");
+const target = prepareE2EEnvironment(
+  parseEnv(readFileSync(path.resolve(webRoot, file), "utf8")),
+  readFileSync(path.join(repositoryRoot, "supabase/config.toml"), "utf8"),
+  process.env,
+);
+Object.assign(process.env, target.env);
 
 /**
  * Playwright E2E configuration for soletrade.
@@ -29,7 +42,7 @@ export default defineConfig({
 
   /* Shared settings for all the projects below */
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    baseURL: target.baseURL,
 
     /* Collect trace when retrying a failed test */
     trace: "on-first-retry",
@@ -74,11 +87,12 @@ export default defineConfig({
     },
   ],
 
-  /* Start the Next.js dev server. Reuse an already-running instance locally. */
+  /* Own the server so an existing process cannot supply a different database or providers. */
   webServer: {
-    command: "pnpm dev",
-    url: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
+    command: `pnpm exec next dev --hostname ${target.hostname} --port ${target.port}`,
+    url: target.baseURL,
+    env: target.env,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 

@@ -91,6 +91,7 @@ describe.skipIf(!HAS_DB)("cancellation engine integration (requires DATABASE_URL
         { table: "credit_ledger" },
         { table: "audit_logs" },
         { table: "module_installations" },
+        { table: "billing_contracts" },
         { table: "subscriptions" },
       ],
     );

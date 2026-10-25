@@ -63,7 +63,7 @@ describe.skipIf(!HAS_DB)("notifications integration (requires DATABASE_URL)", ()
     await cleanupWorkspaces(
       workspaceIds,
       [owner, employee, otherOwner],
-      [{ table: "notifications" }],
+      [{ table: "mobile_notification_outbox" }, { table: "notifications" }],
     );
   });
 

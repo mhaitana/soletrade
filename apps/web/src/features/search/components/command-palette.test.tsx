@@ -8,12 +8,6 @@ const push = vi.fn();
 const fetchMock = vi.fn<typeof fetch>();
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
-vi.mock("@/config/navigation", () => ({
-  buildNav: () => [
-    { href: "/dashboard", label: "Dashboard", icon: () => null },
-    { href: "/customers", label: "Customers", icon: () => null },
-  ],
-}));
 
 function results(label: string): SearchResultGroup[] {
   return [
@@ -68,9 +62,36 @@ afterEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it("updates navigation when a role loses audit access", () => {
+    const installedModules: [] = [];
+    const { rerender } = render(
+      <CommandPalette
+        open
+        onOpenChange={vi.fn()}
+        installedModules={installedModules}
+        role="owner"
+      />,
+    );
+    expect(screen.getByRole("option", { name: "Audit log" })).toBeInTheDocument();
+
+    rerender(
+      <CommandPalette
+        open
+        onOpenChange={vi.fn()}
+        installedModules={installedModules}
+        role="readonly"
+      />,
+    );
+
+    expect(screen.queryByRole("option", { name: "Audit log" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Dashboard" })).toBeInTheDocument();
+  });
+
   it("keeps server matches whose searchable fields are absent from the display label", async () => {
     fetchMock.mockResolvedValue(response(results("Airport parking")));
-    render(<CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} />);
+    render(
+      <CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} role="owner" />,
+    );
 
     // The server can match a customer's company or a Drive note, neither of which
     // needs to appear in the result's display text.
@@ -86,7 +107,9 @@ describe("CommandPalette", () => {
 
   it("hides the previous query's results during the next debounce", async () => {
     fetchMock.mockResolvedValue(response(results("Acme parking")));
-    render(<CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} />);
+    render(
+      <CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} role="owner" />,
+    );
     changeQuery("ac");
     await finishDebounce();
     expect(screen.getByText("Acme parking")).toBeVisible();
@@ -102,7 +125,9 @@ describe("CommandPalette", () => {
     const previous = deferredResponse();
     const latest = deferredResponse();
     fetchMock.mockReturnValueOnce(previous.promise).mockReturnValueOnce(latest.promise);
-    render(<CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} />);
+    render(
+      <CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} role="owner" />,
+    );
     changeQuery("ac");
     await finishDebounce();
     changeQuery("acm");
@@ -123,7 +148,9 @@ describe("CommandPalette", () => {
     if (kind === "http") fetchMock.mockResolvedValueOnce(new Response(null, { status: 503 }));
     else fetchMock.mockRejectedValueOnce(new Error("Offline"));
     fetchMock.mockResolvedValueOnce(response(results("Acme parking")));
-    render(<CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} />);
+    render(
+      <CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} role="owner" />,
+    );
     changeQuery("acme");
     await finishDebounce();
 
@@ -142,7 +169,9 @@ describe("CommandPalette", () => {
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 503 }))
       .mockResolvedValueOnce(response(results("Customer receipt")));
-    render(<CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} />);
+    render(
+      <CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} role="owner" />,
+    );
     changeQuery("cust");
     await screen.findByRole("alert");
 
@@ -179,7 +208,9 @@ describe("CommandPalette", () => {
         },
       ]),
     );
-    render(<CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} />);
+    render(
+      <CommandPalette open onOpenChange={vi.fn()} installedModules={["books"]} role="owner" />,
+    );
     changeQuery("Acme");
     await finishDebounce();
 

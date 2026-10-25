@@ -24,7 +24,7 @@ test.describe("create books transaction", () => {
     await ownerPage.goto("/books/new", { waitUntil: "networkidle" });
     await switchWorkspace(ownerPage, ACTIVE_WORKSPACE);
 
-    await ownerPage.getByLabel("Amount", { exact: true }).fill("275.00");
+    await ownerPage.getByLabel("Amount (AUD)", { exact: true }).fill("275.00");
     await ownerPage.getByLabel("Description", { exact: true }).fill(description);
     await ownerPage.locator("#type").selectOption("income");
 

@@ -16,6 +16,10 @@ import { test } from "../fixtures/auth";
 
 test.describe.configure({ mode: "parallel" });
 
+test.beforeEach(({ viewport }) => {
+  test.skip(viewport === null || viewport.width >= 768, "Only narrow mobile viewports");
+});
+
 async function expectMinHeight(locator: Locator, min: number, name: string): Promise<void> {
   await expect(locator).toBeVisible();
   const box = await locator.boundingBox();

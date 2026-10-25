@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/application/shell/app-shell";
 import type { WorkspaceId } from "@/types/ids";
+import type { WorkspaceRole } from "@/lib/domain/database-enums";
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -12,18 +13,31 @@ beforeEach(() => {
       removeEventListener: vi.fn(),
     })),
   );
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard",
+  useRouter: () => ({ push: vi.fn() }),
+}));
+vi.mock("next/dynamic", async () => {
+  const { CommandPalette } = await import("@/features/search/components/command-palette");
+  return { default: () => CommandPalette };
+});
 vi.mock("@/application/shell/workspace-switcher", () => ({ WorkspaceSwitcher: () => null }));
 vi.mock("@/application/shell/account-menu", () => ({ AccountMenu: () => null }));
 vi.mock("@/application/shell/quick-create-menu", () => ({ QuickCreateMenu: () => null }));
 vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }));
 vi.mock("@/features/notifications/components/notification-bell", () => ({
   NotificationBell: () => null,
-}));
-vi.mock("@/features/search/components/search-trigger", () => ({
-  SearchTrigger: () => null,
 }));
 
 // Stand in for the network-backed assistant. Its local input state proves that
@@ -96,4 +110,30 @@ describe("AppShell assistant lifecycle", () => {
     await waitFor(() => expect(draft).toBeVisible());
     expect(screen.getByLabelText("Assistant draft")).toHaveValue("Help with my invoice");
   });
+});
+
+it("removes Audit log from navigation and open search when the workspace role changes", () => {
+  const installedModules: [] = [];
+  const shell = (role: WorkspaceRole) => (
+    <AppShell
+      workspaces={[]}
+      activeWorkspaceId={"workspace" as WorkspaceId}
+      installedModules={installedModules}
+      role={role}
+      userEmail="member@example.test"
+      notificationCount={0}
+    >
+      <h1>Dashboard</h1>
+    </AppShell>
+  );
+  const { rerender } = render(shell("owner"));
+  expect(screen.getByRole("link", { name: "Audit log" })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Search (⌘K)" }));
+  expect(screen.getByRole("option", { name: "Audit log" })).toBeInTheDocument();
+
+  rerender(shell("readonly"));
+
+  expect(screen.queryAllByText("Audit log", { exact: true })).toHaveLength(0);
+  expect(screen.getByRole("option", { name: "Dashboard" })).toBeInTheDocument();
 });

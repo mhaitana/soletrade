@@ -1,4 +1,4 @@
-import { repositoryRoot } from "../../src/testing/paths";
+import { repositoryRoot } from "./paths";
 import { execSync } from "node:child_process";
 
 /**

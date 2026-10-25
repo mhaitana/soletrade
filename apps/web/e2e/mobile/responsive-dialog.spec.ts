@@ -1,4 +1,4 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { switchWorkspace, test } from "../fixtures/auth";
 
 /**
@@ -13,6 +13,19 @@ const ACTIVE_WORKSPACE = "Soletrade Demo Co";
 
 test.describe.configure({ mode: "parallel" });
 
+function trackHydrationErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => {
+    if (/hydration failed/i.test(error.message)) errors.push(error.message);
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration failed/i.test(message.text())) {
+      errors.push(message.text());
+    }
+  });
+  return errors;
+}
+
 test("members remove confirmation renders as a bottom sheet at 390px", async ({
   ownerPage: page,
   viewport,
@@ -21,6 +34,7 @@ test("members remove confirmation renders as a bottom sheet at 390px", async ({
     viewport === null || viewport.width >= 768,
     "Only narrow viewports render a bottom sheet",
   );
+  const hydrationErrors = trackHydrationErrors(page);
 
   await page.goto("/settings/members", { waitUntil: "networkidle" });
   await switchWorkspace(page, ACTIVE_WORKSPACE);
@@ -42,6 +56,7 @@ test("members remove confirmation renders as a bottom sheet at 390px", async ({
 
   const dialog = page.locator('[data-slot="dialog-content"]');
   await expect(dialog).not.toBeVisible();
+  expect(hydrationErrors).toEqual([]);
 });
 
 test("members remove confirmation renders as a centered dialog at 1280px", async ({
@@ -52,6 +67,7 @@ test("members remove confirmation renders as a centered dialog at 1280px", async
     viewport === null || viewport.width < 768,
     "Only desktop viewports render a centered dialog",
   );
+  const hydrationErrors = trackHydrationErrors(page);
   await page.goto("/settings/members", { waitUntil: "networkidle" });
   await switchWorkspace(page, ACTIVE_WORKSPACE);
 
@@ -64,4 +80,5 @@ test("members remove confirmation renders as a centered dialog at 1280px", async
 
   const sheet = page.locator('[data-slot="sheet-content"]');
   await expect(sheet).not.toBeVisible();
+  expect(hydrationErrors).toEqual([]);
 });

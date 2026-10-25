@@ -15,9 +15,26 @@ test.describe("global hAI assistant", () => {
     });
 
     await ownerPage.goto("/dashboard", { waitUntil: "networkidle" });
+    // Other browser projects create invoices and accept quotes in this shared
+    // workspace. Compare the assistant with the current dashboard evidence.
+    const outstanding = await ownerPage
+      .getByRole("link", { name: /^Outstanding invoices:/ })
+      .getAttribute("aria-label");
+    const readyToInvoice = await ownerPage
+      .getByRole("link", { name: /^Ready to invoice:/ })
+      .getAttribute("aria-label");
+    expect(outstanding).toMatch(/^Outstanding invoices: \$[\d,]+\.\d{2}$/);
+    expect(readyToInvoice).toMatch(/^Ready to invoice: \$[\d,]+\.\d{2}$/);
+    const overdue = await ownerPage.getByText(/^\d+ overdue invoices?$/).textContent();
+    expect(overdue).toMatch(/^\d+ overdue invoices?$/);
+    const outstandingEvidence = `${outstanding} (${overdue!.match(/^\d+/)![0]} overdue)`;
+    const acceptedQuotesEvidence = readyToInvoice!.replace(
+      "Ready to invoice:",
+      "Ready to invoice (accepted quotes):",
+    );
     await ownerPage.getByRole("button", { name: "hAI", exact: true }).click();
 
-    const panel = ownerPage.getByRole("complementary", { name: "hAI global assistant" });
+    const panel = ownerPage.getByRole("dialog", { name: "hAI global assistant" });
     await expect(panel.getByText("Context: /dashboard")).toBeVisible();
     await panel.getByRole("button", { name: "What should I pay attention to here?" }).click();
 
@@ -27,10 +44,8 @@ test.describe("global hAI assistant", () => {
     await expect(
       panel.getByText(/Installed modules: invoices, books, drive, quotes/),
     ).toBeVisible();
-    await expect(panel.getByText(/Outstanding invoices: \$21,450\.00 \(1 overdue\)/)).toBeVisible();
-    await expect(
-      panel.getByText(/Ready to invoice \(accepted quotes\): \$4,400\.00/),
-    ).toBeVisible();
+    await expect(panel.getByText(outstandingEvidence)).toBeVisible();
+    await expect(panel.getByText(acceptedQuotesEvidence)).toBeVisible();
 
     const history = panel.getByRole("link", { name: "History" });
     const historyHref = await history.getAttribute("href");
@@ -38,9 +53,9 @@ test.describe("global hAI assistant", () => {
     await history.click();
     await ownerPage.waitForURL(/\/assistant\?c=[0-9a-f-]{36}$/);
 
-    // Close the persistent panel so the server-rendered History transcript is
-    // the only visible copy. A hard reload then proves both turns came from DB.
-    await panel.getByRole("button", { name: "Close hAI" }).click();
+    // Opening History closes the panel. A hard reload then proves both turns
+    // in the server-rendered transcript came from the database.
+    await expect(panel).not.toBeVisible();
     const main = ownerPage.locator("main");
     await expect(
       main.getByText("What should I pay attention to here?", { exact: true }).last(),
@@ -54,7 +69,7 @@ test.describe("global hAI assistant", () => {
     await expect(
       main.getByText("What should I pay attention to here?", { exact: true }).last(),
     ).toBeVisible();
-    await expect(main.getByText(/Outstanding invoices: \$21,450\.00 \(1 overdue\)/)).toBeVisible();
+    await expect(main.getByText(outstandingEvidence)).toBeVisible();
     expect(hydrationErrors).toEqual([]);
   });
 
@@ -64,7 +79,7 @@ test.describe("global hAI assistant", () => {
     await readonlyPage.goto("/dashboard", { waitUntil: "networkidle" });
     await readonlyPage.getByRole("button", { name: "hAI", exact: true }).click();
 
-    const panel = readonlyPage.getByRole("complementary", { name: "hAI global assistant" });
+    const panel = readonlyPage.getByRole("dialog", { name: "hAI global assistant" });
     const message = panel.getByLabel("Message hAI");
     await message.fill("Draft an invoice for Acme Corp for $250");
     await message.press("Enter");
@@ -75,6 +90,7 @@ test.describe("global hAI assistant", () => {
       },
     );
     await expect(readonlyPage).toHaveURL(/\/dashboard$/);
+    await panel.getByRole("button", { name: "Close hAI" }).click();
     await expect(
       readonlyPage.getByRole("complementary", { name: "hAI assisted draft" }),
     ).not.toBeVisible();
@@ -85,6 +101,9 @@ test.describe("global hAI assistant", () => {
     viewport,
   }) => {
     expect(viewport, "The hAI responsive test requires a configured viewport").not.toBeNull();
+    expect(ownerPage.viewportSize(), "The auth fixture must inherit the project viewport").toEqual(
+      viewport,
+    );
     const compact = viewport!.width < 1280;
 
     await ownerPage.goto("/dashboard", { waitUntil: "networkidle" });
@@ -94,18 +113,19 @@ test.describe("global hAI assistant", () => {
       )
       .toBe(true);
     const toggle = ownerPage.getByRole("button", { name: "hAI", exact: true });
-    await toggle.click();
-
-    const panel = ownerPage.getByRole("complementary", { name: "hAI global assistant" });
-    await expect(panel).toBeVisible();
-
-    const message = panel.getByLabel("Message hAI");
     if (compact) {
       const toggleBox = await toggle.boundingBox();
       expect(toggleBox, "The mobile hAI toggle needs a measurable touch target").not.toBeNull();
       expect(toggleBox!.height).toBeGreaterThanOrEqual(44);
       expect(toggleBox!.width).toBeGreaterThanOrEqual(44);
+    }
+    await toggle.click();
 
+    const panel = ownerPage.getByRole("dialog", { name: "hAI global assistant" });
+    await expect(panel).toBeVisible();
+
+    const message = panel.getByLabel("Message hAI");
+    if (compact) {
       await expect
         .poll(async () => {
           const box = await panel.boundingBox();
@@ -157,9 +177,11 @@ test.describe("global hAI assistant", () => {
 
     await expect(panel).toBeVisible();
     await expect(panel.getByText("Context: /invoices/new")).toBeVisible();
-    if (compact) {
+    if ((await panel.getAttribute("aria-modal")) === "true") {
       await panel.getByRole("button", { name: "Close hAI" }).click();
       await expect(panel).not.toBeVisible();
+    }
+    if (compact) {
       await expect
         .poll(() =>
           ownerPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

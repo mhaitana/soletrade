@@ -16,6 +16,7 @@ import { SEARCH_MODULE_LABEL, type SearchResultGroup } from "@/types/search";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { ModuleKey } from "@/config/modules";
+import type { WorkspaceRole } from "@/lib/domain/database-enums";
 
 /**
  * ⌘K command palette (Wave 3). A `CommandDialog` (cmdk wrapped in the vendored `Dialog`) with
@@ -31,19 +32,28 @@ export interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   installedModules: ModuleKey[];
+  role: WorkspaceRole;
 }
 
 type SearchResponse =
   | { version: number; status: "success"; groups: SearchResultGroup[] }
   | { version: number; status: "error" };
 
-export function CommandPalette({ open, onOpenChange, installedModules }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onOpenChange,
+  installedModules,
+  role,
+}: CommandPaletteProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [requestVersion, setRequestVersion] = useState(0);
   const [response, setResponse] = useState<SearchResponse | null>(null);
 
-  const navItems = useMemo<NavItem[]>(() => buildNav(installedModules), [installedModules]);
+  const navItems = useMemo<NavItem[]>(
+    () => buildNav(installedModules, role),
+    [installedModules, role],
+  );
 
   const term = query.trim();
   const showResults = open && term.length >= 2;

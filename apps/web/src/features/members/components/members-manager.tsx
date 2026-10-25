@@ -32,6 +32,13 @@ import {
 
 const ROLE_OPTIONS = ["admin", "manager", "accountant", "employee", "readonly"] as const;
 const initialState: InviteMemberResult = { ok: false, error: "" };
+// Explicit numeric fields and UTC keep Node and WebKit hydration output identical.
+const memberDateFormatter = new Intl.DateTimeFormat("en-AU", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 /** Roles a member can be changed to (excludes owner - ownership transfer is separate). */
 const CHANGEABLE_ROLES = ROLE_OPTIONS;
@@ -217,7 +224,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                         {isSelf ? <span className="text-muted-foreground"> (you)</span> : null}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Member since {new Date(m.createdAt).toLocaleDateString("en-AU")}
+                        Member since {memberDateFormatter.format(new Date(m.createdAt))}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -272,7 +279,7 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{inv.email}</p>
                     <p className="text-xs text-muted-foreground">
-                      Expires {new Date(inv.expiresAt).toLocaleDateString("en-AU")}
+                      Expires {memberDateFormatter.format(new Date(inv.expiresAt))}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

@@ -101,6 +101,7 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
     const tables: CleanupTable[] = [
       { table: "credit_ledger" },
       { table: "module_installations" },
+      { table: "billing_contracts" },
       { table: "subscriptions" },
       { table: "audit_logs" },
     ];
@@ -127,8 +128,24 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
 
   it("a second delivery of the same event id is a no-op (pre-check idempotency)", async () => {
     const ws = await freshWorkspace("idempotent");
+    await startBilling(ws, "idempotent", "monthly");
+
+    const readUpdateAudits = () =>
+      unwrap(
+        getDataClient()
+          .from("audit_logs")
+          .select("id")
+          .eq("workspace_id", ws)
+          .eq("action", "billing.subscription.update")
+          .order("id"),
+      );
+    const readContracts = () =>
+      unwrap(
+        getDataClient().from("billing_contracts").select("*").eq("workspace_id", ws).order("id"),
+      );
+    const auditsBefore = await readUpdateAudits();
     // Use subscription.updated for the idempotency pre-check - it carries
-    // everything on the event (no Stripe retrieve), and writes exactly one
+    // everything on the event (no Stripe retrieve), and writes one additional
     // audit row on the first delivery (status change active → past_due).
     const event = makeEvent("customer.subscription.updated", `evt_idempotent_${ws}`, {
       id: `sub_test_${ws}`,
@@ -137,16 +154,18 @@ describe.skipIf(!HAS_DB)("Stripe webhook handlers integration (requires DATABASE
     });
 
     await handleStripeEvent(event);
-    await handleStripeEvent(event); // retry - should be a no-op
+    // The HTTP route records successful processing before a later retry arrives.
+    await recordProcessedEvent(event.id, event.type);
+    const firstSubscription = await getSubscription(ws);
+    const firstContracts = await readContracts();
+    const firstAudits = await readUpdateAudits();
+    expect(firstSubscription?.status).toBe("past_due");
+    expect(firstAudits).toHaveLength(auditsBefore.length + 1);
 
-    const sub = await getSubscription(ws);
-    expect(sub?.status).toBe("past_due");
-
-    const auditRows = await unwrap(
-      getDataClient().from("audit_logs").select("action").eq("workspace_id", ws),
-    );
-    const updateAudits = auditRows.filter((r) => r.action === "billing.subscription.update");
-    expect(updateAudits.length).toBe(1);
+    await handleStripeEvent(event);
+    expect(await getSubscription(ws)).toEqual(firstSubscription);
+    expect(await readContracts()).toEqual(firstContracts);
+    expect(await readUpdateAudits()).toEqual(firstAudits);
   });
 
   it("customer.subscription.updated syncs the local status and leaves billingInterval unchanged", async () => {

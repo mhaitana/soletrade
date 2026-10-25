@@ -13,7 +13,7 @@ import type { BusEvent } from "@/server/infrastructure/events";
  * Integration tests for the Books receipt-extraction pipeline (Wave 2) against a real
  * Postgres with the **mock** AI provider (no Anthropic/OpenAI key needed). Exercises the
  * full flow: upload a file row → extract (canned data) → review queue → apply (creates a
- * book_transaction with `receiptFileId` + `gstCents`) → idempotent re-apply rejected.
+ * book_transaction with `receiptFileId` + `gstCents`) → re-apply returns the same transaction.
  *
  * `.env.local` sets `AI_PROVIDER=openai` for the dev server; the receipt-extraction
  * service branches on `isMockProvider()` (which reads the `env` singleton parsed once at
@@ -167,13 +167,47 @@ describe.skipIf(!HAS_DB)("books receipt extraction (requires DATABASE_URL)", () 
     expect(row!.transactionId).toBe(transactionId);
   });
 
-  it("is idempotent - re-applying an applied extraction throws", async () => {
+  it("is idempotent - re-applying returns the original transaction without duplicating side effects", async () => {
     const extractions = await svc.listExtractions(ws!, { status: "applied" });
-    expect(extractions.length).toBeGreaterThan(0);
-    const extractionId = extractions[0]!.id;
-    await expect(svc.applyExtraction(ws!, extractionId, {}, actor)).rejects.toThrow(
-      /already applied/i,
+    expect(extractions).toHaveLength(1);
+    const extraction = extractions[0]!;
+    expect(extraction.transactionId).not.toBeNull();
+    const readTransactions = () =>
+      unwrap(
+        getDataClient()
+          .from("book_transactions")
+          .select("*")
+          .eq("workspace_id", ws!)
+          .eq("receipt_file_id", receiptFileId),
+      );
+    const originalTransactions = await readTransactions();
+    expect(originalTransactions).toHaveLength(1);
+    expect(originalTransactions[0]!.id).toBe(extraction.transactionId);
+
+    await expect(svc.applyExtraction(ws!, extraction.id, {}, actor)).resolves.toBe(
+      extraction.transactionId,
     );
+    expect(await readTransactions()).toEqual(originalTransactions);
+    expect(await svc.getExtraction(ws!, extraction.id)).toEqual(extraction);
+
+    const applyAudits = await unwrap(
+      getDataClient()
+        .from("audit_logs")
+        .select("id")
+        .eq("workspace_id", ws!)
+        .eq("action", "books.receipt.apply")
+        .eq("target_id", extraction.id),
+    );
+    const transactionEvents = await unwrap(
+      getDataClient()
+        .from("activity_events")
+        .select("id")
+        .eq("workspace_id", ws!)
+        .eq("type", "TransactionCreated")
+        .eq("entity_id", extraction.transactionId!),
+    );
+    expect(applyAudits).toHaveLength(1);
+    expect(transactionEvents).toHaveLength(1);
   });
 
   it("rejects an extraction without creating a transaction", async () => {

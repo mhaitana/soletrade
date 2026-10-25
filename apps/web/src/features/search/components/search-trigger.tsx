@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ModuleKey } from "@/config/modules";
+import type { WorkspaceRole } from "@/lib/domain/database-enums";
 
 // cmdk + its dialog primitives are not needed for first paint. Keep them out of
 // every authenticated page's initial client bundle and load them only after the
@@ -27,9 +28,10 @@ const CommandPalette = dynamic(
  */
 export interface SearchTriggerProps {
   installedModules: ModuleKey[];
+  role: WorkspaceRole;
 }
 
-export function SearchTrigger({ installedModules }: SearchTriggerProps) {
+export function SearchTrigger({ installedModules, role }: SearchTriggerProps) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -60,7 +62,12 @@ export function SearchTrigger({ installedModules }: SearchTriggerProps) {
         <kbd className="ml-auto hidden font-sans text-xs font-medium xl:inline">⌘K</kbd>
       </Button>
       {open ? (
-        <CommandPalette open={open} onOpenChange={setOpen} installedModules={installedModules} />
+        <CommandPalette
+          open={open}
+          onOpenChange={setOpen}
+          installedModules={installedModules}
+          role={role}
+        />
       ) : null}
     </>
   );

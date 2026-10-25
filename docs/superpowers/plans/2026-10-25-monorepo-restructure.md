@@ -113,3 +113,43 @@ External Supabase/Stripe integration suites, destructive Playwright E2E and
 physical-device journeys were not run as part of the cutover. Follow
 [`docs/TESTING.md`](../../TESTING.md) and [`docs/DEPLOYMENT.md`](../../DEPLOYMENT.md)
 for those environment-specific steps and rollback guidance.
+
+## Follow-up local integration verification - 25 October 2026
+
+Subsequent verification used the repository's disposable loopback Supabase stack,
+Stripe test-mode credentials, and an isolated Next development server. The original
+local database was backed up before resetting it. Email, SMS and external AI
+transports were disabled for the browser tests.
+
+- Supabase: **28 suites / 215 tests passed**.
+- Stripe: **1 suite / 2 tests passed**, including cleanup of test customers,
+  uncompleted Checkout sessions and local billing records.
+- Playwright: **108 passed / 46 viewport-specific skips / 0 failed** across Desktop
+  Chrome, iPhone, Pixel and iPad profiles. All 154 discovered cases were accounted for.
+- After the member-date fix, the focused dialog and signature rerun passed
+  **18 tests**, with **4 viewport-specific skips** and no hydration errors.
+- After synchronizing quote-search navigation, the affected quote flows passed
+  **15 tests**, with **3 viewport-specific skips** across all four profiles.
+
+All 29 focused regression tests, the whole-web type check, changed-file lint and
+formatting, and workspace runtime-cycle checks also passed.
+
+The follow-up repaired monorepo test-path resolution, cleanup dependencies on billing
+contracts and notification outbox rows, and stale idempotency assertions. The E2E
+harness now requires an explicit local environment file, validates the repository's
+Supabase ports, owns its server, and bounds the Docker status check. Persistent
+Turbopack development caching is disabled during E2E after cache growth exhausted
+local disk space; the local Docker engine was recovered without deleting containers
+or volumes.
+
+Browser verification also found and fixed two application issues: Audit log navigation
+now respects role permissions in the shell and command palette, and member join and
+invitation expiry dates use explicit numeric UTC formatting to avoid Node/WebKit
+hydration differences. New regressions cover role changes and date hydration across
+timezones. These are local follow-up changes, separate from the production cutover
+record above. Physical-device journeys remain outside this verification.
+
+Instrumented WebKit runs traced remaining development chunk warnings to cancelled
+requests during native quote-search reloads. Asset responses were 200 or 304, with
+no missing assets or server-error responses; public quote acceptance had no failed
+requests. Temporary request diagnostics were removed after verification.

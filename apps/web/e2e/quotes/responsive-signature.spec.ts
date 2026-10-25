@@ -39,12 +39,20 @@ async function createAndSendQuote(ownerPage: Page, projectName: string): Promise
   await ownerPage.getByLabel("Line 1 unit price").fill("100.00");
 
   await ownerPage.getByRole("button", { name: "Create quote" }).click();
-  await ownerPage.waitForURL("/quotes");
+  await ownerPage.waitForURL("/quotes", { waitUntil: "networkidle" });
 
   // Find the quote by its unique customer name instead of relying on row order.
   const search = ownerPage.getByRole("search").getByLabel("Search quotes");
   await search.fill(customerName);
-  await search.press("Enter");
+  // The new row is also present before search; wait for the GET navigation
+  // before clicking it so the assertion cannot match the previous document.
+  await Promise.all([
+    ownerPage.waitForURL(
+      (url) => url.pathname === "/quotes" && url.searchParams.get("search") === customerName,
+      { waitUntil: "networkidle" },
+    ),
+    search.press("Enter"),
+  ]);
   await expect(
     ownerPage.locator("table tbody tr").filter({ hasText: customerName }).first(),
   ).toBeVisible();

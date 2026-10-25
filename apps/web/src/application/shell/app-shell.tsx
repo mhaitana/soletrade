@@ -171,7 +171,7 @@ export function AppShell({
   notificationCount,
   children,
 }: AppShellProps) {
-  const items = useMemo(() => buildNav(installedModules), [installedModules]);
+  const items = useMemo(() => buildNav(installedModules, role), [installedModules, role]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [haiOpen, setHaiOpen] = useState(false);
   const [haiStarted, setHaiStarted] = useState(false);
@@ -237,7 +237,7 @@ export function AppShell({
 
           <QuickCreateMenu installedModules={installedModules} role={role} />
 
-          <SearchTrigger installedModules={installedModules} />
+          <SearchTrigger installedModules={installedModules} role={role} />
 
           <div className="ml-auto flex items-center gap-0 min-[360px]:gap-1">
             <Button
