@@ -74,7 +74,7 @@ a failing-then-passing task-hash regression. No other P1/P2 findings.
 - [x] Complete GitHub CI, including web build and iOS/Android exports.
 
 The release uses the existing `soletrade` project in the `soletrade` team
-(`prj_zBA4wDqEbnvuaIe80lfAJXM1Y8GR`). The completed release commit is
+(`prj_zBA4wDqEbnvuaIe80lfAJXM1Y8GR`). The initial cutover release commit is
 [`1d3125183f90380a2d8062a34801914aa04960dc`](https://github.com/soletrade/soletrade/commit/1d3125183f90380a2d8062a34801914aa04960dc).
 Production deployment
 [`dpl_FgQ1tAihg5718SzeV5eMqCDU17JN`](https://vercel.com/soletrade/soletrade/FgQ1tAihg5718SzeV5eMqCDU17JN)
@@ -146,10 +146,57 @@ Browser verification also found and fixed two application issues: Audit log navi
 now respects role permissions in the shell and command palette, and member join and
 invitation expiry dates use explicit numeric UTC formatting to avoid Node/WebKit
 hydration differences. New regressions cover role changes and date hydration across
-timezones. These are local follow-up changes, separate from the production cutover
-record above. Physical-device journeys remain outside this verification.
+timezones. These fixes were subsequently released in `9451b66`, as recorded below.
+Physical-device journeys remain outside this verification.
 
 Instrumented WebKit runs traced remaining development chunk warnings to cancelled
 requests during native quote-search reloads. Asset responses were 200 or 304, with
 no missing assets or server-error responses; public quote acceptance had no failed
 requests. Temporary request diagnostics were removed after verification.
+
+## Follow-up production release - 25 October 2026
+
+- [x] Commit the integration, E2E and application fixes on `codex/local-integration-e2e`.
+- [x] Push the branch, fast-forward `main` to the release commit and push `main`.
+- [x] Verify CI and the Vercel production deployment for that exact commit.
+- [x] Verify the production domain with HTTP and Chromium/WebKit smoke checks.
+
+The release commit is
+[`9451b6698ce1481c138b467dc31a211ef224af57`](https://github.com/soletrade/soletrade/commit/9451b6698ce1481c138b467dc31a211ef224af57)
+(`fix: stabilize integration tests and browser workflows`). The merge retained the
+previously released Drive bulk earnings change in `670423f`.
+
+[CI run 40167485691](https://github.com/soletrade/soletrade/actions/runs/40167485691)
+completed successfully: frozen installation, `pnpm check` (lint, architecture, types,
+deterministic tests, formatting and branding), `pnpm build`, and `pnpm mobile:export`
+for iOS and Android. The 29 focused regression tests also passed before committing.
+The local Supabase, Stripe and Playwright results above cover the external integration
+and browser suites that are separate from the ordinary CI workflow.
+
+Vercel's Git integration deployed the same commit from `main` as
+[`dpl_DdRVAHuDppGqZ9wn7FGMU3gujaBj`](https://vercel.com/soletrade/soletrade/DdRVAHuDppGqZ9wn7FGMU3gujaBj).
+It reached `READY` in the existing `soletrade/soletrade` project, with
+[business.soletrade.example](https://business.soletrade.example) mapped to the deployment.
+The immutable deployment URL is
+[soletrade-pp4j97320-soletrade.vercel.app](https://soletrade-pp4j97320-soletrade.vercel.app).
+Build logs confirmed `/vercel/path0/apps/web`, pnpm 10.33.0 and Next.js 16.2.10;
+the project retained Node.js 24 and Root Directory `apps/web`.
+
+Production verification passed:
+
+- **13 HTTP checks:** home, login, pricing, manifest, versioned icon and sampled
+  CSS/JavaScript returned 200; unauthenticated bootstrap returned 401 with
+  `UNAUTHENTICATED`, and all five cron routes returned 401. Sampled asset URLs
+  identified this deployment.
+- **Chromium and WebKit:** all six page/browser combinations passed for home, login
+  and pricing, including branding, headings and login controls. Each browser received
+  46 successful JavaScript/CSS responses, with zero page errors, failed assets or bad
+  asset responses. The run completed at 06:06:08 UTC on 25 October 2026.
+- **Runtime logs:** the exact deployment's production error/fatal scan returned no
+  entries for 05:06:33–06:06:33 UTC on 25 October 2026.
+
+Production verification used public, read-only requests. Authenticated business flows
+were exercised in local/test environments; physical-device journeys and successful
+scheduled cron execution were not verified by these production checks. No production
+database migrations, provider credentials, callback URLs or cron configuration were
+changed for this release.

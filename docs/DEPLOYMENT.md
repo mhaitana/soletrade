@@ -27,7 +27,26 @@ in your Vercel env. The current production URL is
    deployment can be rolled back without rebuilding. Restore `apps/web` before building
    current `main` again.
 
-The monorepo production cutover completed on **25 October 2026** in the existing
+The integration and E2E follow-up was released on **25 October 2026** as
+[`9451b6698ce1481c138b467dc31a211ef224af57`](https://github.com/soletrade/soletrade/commit/9451b6698ce1481c138b467dc31a211ef224af57),
+merged from `codex/local-integration-e2e` into `main`. Vercel's Git integration
+deployed it to the existing `soletrade` project with Root Directory `apps/web`.
+Production deployment
+[`dpl_DdRVAHuDppGqZ9wn7FGMU3gujaBj`](https://vercel.com/soletrade/soletrade/DdRVAHuDppGqZ9wn7FGMU3gujaBj)
+reached `READY` and served [business.soletrade.example](https://business.soletrade.example).
+[Release CI](https://github.com/soletrade/soletrade/actions/runs/40167485691)
+passed the frozen install, `pnpm check`, web build and iOS/Android exports.
+
+All 13 production HTTP checks passed. Chromium and WebKit verified home, login and
+pricing with no page errors or failed assets; the release's post-deployment error/fatal
+log scan was empty. The preceding Supabase, Stripe test-mode and Playwright suites
+passed in local/test environments. This release includes role-aware Audit log navigation
+and consistent UTC member-date rendering, alongside the integration and E2E fixes.
+No production database migrations or provider configuration changes were made. See the
+[follow-up release record](superpowers/plans/2026-10-25-monorepo-restructure.md#follow-up-production-release---25-october-2026)
+for verification scope and evidence.
+
+The initial monorepo production cutover completed on **25 October 2026** in the existing
 `soletrade` project under `soletrade`. The refactor was merged into `main`,
 the settings above were applied, and Vercel's Git integration deployed release commit
 `1d3125183f90380a2d8062a34801914aa04960dc` as
