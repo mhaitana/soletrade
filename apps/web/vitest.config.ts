@@ -18,7 +18,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    maxWorkers: 4,
+    maxWorkers: process.env.CI ? 1 : 4,
     setupFiles: ["./src/testing/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}", "scripts/**/*.{test,spec}.ts"],
     exclude: ["**/node_modules/**", ".next/**", "src/**/*integration.test.{ts,tsx}"],
