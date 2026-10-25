@@ -18,7 +18,7 @@
     "lint:fix": "turbo run lint:fix && eslint scripts eslint.config.mjs --fix",
     "type-check": "turbo run type-check",
     "test": "turbo run test",
-    "test:ci": "turbo run test",
+    "test:ci": "turbo run test --concurrency=1",
     "test:watch": "pnpm --filter @soletrade/web test:watch",
     "test:integration": "pnpm --filter @soletrade/web test:integration",
     "test:stripe": "pnpm --filter @soletrade/web test:stripe",
