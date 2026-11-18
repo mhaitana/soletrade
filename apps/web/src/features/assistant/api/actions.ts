@@ -111,14 +111,24 @@ export async function renameConversationAction(input: unknown): Promise<RenameCo
   return { ok: true, title: parsed.data.title };
 }
 
+/**
+ * The signed-in person's conversations in this workspace, newest first, for the side
+ * panel's History view.
+ */
+export async function listPanelConversationsAction(): Promise<ConversationSummary[]> {
+  const ctx = await requireWorkspaceContext();
+  return listConversations(ctx.workspaceId, ctx.user.id);
+}
+
 export interface PanelConversation {
   id: string;
   messages: { id: string; role: "user" | "assistant"; content: string; parts: unknown[] | null }[];
 }
 
 /**
- * The conversation the side panel was showing before the page reloaded, or null when it
- * is gone (deleted, or it belongs to another workspace or person).
+ * One conversation for the side panel: the one it was showing before the page reloaded,
+ * or one picked from its History. Null when it is gone (deleted, or it belongs to another
+ * workspace or person).
  */
 export async function loadPanelConversationAction(
   input: unknown,

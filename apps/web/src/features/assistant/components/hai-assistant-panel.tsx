@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   ArrowUpRight,
@@ -24,6 +23,7 @@ import {
 } from "@/features/assistant/hooks/use-hai-tool-navigation";
 import { useHaiChat } from "@/features/assistant/hooks/use-hai-chat";
 import { HaiChatError, HaiMessage } from "@/features/assistant/components/hai-message";
+import { HaiPanelHistory } from "@/features/assistant/components/hai-panel-history";
 
 const STARTERS = [
   "What should I pay attention to here?",
@@ -64,11 +64,22 @@ export function HaiAssistantPanel({
   returnFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [input, setInput] = useState("");
+  // History is a view of this panel, not another page: a past conversation opens here.
+  const [view, setView] = useState<"chat" | "history">("chat");
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    // Reopening the panel always starts on the chat.
+    if (!open) setView("chat");
+  }
   // Tool calls from a restored thread already ran; they must not navigate again.
   const [settled, setSettled] = useState<ReadonlySet<string>>(NO_CALLS);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const historyButtonRef = useRef<HTMLButtonElement>(null);
+  const leftHistoryRef = useRef(false);
 
   const chat = useHaiChat({
     chatId: "hai-global-assistant",
@@ -96,7 +107,7 @@ export function HaiAssistantPanel({
         setSettled(toolCallIdsOf(restored));
         restore(conversation.id, restored);
       } catch {
-        // Start fresh; the conversation is still on the assistant page.
+        // Start fresh; the conversation is still in History.
       }
     })();
     return () => {
@@ -110,7 +121,15 @@ export function HaiAssistantPanel({
     if (!open) return;
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages, open]);
+  }, [messages, open, view]);
+
+  // Coming back from History, focus returns to the control that opened it (not the
+  // composer: on a phone that would raise the keyboard over the conversation).
+  useEffect(() => {
+    if (view !== "chat" || !leftHistoryRef.current) return;
+    leftHistoryRef.current = false;
+    historyButtonRef.current?.focus();
+  }, [view]);
 
   function send(text: string) {
     if (!text.trim() || busy) return;
@@ -128,6 +147,54 @@ export function HaiAssistantPanel({
     storeConversation(null);
     setSettled(NO_CALLS);
     setInput("");
+  }
+
+  function showChat() {
+    leftHistoryRef.current = true;
+    setView("chat");
+  }
+
+  /** Show a conversation picked from History. False when it no longer exists. */
+  async function openConversation(id: string): Promise<boolean> {
+    if (id !== conversationId) {
+      const conversation = await loadPanelConversationAction({ conversationId: id });
+      if (!conversation) return false;
+      const restored = conversation.messages.map(storedToUIMessage);
+      setSettled(toolCallIdsOf(restored));
+      restore(conversation.id, restored);
+      storeConversation(conversation.id);
+    }
+    showChat();
+    return true;
+  }
+
+  function onConversationDeleted(id: string) {
+    if (id === conversationId) {
+      chat.startNew();
+      storeConversation(null);
+      setSettled(NO_CALLS);
+    }
+    // The assistant page lists the same conversations.
+    if (pathname === "/assistant") router.refresh();
+  }
+
+  if (view === "history") {
+    return (
+      <HaiPanelFrame open={open} onOpenChange={onOpenChange} returnFocusRef={returnFocusRef}>
+        <HaiPanelHistory
+          activeId={conversationId}
+          fullPageHref={conversationId ? `/assistant?c=${conversationId}` : "/assistant"}
+          onOpen={openConversation}
+          onDeleted={onConversationDeleted}
+          onNew={() => {
+            newConversation();
+            showChat();
+          }}
+          onBack={showChat}
+          onClose={() => onOpenChange(false)}
+        />
+      </HaiPanelFrame>
+    );
   }
 
   return (
@@ -279,13 +346,14 @@ export function HaiAssistantPanel({
         </form>
         <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[0.7rem] text-muted-foreground">
           <span>Verify figures in the source module.</span>
-          <Link
-            href={conversationId ? `/assistant?c=${conversationId}` : "/assistant"}
-            onClick={() => onOpenChange(false)}
-            className="shrink-0 font-medium text-brand-blue hover:underline"
+          <button
+            ref={historyButtonRef}
+            type="button"
+            onClick={() => setView("history")}
+            className="-mt-2 -mr-2 -mb-3 shrink-0 cursor-pointer rounded px-2 pt-2 pb-3 font-medium text-brand-blue outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/40"
           >
             History
-          </Link>
+          </button>
         </div>
       </div>
     </HaiPanelFrame>

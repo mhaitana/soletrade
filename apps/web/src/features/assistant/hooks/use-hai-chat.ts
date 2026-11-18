@@ -218,11 +218,13 @@ export function useHaiChat(options: UseHaiChatOptions) {
     chat.clearError();
   }
 
-  /** Show a stored conversation in this chat. */
+  /** Show a stored conversation in this chat, in place of whatever it was showing. */
   function restore(id: string, messages: HaiUIMessage[]): void {
+    if (busy) void chat.stop();
     session.setConversationId(id);
     setConversationId(id);
     chat.setMessages(messages);
+    chat.clearError();
   }
 
   return {

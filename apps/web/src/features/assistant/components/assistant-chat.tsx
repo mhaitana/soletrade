@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 import { brand } from "@/config/brand";
 import { storedToUIMessage, type HaiUIMessage } from "@/lib/assistant/messages";
 import {
-  deleteConversationAction,
   renameConversationAction,
   setWriteEnabledAction,
   type AssistantPageData,
@@ -30,6 +29,7 @@ import {
   useHaiToolNavigation,
 } from "@/features/assistant/hooks/use-hai-tool-navigation";
 import { useHaiChat } from "@/features/assistant/hooks/use-hai-chat";
+import { DeleteConversationDialog } from "@/features/assistant/components/delete-conversation-dialog";
 import { HaiChatError, HaiMessage } from "@/features/assistant/components/hai-message";
 
 /**
@@ -62,10 +62,8 @@ export function AssistantChat({
   const router = useRouter();
   const initialId = activeConversation?.id ?? null;
   const [input, setInput] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   // Deleting a conversation and switching write tools on both ask first.
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null);
-  const [deleteError, setDeleteError] = useState("");
   const [confirmWrite, setConfirmWrite] = useState(false);
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [renameError, setRenameError] = useState("");
@@ -103,21 +101,7 @@ export function AssistantChat({
     setInput("");
   }
 
-  async function onDelete(id: string) {
-    setDeleteError("");
-    setPendingDelete(id);
-    let ok = false;
-    try {
-      ok = (await deleteConversationAction({ conversationId: id })).ok;
-    } catch {
-      ok = false;
-    }
-    setPendingDelete(null);
-    if (!ok) {
-      // Keep the confirmation open and say so: silently doing nothing looked like success.
-      setDeleteError("The conversation could not be deleted. Please try again.");
-      return;
-    }
+  function onDeleted(id: string) {
     setConfirmDelete(null);
     if (id === conversationId || id === initialId) {
       router.push("/assistant");
@@ -171,7 +155,9 @@ export function AssistantChat({
   const displayTitle = title ?? initialConversations.find((c) => c.id === activeId)?.title ?? null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+    // One column that cannot grow past the screen: a long conversation title is cut short
+    // instead of pushing the page wider than a phone.
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
       {/* Sidebar: conversation list */}
       <aside className="order-2 lg:order-1">
         <div className="mb-3 flex items-center justify-between">
@@ -209,11 +195,7 @@ export function AssistantChat({
                   </Link>
                   <button
                     type="button"
-                    onClick={() => {
-                      setDeleteError("");
-                      setConfirmDelete({ id: c.id as string, title: label });
-                    }}
-                    disabled={pendingDelete === (c.id as string)}
+                    onClick={() => setConfirmDelete({ id: c.id as string, title: label })}
                     aria-label={`Delete conversation ${label}`}
                     className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50 max-lg:size-11 max-lg:p-0 max-lg:opacity-100"
                   >
@@ -388,44 +370,11 @@ export function AssistantChat({
         </p>
       </section>
 
-      <Dialog
-        open={confirmDelete !== null}
-        onOpenChange={(open) => {
-          if (!open && pendingDelete === null) setConfirmDelete(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this conversation?</DialogTitle>
-            <DialogDescription>
-              {confirmDelete ? `"${confirmDelete.title}" and its messages` : "This conversation"}{" "}
-              will be permanently deleted. Records the assistant created or changed are not
-              affected.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {deleteError}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmDelete(null)}
-              disabled={pendingDelete !== null}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => confirmDelete && void onDelete(confirmDelete.id)}
-              disabled={pendingDelete !== null}
-            >
-              {pendingDelete !== null ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConversationDialog
+        conversation={confirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+        onDeleted={onDeleted}
+      />
 
       <Dialog
         open={renameDraft !== null}

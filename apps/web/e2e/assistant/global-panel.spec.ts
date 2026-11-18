@@ -47,14 +47,23 @@ test.describe("global hAI assistant", () => {
     await expect(panel.getByText(outstandingEvidence)).toBeVisible();
     await expect(panel.getByText(acceptedQuotesEvidence)).toBeVisible();
 
-    const history = panel.getByRole("link", { name: "History" });
-    const historyHref = await history.getAttribute("href");
+    // History is a view of the panel itself: the conversation is listed there,
+    // marked as the one in the chat, and the page underneath does not change.
+    await panel.getByRole("button", { name: "History" }).click();
+    await expect(panel.getByRole("heading", { name: "History" })).toBeVisible();
+    await expect(
+      panel.getByRole("list", { name: "Conversations" }).locator('[aria-current="true"]'),
+    ).toContainText("What should I pay attention to here?");
+    await expect(ownerPage).toHaveURL(/\/dashboard$/);
+
+    const fullPage = panel.getByRole("link", { name: "Open full page" });
+    const historyHref = await fullPage.getAttribute("href");
     expect(historyHref).toMatch(/^\/assistant\?c=[0-9a-f-]{36}$/);
-    await history.click();
+    await fullPage.click();
     await ownerPage.waitForURL(/\/assistant\?c=[0-9a-f-]{36}$/);
 
-    // Opening History closes the panel. A hard reload then proves both turns
-    // in the server-rendered transcript came from the database.
+    // Opening the full page closes the panel. A hard reload then proves both
+    // turns in the server-rendered transcript came from the database.
     await expect(panel).not.toBeVisible();
     const main = ownerPage.locator("main");
     await expect(
