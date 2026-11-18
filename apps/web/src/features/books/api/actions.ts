@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
+import { createWithRequestId } from "@/server/application/request-id-create";
 import { getWorkspace } from "@/server/foundation/workspaces/index";
 import { authorize } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import { isModuleEnabled } from "@/server/foundation/module-installations/index";
-import { listCustomers } from "@/server/foundation/customers/index";
-import type { CustomerRow } from "@/lib/domain/customers/types";
+import { listCustomerOptions } from "@/server/foundation/customers/index";
+import type { PickerCustomer } from "@/types/customer-picker";
 import {
   createTransaction,
   deleteTransaction,
@@ -21,6 +22,7 @@ import {
 import type { TransactionInput, TransactionRow, TransactionSource } from "@/lib/domain/books/types";
 import type { TransactionSummary } from "@/lib/domain/books/calc";
 import { type Period, parsePeriod, periodRange } from "@/utils/periods";
+import { RECORD_PAGE_SIZE, parsePage } from "@/utils/pagination";
 import { isBookCategory } from "@/config/books-categories";
 import type { BookType } from "@/lib/domain/database-enums";
 import { branded } from "@/types/ids";
@@ -32,6 +34,8 @@ const forbid = (msg = "You don't have permission to manage books.") => ({
 
 const createSchema = z
   .object({
+    /** One id per form draft; resending it never creates a second record. */
+    requestId: z.string().uuid().optional(),
     type: z.enum(["income", "expense"]),
     amountCents: z.number().int().min(1, "Amount must be greater than 0."),
     currency: z.string().trim().min(3).max(3).optional(),
@@ -81,7 +85,11 @@ export async function createTransactionAction(input: unknown): Promise<CreateTra
   };
 
   try {
-    const id = await createTransaction(ctx.workspaceId, txInput, ctx.user.id);
+    const { id } = await createWithRequestId(
+      d.requestId ? branded<"BookTransactionId">(d.requestId) : undefined,
+      (requestId) => createTransaction(ctx.workspaceId, txInput, ctx.user.id, requestId),
+      async (requestId) => (await getTransaction(ctx.workspaceId, requestId)) !== null,
+    );
     revalidatePath("/books");
     return { ok: true, transactionId: id };
   } catch (err) {
@@ -197,6 +205,8 @@ export type BooksPageData =
       period: Period;
       currency: string;
       summary: TransactionSummary;
+      page: number;
+      hasNext: boolean;
     }
   | { installed: false };
 
@@ -204,6 +214,7 @@ export async function loadBooksPage(params?: {
   type?: BookType;
   search?: string;
   period?: Period;
+  page?: number;
 }): Promise<BooksPageData> {
   const ctx = await requireWorkspaceContext();
   const [enabled, workspace] = await Promise.all([
@@ -216,14 +227,17 @@ export async function loadBooksPage(params?: {
   const period = params?.period ?? parsePeriod(undefined);
   const search = params?.search?.trim() ?? "";
   const range = periodRange(period, undefined, fyStartMonth);
-  const [transactions, summary] = await Promise.all([
-    // Page list: cap at the default 100, with the type + search + date range.
+  const page = parsePage(params?.page, RECORD_PAGE_SIZE);
+  const [rows, summary] = await Promise.all([
+    // One page of the list (type + search + date range); one extra row says whether a next
+    // page exists without a count query.
     listTransactions(ctx.workspaceId, {
       type: params?.type,
       search: search || undefined,
       dateFrom: range.start ?? undefined,
       dateTo: range.end,
-      limit: 100,
+      offset: (page - 1) * RECORD_PAGE_SIZE,
+      limit: RECORD_PAGE_SIZE + 1,
     }),
     // Summary: type + date range (NO search - the header is the period overview), aggregated
     // in Postgres so the page receives one compact JSON result instead of up to 2,000 rows.
@@ -235,13 +249,15 @@ export async function loadBooksPage(params?: {
   ]);
   return {
     installed: true,
-    transactions,
+    transactions: rows.slice(0, RECORD_PAGE_SIZE),
     canManage: authorize(ctx.role, "manage:books").ok,
     typeFilter: params?.type ?? null,
     search,
     period,
     currency: workspace.defaultCurrency,
     summary,
+    page,
+    hasNext: rows.length > RECORD_PAGE_SIZE,
   };
 }
 
@@ -275,7 +291,7 @@ export type BookEditData =
   | {
       installed: true;
       transaction: TransactionRow | null;
-      customers: CustomerRow[];
+      customers: PickerCustomer[];
       defaultCurrency: string;
       source: TransactionSource | null;
       canManage: boolean;
@@ -288,7 +304,7 @@ export async function loadTransactionForEdit(transactionId: string): Promise<Boo
 
   const [transaction, customers, workspace, hasManagePermission] = await Promise.all([
     getTransaction(ctx.workspaceId, branded<"BookTransactionId">(transactionId)),
-    listCustomers(ctx.workspaceId),
+    listCustomerOptions(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
@@ -305,13 +321,13 @@ export async function loadTransactionForEdit(transactionId: string): Promise<Boo
 
 /** Customer list for the new-transaction form (module-gated). */
 export async function loadCustomersForBook(): Promise<
-  | { installed: true; customers: CustomerRow[]; defaultCurrency: string; canManage: boolean }
+  | { installed: true; customers: PickerCustomer[]; defaultCurrency: string; canManage: boolean }
   | { installed: false }
 > {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "books"))) return { installed: false };
   const [customers, workspace, canManage] = await Promise.all([
-    listCustomers(ctx.workspaceId),
+    listCustomerOptions(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);

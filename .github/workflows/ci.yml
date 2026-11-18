@@ -5,25 +5,90 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  quality:
+  # Static checks, tests and builds run side by side instead of one after another, and each
+  # restores Turbo's cache so unchanged workspaces are skipped.
+  static:
+    name: Lint, types, format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
-
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-static-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-static-
       - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm type-check
+      - run: pnpm format:check
+      - run: pnpm branding:check
 
-      - run: pnpm check
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-test-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-test-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:ci
+
+  build:
+    name: Build web and mobile bundles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .turbo
+            apps/web/.next/cache
+          key: turbo-${{ runner.os }}-build-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-build-
+      - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm mobile:export
         env:
           EXPO_PUBLIC_API_URL: https://example.invalid
           EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:56421
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-public-placeholder
+
+  # Keeps the original check name, so a branch rule that requires "quality" keeps working.
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    needs: [static, test, build]
+    if: always()
+    steps:
+      - name: Require every job to have passed
+        run: |
+          if [ "${{ needs.static.result }}" != "success" ] || \
+             [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.build.result }}" != "success" ]; then
+            echo "A required job did not succeed."
+            exit 1
+          fi

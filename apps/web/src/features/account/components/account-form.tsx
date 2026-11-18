@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,10 @@ export function AccountForm({
 
   const initial = (initialEmail.charAt(0) || "A").toUpperCase();
   const error = !state.ok ? state.error : "";
+
+  useEffect(() => {
+    if (state.ok) toast.success("Profile saved");
+  }, [state]);
   const haiNotice = useHaiFormPrefill("settings.account", (fields) => {
     const fullName = fieldString(fields, "fullName");
     const control = formRef.current?.elements.namedItem("fullName");
@@ -84,7 +89,9 @@ export function AccountForm({
                 {error}
               </p>
             ) : state.ok ? (
-              <p className="text-sm text-muted-foreground">Saved.</p>
+              <p role="status" className="text-sm text-muted-foreground">
+                Saved.
+              </p>
             ) : null}
           </form>
         </CardContent>

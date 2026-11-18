@@ -16,13 +16,16 @@ import {
   unwrap,
   unwrapMaybe,
 } from "@/server/infrastructure/db/helpers";
-import { getCustomer } from "@/server/foundation/customers";
+import { findCustomerIdsMatching, getCustomer } from "@/server/foundation/customers";
 import { getWorkspace } from "@/server/foundation/workspaces";
 import { publishEvent } from "@/server/infrastructure/events";
 import { writeAudit } from "@/server/foundation/audit";
 import { isBookCategory } from "@/config/books-categories";
 import type { BookType } from "@/lib/domain/database-enums";
-import type { TransactionSummary as TransactionSummaryResult } from "@/lib/domain/books/calc";
+import type {
+  GstMonthlyPoint,
+  TransactionSummary as TransactionSummaryResult,
+} from "@/lib/domain/books/calc";
 import {
   branded,
   type BookTransactionId,
@@ -409,6 +412,8 @@ export async function listTransactions(
     type?: BookType;
     category?: string;
     search?: string;
+    /** Customer ids already matched against `search`; skips the customer lookup. */
+    matchingCustomerIds?: readonly string[];
     customerId?: CustomerId;
     /** Inclusive lower bound on `date` (transaction date). */
     dateFrom?: Date;
@@ -446,14 +451,8 @@ export async function listTransactions(
     //       in that set. A no-customer transaction still matches via the description
     //       branch. UUIDs carry no commas/parens so the `in.(...)` list is parser-safe.
     const term = pgQuote(`%${search}%`);
-    const matchingCustomers = await unwrap(
-      supabase
-        .from("customers")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .or(`name.ilike.${term},company.ilike.${term}`),
-    );
-    const customerIds = matchingCustomers.map((c) => c.id);
+    const customerIds =
+      opts?.matchingCustomerIds ?? (await findCustomerIdsMatching(workspaceId, search));
     query =
       customerIds.length > 0
         ? query.or(`description.ilike.${term},customer_id.in.(${customerIds.join(",")})`)
@@ -509,6 +508,27 @@ export async function getBookSummary(
   });
   if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
   return transactionSummarySchema.parse(data);
+}
+
+const gstMonthlySchema = z.array(
+  z.object({
+    month: z.string().regex(/^\d{4}-\d{2}$/),
+    gstCollectedCents: z.number(),
+    gstPaidCents: z.number(),
+  }),
+);
+
+/**
+ * GST collected / paid per calendar month across the whole workspace, aggregated in
+ * Postgres. Feeds the GST/BAS page via `summarizeGstMonthly`; unlike a raw-row fetch it is
+ * not subject to the data API's 1,000-row cap.
+ */
+export async function getGstMonthly(workspaceId: WorkspaceId): Promise<GstMonthlyPoint[]> {
+  const { data, error } = await rpc(getDataClient(), "get_gst_monthly", {
+    p_workspace_id: workspaceId,
+  });
+  if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  return gstMonthlySchema.parse(data);
 }
 
 /**

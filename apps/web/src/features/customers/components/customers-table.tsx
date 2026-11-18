@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,9 +20,12 @@ import type { CustomerRow } from "@/lib/domain/customers/types";
 export function CustomersTable({
   customers,
   canManage,
+  searchTerm,
 }: {
   customers: CustomerRow[];
   canManage: boolean;
+  /** Active search term, if any, so an empty result can say "no match" instead of "no customers". */
+  searchTerm?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -39,12 +43,28 @@ export function CustomersTable({
           setDeleteError(res.error);
           return;
         }
+        toast.success("Customer deleted");
         setDeleting(null);
         router.refresh();
       } catch {
         setDeleteError("Unable to delete this customer. Please try again.");
       }
     });
+  }
+
+  if (customers.length === 0 && searchTerm) {
+    return (
+      <div className="rounded-lg border border-dashed border-border p-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          No customers match &ldquo;{searchTerm}&rdquo;.
+        </p>
+        <p className="mt-1 text-sm">
+          <Link href="/customers" className="text-primary hover:underline">
+            Clear search
+          </Link>
+        </p>
+      </div>
+    );
   }
 
   if (customers.length === 0) {

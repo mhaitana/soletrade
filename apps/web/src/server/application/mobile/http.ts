@@ -15,6 +15,17 @@ import type { Json } from "@/lib/domain/json";
 export interface MobileWorkspaceContext extends WorkspaceContext {
   operationId?: string;
   signal?: AbortSignal;
+  /** What this app build can show, from `x-hai-capabilities` (e.g. "approvals"). */
+  capabilities?: readonly string[];
+}
+
+/** Read the comma-separated `x-hai-capabilities` header an app build sends. */
+export function clientCapabilities(request: Request): string[] {
+  return (request.headers.get("x-hai-capabilities") ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => /^[a-z][a-z0-9-]{0,39}$/.test(value))
+    .slice(0, 20);
 }
 
 export class MobileApiError extends Error {
@@ -115,10 +126,16 @@ export async function requireMobileUser(request: Request): Promise<SessionUser> 
 export async function requireMobileContext(
   request: Request,
   candidate: string,
+  /**
+   * The result of `requireMobileUser(request)` when the caller has already run it for this
+   * same request. Passing it avoids a second token verification, account-status read and
+   * rate-limit charge. Never pass a user obtained any other way.
+   */
+  verifiedUser?: SessionUser,
 ): Promise<MobileWorkspaceContext> {
   if (!uuidSchema.safeParse(candidate).success)
     throw new MobileApiError("INVALID_WORKSPACE", "Choose a valid workspace.");
-  const user = await requireMobileUser(request);
+  const user = verifiedUser ?? (await requireMobileUser(request));
   const workspaceId = branded<"WorkspaceId">(candidate);
   const [role, workspace] = await Promise.all([
     getMembershipRole(workspaceId, user.id),
@@ -273,5 +290,10 @@ export async function runMobileStream(
       "This message was already accepted. Reload the conversation to see its result; it will not be executed again.",
       409,
     );
-  return work({ ...ctx, operationId, signal: request.signal });
+  return work({
+    ...ctx,
+    operationId,
+    signal: request.signal,
+    capabilities: clientCapabilities(request),
+  });
 }

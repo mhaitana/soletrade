@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import { runAfterResponse } from "@/server/infrastructure/after-response";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getInvoiceByPublicToken, markInvoiceViewed } from "@/server/domains/invoices/index";
-import type { PublicInvoiceView } from "@/lib/domain/invoices/types";
 import { env } from "@/server/infrastructure/config/env";
 import { brand } from "@/config/brand";
+import { formatCents } from "@/lib/domain/billing/pricing";
+import { formatDate } from "@/utils/format-date";
 import { Logo } from "@/components/logo";
 import {
   getPaymentMethodDetails,
@@ -12,6 +14,7 @@ import {
   type PaymentMethods,
 } from "@/types/payment-methods";
 import { InvoicePaymentForm } from "@/features/invoices/components/public/invoice-payment-form";
+import { INVOICE_PUBLIC_STATUS_DISPLAY } from "@/lib/domain/invoices/status-display";
 
 function PaymentMethodsBlock({ methods }: { methods: PaymentMethods }) {
   return (
@@ -43,27 +46,6 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   return { title: `Invoice ${inv.number}`, robots: { index: false, follow: false } };
 }
 
-const STATUS_BADGE: Record<
-  PublicInvoiceView["status"],
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" }
-> = {
-  draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Awaiting payment", variant: "default" },
-  viewed: { label: "Awaiting payment", variant: "default" },
-  overdue: { label: "Overdue", variant: "destructive" },
-  paid: { label: "Paid", variant: "success" },
-  void: { label: "Voided", variant: "destructive" },
-};
-
-function formatDate(d: Date | null): string {
-  if (!d) return "-";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-function money(cents: number, currency: string): string {
-  return `${currency} ${(cents / 100).toFixed(2)}`;
-}
-
 export default async function PublicInvoicePage({
   params,
 }: {
@@ -73,13 +55,15 @@ export default async function PublicInvoicePage({
   const inv = await getInvoiceByPublicToken(token);
   if (!inv) notFound();
 
-  // First view of a sent invoice flips to "viewed" (idempotent). Render uses the fetched
-  // `inv` (already reflects the latest status from the lookup).
+  // First view of a sent invoice flips to "viewed" (idempotent). Nothing on this page reads
+  // the result ("sent" and "viewed" render identically), so it runs after the response is
+  // sent: the customer's first paint no longer waits on the status update, the merchant
+  // notification fan-out and the audit write.
   if (inv.status === "sent") {
-    await markInvoiceViewed(token);
+    await runAfterResponse("[invoices] recording the public view", () => markInvoiceViewed(token));
   }
 
-  const badge = STATUS_BADGE[inv.status];
+  const badge = INVOICE_PUBLIC_STATUS_DISPLAY[inv.status];
   const payable = inv.status === "sent" || inv.status === "viewed" || inv.status === "overdue";
   // Publishable key read server-side so the client component never imports env.
   const publishableKey = env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
@@ -119,11 +103,20 @@ export default async function PublicInvoicePage({
           {/* Amount block */}
           <div className="mt-6 border-t border-border/60 pt-6">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Amount due
+              {inv.status === "paid"
+                ? "Amount paid"
+                : inv.status === "void"
+                  ? "Invoice total"
+                  : "Amount due"}
             </p>
             <p className="mt-1 font-mono text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-foreground">
-              {money(inv.totalCents, inv.currency)}
+              {formatCents(inv.totalCents, inv.currency)}
             </p>
+            {payable && inv.dueDate ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Due <span className="font-medium text-foreground">{formatDate(inv.dueDate)}</span>
+              </p>
+            ) : null}
           </div>
 
           {/* Line items */}
@@ -135,11 +128,11 @@ export default async function PublicInvoicePage({
                     {it.description}
                   </span>
                   <span className="font-mono tabular-nums text-foreground">
-                    {money(it.amountCents, inv.currency)}
+                    {formatCents(it.amountCents, inv.currency)}
                   </span>
                 </div>
                 <p className="text-xs font-mono text-muted-foreground tabular-nums">
-                  {it.quantity} × {money(it.unitPriceCents, inv.currency)}
+                  {it.quantity} × {formatCents(it.unitPriceCents, inv.currency)}
                 </p>
               </div>
             ))}
@@ -152,7 +145,7 @@ export default async function PublicInvoicePage({
                 {inv.pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
               </dt>
               <dd className="font-mono tabular-nums text-foreground">
-                {money(inv.subtotalCents, inv.currency)}
+                {formatCents(inv.subtotalCents, inv.currency)}
               </dd>
             </div>
             <div className="flex justify-between">
@@ -160,13 +153,13 @@ export default async function PublicInvoicePage({
                 Tax ({inv.taxRate}%{inv.pricesIncludeTax ? ", included" : ""})
               </dt>
               <dd className="font-mono tabular-nums text-foreground">
-                {money(inv.taxCents, inv.currency)}
+                {formatCents(inv.taxCents, inv.currency)}
               </dd>
             </div>
             <div className="flex justify-between border-t border-border/60 pt-3 text-base font-semibold">
               <dt className="text-foreground">Total</dt>
               <dd className="font-mono tabular-nums text-foreground">
-                {money(inv.totalCents, inv.currency)}
+                {formatCents(inv.totalCents, inv.currency)}
               </dd>
             </div>
           </dl>
@@ -197,7 +190,7 @@ export default async function PublicInvoicePage({
               <div className="text-sm">
                 <p className="font-semibold text-success">Paid</p>
                 <p className="text-success/90 font-mono text-xs">
-                  {money(inv.totalCents, inv.currency)}
+                  {formatCents(inv.totalCents, inv.currency)}
                   {inv.stripeChargeId ? ` · Receipt ${inv.stripeChargeId}` : ""}
                 </p>
               </div>

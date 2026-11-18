@@ -165,6 +165,10 @@ export type MobileTables = {
 };
 
 export type MobileFunctions = {
+  prune_mobile_operations: {
+    Args: { p_before: string; p_limit?: number };
+    Returns: number;
+  };
   convert_quote_to_invoice: {
     Args: {
       p_workspace_id: string;

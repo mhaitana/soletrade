@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,6 +98,7 @@ export function VehicleForm({ mode, vehicle }: { mode: "create" | "edit"; vehicl
           ? await updateVehicleAction({ vehicleId: vehicle.id, ...input })
           : await createVehicleAction(input);
       if (res.ok) {
+        toast.success(isEdit ? "Vehicle updated" : "Vehicle added");
         router.push("/drive/vehicles");
         router.refresh();
         return;

@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { Download, FileText, Plus, Search } from "lucide-react";
+import { Download, FileText, Landmark, Plus, ScanLine, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ResponsiveFilter } from "@/components/ui/responsive-filter";
 import { ModuleNotInstalledCard } from "@/components/module-not-installed-card";
+import { ListPagination } from "@/components/list-pagination";
 import { formatCents } from "@/lib/domain/billing/pricing";
 import { formatDate } from "@/utils/format-date";
 import { categoryLabel } from "@/config/books-categories";
 import { PERIODS, parsePeriod, type Period } from "@/utils/periods";
+import { RECORD_PAGE_SIZE, pageHref, parsePage } from "@/utils/pagination";
 import { loadBooksPage } from "@/features/books/api/actions";
 import { BooksSummary } from "@/features/books/components/books-summary";
 import type { BookType } from "@/lib/domain/database-enums";
@@ -51,6 +53,7 @@ export default async function BooksPage({
     type?: string | string[];
     search?: string | string[];
     period?: string | string[];
+    page?: string | string[];
   }>;
 }) {
   const sp = await searchParams;
@@ -59,11 +62,22 @@ export default async function BooksPage({
   const rawPeriod = typeof sp.period === "string" ? sp.period : undefined;
   const type = rawType === "income" || rawType === "expense" ? (rawType as BookType) : undefined;
   const period = parsePeriod(rawPeriod);
-  const data = await loadBooksPage({ type, search: rawSearch, period });
+  const data = await loadBooksPage({
+    type,
+    search: rawSearch,
+    period,
+    page: parsePage(sp.page, RECORD_PAGE_SIZE),
+  });
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="books" />;
 
   const current = { type: data.typeFilter, search: data.search, period: data.period };
+  // Page links keep the active filters; "year" is the default period and stays implicit.
+  const pageFilters = {
+    type: data.typeFilter,
+    search: data.search,
+    period: data.period !== "year" ? data.period : null,
+  };
   const periodFilterItems = PERIODS.map((option) => ({
     key: option.key,
     label: option.label,
@@ -85,6 +99,18 @@ export default async function BooksPage({
           <p className="text-sm text-muted-foreground">Track income, expenses, and receipts.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/books/receipts">
+              <ScanLine className="size-4" aria-hidden />
+              Receipts
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/books/tax">
+              <Landmark className="size-4" aria-hidden />
+              GST / BAS
+            </Link>
+          </Button>
           <Button asChild variant="outline" size="sm">
             <Link href={`/books/report?period=${data.period}`}>
               <FileText className="size-4" aria-hidden />
@@ -154,9 +180,22 @@ export default async function BooksPage({
       {data.transactions.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
           <p className="text-sm text-muted-foreground">
-            {data.search || type ? "No transactions match your filters." : "No transactions yet."}
+            {data.page > 1
+              ? "No transactions on this page."
+              : data.search || type
+                ? "No transactions match your filters."
+                : "No transactions yet."}
           </p>
-          {data.canManage && !data.search && !type ? (
+          {data.page > 1 ? (
+            <p className="mt-1 text-sm">
+              <Link
+                href={pageHref("/books", 1, pageFilters)}
+                className="text-primary hover:underline"
+              >
+                Return to first page
+              </Link>
+            </p>
+          ) : data.canManage && !data.search && !type ? (
             <p className="mt-1 text-sm">
               <Link href="/books/new" className="text-primary hover:underline">
                 Record your first transaction
@@ -232,6 +271,13 @@ export default async function BooksPage({
           </table>
         </div>
       )}
+
+      <ListPagination
+        pathname="/books"
+        page={data.page}
+        hasNext={data.hasNext}
+        filters={pageFilters}
+      />
     </div>
   );
 }

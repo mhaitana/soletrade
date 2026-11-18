@@ -39,9 +39,10 @@ import {
   unwrapMaybe,
 } from "@/server/infrastructure/db/helpers";
 import { branded } from "@/types/ids";
-import { getCustomer } from "@/server/foundation/customers";
+import { findCustomerIdsMatching, getCustomer } from "@/server/foundation/customers";
 import { getWorkspace } from "@/server/foundation/workspaces";
 import { publishEvent } from "@/server/infrastructure/events";
+import { forEachSettled } from "@/server/infrastructure/for-each-settled";
 import { writeAudit } from "@/server/foundation/audit";
 import { computeLineItemTotals, lineItemAmountCents } from "@/utils/totals";
 import type { QuoteStatus } from "@/lib/domain/database-enums";
@@ -243,6 +244,18 @@ async function nextQuoteNumber(
       .like("number", `${yearPrefix}%`),
   );
   return formatQuoteNumber(prefix, year, n + 1);
+}
+
+/** Number of quotes in the workspace that have left draft (sent, accepted, declined, ...). */
+export async function countNonDraftQuotes(workspaceId: WorkspaceId): Promise<number> {
+  const supabase = getDataClient();
+  return unwrapCount(
+    supabase
+      .from("quotes")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .neq("status", "draft"),
+  );
 }
 
 /** Verify a customer belongs to the workspace (IDOR guard). Throws if customerId is set but not found. */
@@ -480,6 +493,8 @@ export async function listQuotes(
   opts?: {
     status?: QuoteStatus;
     search?: string;
+    /** Customer ids already matched against `search`; skips the customer lookup. */
+    matchingCustomerIds?: readonly string[];
     dateFrom?: Date;
     dateTo?: Date;
     customerId?: CustomerId;
@@ -503,14 +518,8 @@ export async function listQuotes(
     // deleted_at filter - the original leftJoin didn't exclude soft-deleted customers);
     // (2) `or(number.ilike.X, customer_id.in.(ids))` on quotes.
     const term = pgQuote(`%${search}%`);
-    const matching = await unwrap(
-      supabase
-        .from("customers")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .or(`name.ilike.${term},company.ilike.${term}`),
-    );
-    const customerIds = matching.map((m) => m.id);
+    const customerIds =
+      opts?.matchingCustomerIds ?? (await findCustomerIdsMatching(workspaceId, search));
     if (customerIds.length > 0) {
       query = query.or(`number.ilike.${term},customer_id.in.(${customerIds.join(",")})`);
     } else {
@@ -1109,7 +1118,8 @@ export async function markExpiredQuotes(now: Date = new Date()): Promise<number>
 
   if (rows.length === 0) return 0;
 
-  for (const row of rows) {
+  // The status change is committed; one failing follow-up must not cost the rest theirs.
+  await forEachSettled(rows, 5, "quotes.expired", async (row) => {
     const workspaceId = branded<"WorkspaceId">(row.workspace_id);
     const quoteId = branded<"QuoteId">(row.id);
     await publishEvent({
@@ -1127,7 +1137,7 @@ export async function markExpiredQuotes(now: Date = new Date()): Promise<number>
       targetId: quoteId,
       metadata: { number: row.number, source: "cron" },
     });
-  }
+  });
   return rows.length;
 }
 

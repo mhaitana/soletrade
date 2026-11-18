@@ -6,7 +6,7 @@ import { getInstalledModules } from "@/server/foundation/module-installations/in
 import { getWorkspace } from "@/server/foundation/workspaces/index";
 import { listActivity } from "@/server/foundation/activity/index";
 import { unreadCount } from "@/server/foundation/notifications/store";
-import { listCustomers } from "@/server/foundation/customers/index";
+import { findCustomerIdsMatching, listCustomers } from "@/server/foundation/customers/index";
 import type { CustomerRow } from "@/lib/domain/customers/types";
 import * as invoices from "@/server/domains/invoices/index";
 import * as quotes from "@/server/domains/quotes/index";
@@ -25,8 +25,11 @@ import {
 } from "@/server/application/mobile/resources/common";
 import { z } from "zod";
 export async function dashboard(ctx: Context, q: Query) {
-  const workspace = found(await getWorkspace(ctx.workspaceId));
-  const modules = await getInstalledModules(ctx.workspaceId);
+  const [foundWorkspace, modules] = await Promise.all([
+    getWorkspace(ctx.workspaceId),
+    getInstalledModules(ctx.workspaceId),
+  ]);
+  const workspace = found(foundWorkspace);
   const range = periodRange(q.period ?? "month", undefined, workspace.fyStartMonth);
   const previous = previousPeriodRange(q.period ?? "month", undefined, workspace.fyStartMonth);
   const [invoice, quote, book, driving, activity, count, pendingReceipts] = await Promise.all([
@@ -211,65 +214,79 @@ export async function search(ctx: Context, q: Query) {
   const limit = Math.min(q.limit, 20);
   const modules = await getInstalledModules(ctx.workspaceId);
   const opts = { search: term, limit };
-  const groups: { module: string; results: { id: string; label: string; href: string }[] }[] = [];
+  // Invoices, quotes and transactions match on customer name. Look those customers up once,
+  // on first use, instead of once per module.
+  let customerMatch: Promise<string[]> | undefined;
+  const documentOpts = async () => ({
+    ...opts,
+    matchingCustomerIds: await (customerMatch ??= findCustomerIdsMatching(ctx.workspaceId, term)),
+  });
+  type Group = { module: string; results: { id: string; label: string; href: string }[] };
+  // Every permitted area is searched at the same time; the group order in the response is
+  // the order of this list, not the order the queries finish in.
+  const searches: Promise<Group | null>[] = [];
   if (can(ctx.role, "view:customer"))
-    groups.push({
-      module: "customers",
-      results: (await listCustomers(ctx.workspaceId, opts)).map((r) => ({
-        id: r.id,
-        label: r.name,
-        href: `/customers/${r.id}`,
+    searches.push(
+      listCustomers(ctx.workspaceId, opts).then((rows) => ({
+        module: "customers",
+        results: rows.map((r) => ({ id: r.id, label: r.name, href: `/customers/${r.id}` })),
       })),
-    });
+    );
   if (modules.includes("invoices") && can(ctx.role, "view:invoice"))
-    groups.push({
-      module: "invoices",
-      results: (await invoices.listInvoices(ctx.workspaceId, opts)).map((r) => ({
-        id: r.id,
-        label: r.number,
-        href: `/invoices/${r.id}`,
-      })),
-    });
+    searches.push(
+      documentOpts()
+        .then((o) => invoices.listInvoices(ctx.workspaceId, o))
+        .then((rows) => ({
+          module: "invoices",
+          results: rows.map((r) => ({ id: r.id, label: r.number, href: `/invoices/${r.id}` })),
+        })),
+    );
   if (modules.includes("quotes") && can(ctx.role, "view:quote"))
-    groups.push({
-      module: "quotes",
-      results: (await quotes.listQuotes(ctx.workspaceId, opts)).map((r) => ({
-        id: r.id,
-        label: r.number,
-        href: `/quotes/${r.id}`,
-      })),
-    });
+    searches.push(
+      documentOpts()
+        .then((o) => quotes.listQuotes(ctx.workspaceId, o))
+        .then((rows) => ({
+          module: "quotes",
+          results: rows.map((r) => ({ id: r.id, label: r.number, href: `/quotes/${r.id}` })),
+        })),
+    );
   if (modules.includes("books") && can(ctx.role, "view:books"))
-    groups.push({
-      module: "books",
-      results: (await books.listTransactions(ctx.workspaceId, opts)).map((r) => ({
-        id: r.id,
-        label: r.description,
-        href: `/books/${r.id}`,
+    searches.push(
+      documentOpts()
+        .then((o) => books.listTransactions(ctx.workspaceId, o))
+        .then((rows) => ({
+          module: "books",
+          results: rows.map((r) => ({ id: r.id, label: r.description, href: `/books/${r.id}` })),
+        })),
+    );
+  if (modules.includes("drive") && can(ctx.role, "view:drive"))
+    searches.push(
+      Promise.all([
+        drive.listEarnings(ctx.workspaceId, opts),
+        drive.listTrips(ctx.workspaceId, opts),
+        drive.listExpenses(ctx.workspaceId, opts),
+      ]).then(([e, t, x]) => ({
+        module: "drive",
+        results: [
+          ...e.map((r) => ({ id: r.id, label: r.description, href: "/drive" })),
+          ...t.map((r) => ({ id: r.id, label: r.purpose ?? "Trip", href: "/drive" })),
+          ...x.map((r) => ({ id: r.id, label: r.description, href: "/drive" })),
+        ].slice(0, limit),
       })),
-    });
-  if (modules.includes("drive") && can(ctx.role, "view:drive")) {
-    const [e, t, x] = await Promise.all([
-      drive.listEarnings(ctx.workspaceId, opts),
-      drive.listTrips(ctx.workspaceId, opts),
-      drive.listExpenses(ctx.workspaceId, opts),
-    ]);
-    groups.push({
-      module: "drive",
-      results: [
-        ...e.map((r) => ({ id: r.id, label: r.description, href: "/drive" })),
-        ...t.map((r) => ({ id: r.id, label: r.purpose ?? "Trip", href: "/drive" })),
-        ...x.map((r) => ({ id: r.id, label: r.description, href: "/drive" })),
-      ].slice(0, limit),
-    });
-  }
-  if (can(ctx.role, "view:file")) {
-    const result = await readFiles(ctx, [], { ...q, search: term, limit, cursor: undefined });
-    if ("items" in result)
-      groups.push({
-        module: "files",
-        results: result.items.map((r) => ({ id: r.id, label: r.fileName, href: "/files" })),
-      });
-  }
-  return { groups: groups.filter((g) => g.results.length) };
+    );
+  if (can(ctx.role, "view:file"))
+    searches.push(
+      readFiles(ctx, [], { ...q, search: term, limit, cursor: undefined }).then((result) =>
+        "items" in result
+          ? {
+              module: "files",
+              results: result.items.map((r) => ({ id: r.id, label: r.fileName, href: "/files" })),
+            }
+          : null,
+      ),
+    );
+  const groups = (await Promise.all(searches)).filter(
+    (group): group is Group => group !== null && group.results.length > 0,
+  );
+  return { groups };
 }

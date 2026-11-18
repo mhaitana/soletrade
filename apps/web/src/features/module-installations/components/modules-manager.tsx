@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,6 +72,10 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [previewingCancelKey, setPreviewingCancelKey] = useState<ModuleKey | null>(null);
 
+  // Confirmation for disabling a module that has no billing impact.
+  const [disableTarget, setDisableTarget] = useState<ModuleKey | null>(null);
+  const [disableError, setDisableError] = useState<string | null>(null);
+
   function runEnable(key: ModuleKey) {
     startTransition(async () => {
       const res = await enableModuleAction(key);
@@ -78,6 +83,7 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
         setError(res.error);
         return;
       }
+      toast.success(`${MODULES[key].name} enabled`);
       setResponsiveDialogOpen(false);
       setPreview(null);
       router.refresh();
@@ -116,20 +122,36 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
       return;
     }
     if (res.options.length <= 1) {
-      // No active billing → only the keep option (= just disable locally). Disable
-      // directly without a cancellation modal (the existing behavior).
-      startTransition(async () => {
-        const r = await disableModuleAction(key);
-        if (!r.ok) {
-          setError(r.error);
-          return;
-        }
-        router.refresh();
-      });
+      // No active billing → only the keep option (= just disable locally). No
+      // cancellation modal, but still ask for confirmation first.
+      setDisableError(null);
+      setDisableTarget(key);
       return;
     }
     setCancelPreview(res);
     setCancelOpen(true);
+  }
+
+  function onConfirmDisable() {
+    const key = disableTarget;
+    if (!key) return;
+    setDisableError(null);
+    startTransition(async () => {
+      let r: Awaited<ReturnType<typeof disableModuleAction>>;
+      try {
+        r = await disableModuleAction(key);
+      } catch {
+        setDisableError("We couldn’t confirm whether the module was disabled. Refresh and check.");
+        return;
+      }
+      if (!r.ok) {
+        setDisableError(r.error);
+        return;
+      }
+      toast.success(`${MODULES[key].name} disabled`);
+      setDisableTarget(null);
+      router.refresh();
+    });
   }
 
   function onConfirmCancel(value: string) {
@@ -142,6 +164,11 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
         setCancelError(res.error);
         return;
       }
+      toast.success(
+        value === "keep_until_end_of_cycle"
+          ? `${MODULES[key].name} will be cancelled at the end of the billing period`
+          : `${MODULES[key].name} cancelled`,
+      );
       setCancelOpen(false);
       setCancelPreview(null);
       router.refresh();
@@ -156,6 +183,7 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
         setError(res.error);
         return;
       }
+      toast.success(`${MODULES[key].name} cancellation undone`);
       router.refresh();
     });
   }
@@ -307,6 +335,50 @@ export function ModulesManager({ initial }: { initial: ModulesPageData }) {
               </ResponsiveDialogFooter>
             </>
           ) : null}
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+
+      {/* Disable confirm (no billing impact) */}
+      <ResponsiveDialog
+        open={disableTarget !== null}
+        onOpenChange={(o) => {
+          if (isPending) return;
+          if (!o) {
+            setDisableTarget(null);
+            setDisableError(null);
+          }
+        }}
+      >
+        <ResponsiveDialogContent aria-busy={isPending}>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>
+              Disable {disableTarget ? MODULES[disableTarget].name : "module"}?
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              The module will be switched off for this workspace and its pages will no longer be
+              available. Your data is kept, and you can enable it again at any time.
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          {disableError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {disableError}
+            </p>
+          ) : null}
+          <ResponsiveDialogFooter>
+            <Button
+              variant="outline"
+              disabled={isPending}
+              onClick={() => {
+                setDisableTarget(null);
+                setDisableError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={isPending} onClick={onConfirmDisable}>
+              {isPending ? "Disabling…" : "Disable"}
+            </Button>
+          </ResponsiveDialogFooter>
         </ResponsiveDialogContent>
       </ResponsiveDialog>
 

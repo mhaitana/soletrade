@@ -12,6 +12,7 @@ import { loadDashboardPage } from "@/features/dashboard/api/actions";
 import { KpiCard } from "@/features/dashboard/components/kpi-card";
 import { ModuleSummaryCard } from "@/features/dashboard/components/module-summary-card";
 import { AttentionList } from "@/features/dashboard/components/attention-list";
+import type { SetupChecklist } from "@/features/dashboard/utils/setup-checklist";
 
 export const metadata = { title: "Dashboard" };
 
@@ -23,12 +24,47 @@ const PERIOD_NOUN: Record<Exclude<Period, "all">, string> = {
   calendar: "last calendar year",
 };
 
-const CHECKLIST = [
-  { label: "Create your workspace", complete: true },
-  { label: "Enable your first module", complete: false },
-  { label: "Add a customer", complete: false },
-  { label: "Send your first invoice or quote", complete: false },
-];
+function SetupChecklistCard({ setup }: { setup: SetupChecklist }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Sparkles className="size-4 text-primary" aria-hidden />
+          Getting started
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {setup.completed} of {setup.total} done
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {setup.steps.map((step, i) => (
+          <div key={step.id} className="flex items-center gap-3 text-sm">
+            <span
+              className={`grid size-5 place-items-center rounded-full border text-xs ${
+                step.complete
+                  ? "border-success/30 bg-success/10 text-success"
+                  : "border-border text-muted-foreground"
+              }`}
+              aria-hidden
+            >
+              {step.complete ? <Check className="size-3" /> : i + 1}
+            </span>
+            {step.href ? (
+              <Link href={step.href} className="text-foreground hover:underline">
+                {step.label}
+              </Link>
+            ) : (
+              <span className="text-foreground">{step.label}</span>
+            )}
+            <Badge variant={step.complete ? "success" : "outline"} className="ml-auto">
+              {step.complete ? "Done" : "Next"}
+            </Badge>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -60,34 +96,7 @@ export default async function DashboardPage({
           </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="size-4 text-primary" aria-hidden />
-              Onboarding
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {CHECKLIST.map((step, i) => (
-              <div key={step.label} className="flex items-center gap-3 text-sm">
-                <span
-                  className={`grid size-5 place-items-center rounded-full border text-xs ${
-                    step.complete
-                      ? "border-success/30 bg-success/10 text-success"
-                      : "border-border text-muted-foreground"
-                  }`}
-                  aria-hidden
-                >
-                  {step.complete ? <Check className="size-3" /> : i + 1}
-                </span>
-                <span className="text-foreground">{step.label}</span>
-                <Badge variant={step.complete ? "success" : "outline"} className="ml-auto">
-                  {step.complete ? "Done" : "Next"}
-                </Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        {data.setup ? <SetupChecklistCard setup={data.setup} /> : null}
 
         <section>
           <h2 className="mb-1 text-sm font-medium text-muted-foreground">Build your workspace</h2>
@@ -157,6 +166,8 @@ export default async function DashboardPage({
           <SegmentedControl label="Dashboard period" items={periodItems} />
         </div>
       </div>
+
+      {data.setup ? <SetupChecklistCard setup={data.setup} /> : null}
 
       {/* KPI row */}
       <section aria-label="Key metrics">

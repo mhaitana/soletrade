@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRequestId } from "@/hooks/use-request-id";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +48,7 @@ export function DriveEarningForm({
   const router = useRouter();
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
+  const { requestId } = useRequestId();
   const [error, setError] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
 
@@ -113,8 +116,9 @@ export function DriveEarningForm({
       const res: Result =
         isEdit && earning
           ? await updateEarningAction({ earningId: earning.id, ...input })
-          : await createEarningAction(input);
+          : await createEarningAction({ requestId, ...input });
       if (res.ok) {
+        toast.success(isEdit ? "Earning updated" : "Earning logged");
         router.push("/drive");
         router.refresh();
         return;

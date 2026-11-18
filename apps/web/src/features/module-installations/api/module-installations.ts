@@ -249,8 +249,10 @@ export type ModulesPageData = {
 /** Loader for the modules settings page. */
 export async function loadModulesPage(): Promise<ModulesPageData> {
   const ctx = await requireWorkspaceContext();
-  const authority = await getBillingAuthority(ctx.workspaceId);
-  const rows = await getModuleInstallations(ctx.workspaceId);
+  const [authority, rows] = await Promise.all([
+    getBillingAuthority(ctx.workspaceId),
+    getModuleInstallations(ctx.workspaceId),
+  ]);
   const installed = resolveActiveModules(rows);
   const pendingCancellations = rows
     .filter((r) => r.status === "active" && r.pendingCancellationAt && r.cancelledAt === null)

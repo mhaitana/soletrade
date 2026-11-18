@@ -128,7 +128,15 @@ for source verification and checks.
 - `ANTHROPIC_API_KEY` - your Anthropic API key.
 - `ANTHROPIC_MODEL` - defaults to `claude-sonnet-5`; set to opt into a newer model.
 - (Or `AI_PROVIDER=openai` + `OPENAI_API_KEY` + `OPENAI_MODEL`.)
-- The assistant route is rate-limited per IP (20/min) and per user (30/min).
+- Optional per-task models, each defaulting to the chat model above:
+  `ANTHROPIC_MODEL_LIGHT` / `OPENAI_MODEL_LIGHT` (short text tasks) and
+  `ANTHROPIC_MODEL_VISION` / `OPENAI_MODEL_VISION` (reading receipts).
+- The assistant route is rate-limited per IP (20/min) and per user (30/min), and capped at
+  400 model turns per workspace per day (an interim spend guard until usage metering exists;
+  the constant is `ASSISTANT_DAILY_TURN_LIMIT`).
+- Every model call writes one `[assistant] usage` log line (workspace, model, token counts,
+  cache reads). Route it to your log collector to see spend per workspace.
+- `/api/assistant` and `/api/v1/*` set `maxDuration = 300`; the plan must allow it.
 
 ## 6. Rate limiting (Upstash Redis) - required for multi-replica prod
 

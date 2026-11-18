@@ -38,7 +38,7 @@ export default async function AdminCreditsPage() {
       <AdminPageHeader
         icon={Coins}
         title="Append-Only Credit Ledger"
-        subtitle="Global immutable audit trail for workspace credit adjustments (Principle #7 & #12)."
+        subtitle="Global immutable audit trail for workspace credit adjustments."
       />
 
       <AdminTable caption="Credit ledger entries">

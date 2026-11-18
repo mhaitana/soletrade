@@ -11,14 +11,24 @@ import {
 } from "@/components/ui";
 import { navigateBusiness } from "@/lib/navigation/business";
 import { useResource, useWorkspacePath } from "@/lib/resources";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 export function SearchScreen() {
   const [query, setQuery] = useState("");
+  const [settled, setSettled] = useState("");
   const base = useWorkspacePath("search");
+  const trimmed = query.trim();
+  // Only the text the user has paused on is searched; useResource drops out-of-order responses.
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(trimmed), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [trimmed]);
+  const pending = settled !== trimmed;
   const state = useResource<{
     groups: { module: string; results: { id: string; label: string; href: string }[] }[];
-  }>(query.trim().length >= 2 && base ? `${base}?q=${encodeURIComponent(query.trim())}` : null);
+  }>(settled.length >= 2 && base ? `${base}?q=${encodeURIComponent(settled)}` : null);
   return (
     <Screen>
       <Field
@@ -29,9 +39,9 @@ export function SearchScreen() {
         autoCapitalize="none"
         returnKeyType="search"
       />
-      {query.trim().length < 2 ? (
+      {trimmed.length < 2 ? (
         <Copy muted>Enter at least two characters.</Copy>
-      ) : state.loading && !state.data ? (
+      ) : pending || (state.loading && !state.data) ? (
         <Loading />
       ) : state.data?.groups.length ? (
         state.data.groups.map((group) => (

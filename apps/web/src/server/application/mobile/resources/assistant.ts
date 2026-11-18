@@ -2,7 +2,6 @@ import "server-only";
 import { z } from "zod";
 import { branded } from "@/types/ids";
 import * as conversations from "@/server/foundation/conversations/conversations";
-import { durableAssistantTools } from "@/server/application/mobile/assistant-tools";
 import {
   checkVersion,
   createOnce,
@@ -71,64 +70,60 @@ export async function writeAssistant(
       );
     return found(await conversations.getConversation(ctx.workspaceId, ctx.user.id, key));
   }
-  if (p.length === 3 && p[2] === "messages" && method === "POST") {
-    const input = parse(z.object({ message: z.string().trim().min(1).max(4000) }).strict(), data);
+  if (p.length === 3 && (p[2] === "messages" || p[2] === "approvals") && method === "POST") {
+    const input =
+      p[2] === "messages"
+        ? {
+            kind: "message" as const,
+            text: parse(z.object({ message: z.string().trim().min(1).max(4000) }).strict(), data)
+              .message,
+          }
+        : {
+            kind: "approvals" as const,
+            decisions: parse(
+              z
+                .object({
+                  approvals: z
+                    .array(
+                      z
+                        .object({
+                          approvalId: z.string().min(1).max(200),
+                          approved: z.boolean(),
+                        })
+                        .strict(),
+                    )
+                    .min(1)
+                    .max(20),
+                })
+                .strict(),
+              data,
+            ).approvals,
+          };
     const { rateLimit } = await import("@/server/infrastructure/rate-limit/index");
+    const { MobileApiError } = await import("@/server/application/mobile/http");
     if (!(await rateLimit(`ai:user:${ctx.user.id}`, { max: 30, windowMs: 60_000 })))
-      throw new (await import("@/server/application/mobile/http")).MobileApiError(
+      throw new MobileApiError(
         "rate_limited",
         "Too many assistant requests. Try again shortly.",
         429,
       );
-    await conversations.appendMessage(ctx.workspaceId, ctx.user.id, key, {
-      role: "user",
-      content: input.message,
-    });
-    const conversation = found(
-      await conversations.getConversation(ctx.workspaceId, ctx.user.id, key),
-    );
-    const ai = await import("@/server/application/assistant/services");
-    const { getInstalledModules } = await import("@/server/foundation/module-installations/index");
-    const modules = await getInstalledModules(ctx.workspaceId);
-    const tools = await import("@/server/application/assistant/tools");
-    if (ai.isMockProvider()) {
-      const action = tools.buildMockHaiSafeAction(ctx, modules, input.message);
-      const text = action?.text ?? (await tools.buildMockAssistantReply(ctx, modules));
-      await conversations.appendMessage(ctx.workspaceId, ctx.user.id, key, {
-        role: "assistant",
-        content: text,
-      });
-      return ai.streamMockAssistant({ text, conversationId: key, tool: action?.tool });
-    }
-    return ai.streamAssistant({
-      model: ai.getAIModel(),
-      system: [
-        "You are hAI, the workspace's business assistant. Use tools for business facts; never invent numbers. Money is integer cents; include the currency.",
-        `Role: ${ctx.role}. Modules: ${modules.join(", ")}. Today: ${new Date().toISOString().slice(0, 10)}.`,
-        "The native client supports workspace navigation. Do not send messages or mutate records unless the user explicitly confirms the exact proposed action, amounts and currency.",
-        conversation.writeEnabled
-          ? "Write tools are enabled. Summarise each proposed mutation and ask for explicit confirmation before executing it."
-          : "Write tools are disabled. Help the user inspect data and navigate forms.",
-      ].join("\n"),
-      messages: conversation.messages.map((m, i) => ({
-        id: `message-${i}`,
-        role: m.role,
-        parts: [{ type: "text" as const, text: m.content }],
-      })),
-      tools: durableAssistantTools(
+    const turn = await import("@/server/application/assistant/turn");
+    try {
+      // `row` was loaded above with its history, so the conversation is read once per turn.
+      return await turn.runAssistantTurn({
         ctx,
-        tools.buildAssistantTools(ctx, modules, { writeEnabled: conversation.writeEnabled }),
-      ),
-      abortSignal: ctx.signal,
-      conversationId: key,
-      onFinish: async (text) => {
-        if (text)
-          await conversations.appendMessage(ctx.workspaceId, ctx.user.id, key, {
-            role: "assistant",
-            content: text,
-          });
-      },
-    });
+        surface: "mobile",
+        conversation: row,
+        input,
+        // Builds that cannot show approval cards have changes refused with a reason.
+        approvalsSupported: ctx.capabilities?.includes("approvals") ?? false,
+        abortSignal: ctx.signal,
+      });
+    } catch (err) {
+      if (err instanceof turn.AssistantTurnError)
+        throw new MobileApiError(err.code, err.message, err.status);
+      throw err;
+    }
   }
   missing();
 }

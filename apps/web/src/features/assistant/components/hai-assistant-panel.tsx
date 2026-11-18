@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import {
   ArrowUpRight,
   Bot,
@@ -16,13 +14,16 @@ import {
   X,
 } from "lucide-react";
 import { brand } from "@/config/brand";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { HaiPanelFrame } from "@/components/hai-panel-frame";
+import { storedToUIMessage } from "@/lib/assistant/messages";
+import { loadPanelConversationAction } from "@/features/assistant/api/actions";
 import {
-  HaiToolPart,
+  toolCallIdsOf,
   useHaiToolNavigation,
 } from "@/features/assistant/hooks/use-hai-tool-navigation";
+import { useHaiChat } from "@/features/assistant/hooks/use-hai-chat";
+import { HaiChatError, HaiMessage } from "@/features/assistant/components/hai-message";
 
 const STARTERS = [
   "What should I pay attention to here?",
@@ -30,12 +31,28 @@ const STARTERS = [
   "Draft an invoice for a customer",
 ];
 
-function messageText(message: UIMessage): string {
-  return message.parts
-    .filter((part): part is { type: "text"; text: string } => part.type === "text")
-    .map((part) => part.text)
-    .join("");
+/** The panel's conversation for this browser tab, so a reload keeps the thread. */
+const STORAGE_KEY = "hai-panel-conversation";
+
+function readStoredConversation(): string | null {
+  try {
+    return window.sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
+
+function storeConversation(id: string | null): void {
+  try {
+    if (id) window.sessionStorage.setItem(STORAGE_KEY, id);
+    else window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data); the thread then
+    // simply does not survive a reload.
+  }
+}
+
+const NO_CALLS: ReadonlySet<string> = new Set();
 
 export function HaiAssistantPanel({
   open,
@@ -48,31 +65,46 @@ export function HaiAssistantPanel({
 }) {
   const pathname = usePathname();
   const [input, setInput] = useState("");
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  // Tool calls from a restored thread already ran; they must not navigate again.
+  const [settled, setSettled] = useState<ReadonlySet<string>>(NO_CALLS);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const [transport] = useState(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/assistant",
-        fetch: async (url, init) => {
-          const response = await globalThis.fetch(url, init);
-          const id = response.headers.get("X-Conversation-Id");
-          if (id) setConversationId((current) => current ?? id);
-          return response;
-        },
-      }),
-  );
-
-  const { messages, sendMessage, status, stop, error, setMessages } = useChat({
-    id: "hai-global-assistant",
-    transport,
+  const chat = useHaiChat({
+    chatId: "hai-global-assistant",
+    conversationId: null,
+    onConversationCreated: storeConversation,
   });
-  useHaiToolNavigation(messages);
-
-  const busy = status === "submitted" || status === "streaming";
+  const { messages, busy, error, conversationId, restore } = chat;
+  useHaiToolNavigation(messages, settled);
   const hasMessages = messages.length > 0;
+
+  // Bring back the thread this tab was showing before a reload.
+  useEffect(() => {
+    const storedId = readStoredConversation();
+    if (!storedId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const conversation = await loadPanelConversationAction({ conversationId: storedId });
+        if (cancelled) return;
+        if (!conversation) {
+          storeConversation(null);
+          return;
+        }
+        const restored = conversation.messages.map(storedToUIMessage);
+        setSettled(toolCallIdsOf(restored));
+        restore(conversation.id, restored);
+      } catch {
+        // Start fresh; the conversation is still on the assistant page.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Runs once when the panel first mounts; `restore` is recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -80,21 +112,10 @@ export function HaiAssistantPanel({
     if (node) node.scrollTop = node.scrollHeight;
   }, [messages, open]);
 
-  function contextBody() {
-    return {
-      conversationId,
-      pageContext: {
-        pathname,
-        search: typeof window === "undefined" ? "" : window.location.search,
-      },
-    };
-  }
-
   function send(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!text.trim() || busy) return;
+    chat.send(text);
     setInput("");
-    void sendMessage({ text: trimmed }, { body: contextBody() });
   }
 
   function onSubmit(event: FormEvent) {
@@ -103,9 +124,9 @@ export function HaiAssistantPanel({
   }
 
   function newConversation() {
-    if (busy) stop();
-    setMessages([]);
-    setConversationId(null);
+    chat.startNew();
+    storeConversation(null);
+    setSettled(NO_CALLS);
     setInput("");
   }
 
@@ -148,7 +169,7 @@ export function HaiAssistantPanel({
         </Button>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4" aria-live="polite">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
         {!hasMessages ? (
           <div className="flex min-h-full flex-col justify-center py-6">
             <div className="mb-5">
@@ -182,42 +203,17 @@ export function HaiAssistantPanel({
           </div>
         ) : (
           <div className="space-y-4">
-            {messages.map((message) => {
-              const user = message.role === "user";
-              return (
-                <div
-                  key={message.id}
-                  className={cn("flex", user ? "justify-end" : "justify-start")}
-                >
-                  <div
-                    className={cn(
-                      "max-w-[92%] space-y-2 text-sm",
-                      user &&
-                        "whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-primary-foreground",
-                    )}
-                  >
-                    {user
-                      ? messageText(message)
-                      : message.parts.map((part, index) => {
-                          if (part.type === "text" && part.text) {
-                            return (
-                              <div
-                                key={`${message.id}-text-${index}`}
-                                className="whitespace-pre-wrap rounded-lg bg-muted px-3 py-2 leading-6 text-foreground"
-                              >
-                                {part.text}
-                              </div>
-                            );
-                          }
-                          if (isToolUIPart(part)) {
-                            return <HaiToolPart key={part.toolCallId} part={part} />;
-                          }
-                          return null;
-                        })}
-                  </div>
-                </div>
-              );
-            })}
+            {messages.map((message, index) => (
+              <HaiMessage
+                key={message.id}
+                message={message}
+                busy={busy}
+                isLatest={index === messages.length - 1}
+                onDecide={chat.decide}
+                onRegenerate={chat.regenerate}
+                className="max-w-[92%] leading-6"
+              />
+            ))}
             {busy && messages.at(-1)?.role === "user" ? (
               <div className="flex justify-start">
                 <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
@@ -226,15 +222,17 @@ export function HaiAssistantPanel({
               </div>
             ) : null}
             {error ? (
-              <p
-                className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive"
-                role="alert"
-              >
-                {error.message || `${brand.assistantName} couldn't complete that request.`}
-              </p>
+              <HaiChatError
+                error={error}
+                fallback={`${brand.assistantName} couldn't complete that request.`}
+                onRetry={chat.retry}
+              />
             ) : null}
           </div>
         )}
+        <p className="sr-only" aria-live="polite">
+          {busy ? `${brand.assistantName} is answering…` : ""}
+        </p>
       </div>
 
       <div className="shrink-0 border-t border-border bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -262,7 +260,7 @@ export function HaiAssistantPanel({
               variant="outline"
               size="icon"
               className="size-11 xl:size-9"
-              onClick={stop}
+              onClick={() => void chat.stop()}
               aria-label="Stop response"
             >
               <Square className="size-4" aria-hidden />

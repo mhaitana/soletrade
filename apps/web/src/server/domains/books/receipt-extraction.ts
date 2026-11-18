@@ -10,7 +10,7 @@ export type {
 } from "@/lib/domain/books/receipt-extraction-types";
 import "server-only";
 import { getBillingState } from "@/server/foundation/billing/state";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { getDataClient } from "@/server/infrastructure/db/client";
 import {
@@ -25,8 +25,8 @@ import type { Json } from "@/lib/domain/json";
 import { normalizeListOffset } from "@/utils/pagination";
 import { getFile, downloadFileBytes } from "@/server/foundation/files";
 import { getWorkspace } from "@/server/foundation/workspaces";
-import { getAIModel, isMockProvider } from "@/server/infrastructure/ai/provider";
-import { consumeCredit } from "@/server/foundation/billing/credits";
+import { aiModelLabel, getAIModel, isMockProvider } from "@/server/infrastructure/ai/provider";
+import { consumeCredit, reverseCreditConsumption } from "@/server/foundation/billing/credits";
 import { publishEvent } from "@/server/infrastructure/events";
 import { writeAudit } from "@/server/foundation/audit";
 import { env } from "@/server/infrastructure/config/env";
@@ -57,7 +57,7 @@ import {
 
 /** Structured shape persisted on `receipt_extractions.extracted_data` (jsonb). */
 
-/** Zod schema the model is forced into via `generateObject` (structured output). */
+/** Zod schema the model's structured output must match (`Output.object`). */
 function receiptExtractionSchema(defaultCurrency: string) {
   return z.object({
     merchant: z.string(),
@@ -202,7 +202,7 @@ export async function extractReceipt(
       file_id: fileId,
       status: "pending",
       processing: true,
-      model_used: isMockProvider() ? "mock" : env.AI_PROVIDER,
+      model_used: aiModelLabel("vision"),
       actor_user_id: actorId,
     });
     if (claim.error) {
@@ -247,7 +247,8 @@ export async function extractReceipt(
     }
   }
 
-  const modelUsed = isMockProvider() ? "mock" : env.AI_PROVIDER;
+  // The model that actually reads the receipt (provider and id), not just the provider.
+  const modelUsed = aiModelLabel("vision");
   let extracted: ExtractedReceiptData;
   let errorMessage: string | null = null;
 
@@ -256,9 +257,16 @@ export async function extractReceipt(
       extracted = mockExtractedData(new Date(), defaultCurrency);
     } else {
       const { bytes } = await downloadFileBytes(file.storagePath);
-      const { object } = await generateObject({
-        model: getAIModel(),
-        schema: receiptExtractionSchema(defaultCurrency),
+      const { output } = await generateText({
+        model: getAIModel("vision"),
+        output: Output.object({ schema: receiptExtractionSchema(defaultCurrency) }),
+        // A receipt is a few hundred tokens of JSON; cap the call rather than leaving it at
+        // the model default. On reasoning models the reasoning shares this budget.
+        maxOutputTokens: 8192,
+        // Ask Anthropic for native structured output. The provider's default ("auto")
+        // falls back to a forced tool call for model ids it does not recognise, and
+        // current Anthropic models reject forced tool calls. Ignored by other providers.
+        providerOptions: { anthropic: { structuredOutputMode: "outputFormat" } },
         messages: [
           {
             role: "user",
@@ -269,13 +277,31 @@ export async function extractReceipt(
           },
         ],
       });
-      extracted = coerceExtractedData(object);
+      extracted = coerceExtractedData(output);
     }
   } catch (err) {
     // Persist the failure as a rejected row so it's visible in the queue rather than
     // silently dropped. No extractedData; the user can still manually enter the tx.
     errorMessage = err instanceof Error ? err.message : String(err);
     extracted = coerceExtractedData({});
+    // The scan was paid for before the model ran. It produced nothing, so give the credit
+    // back. A failed reversal must not hide the original failure; it is logged for follow-up.
+    if (costCents > 0) {
+      try {
+        await reverseCreditConsumption(
+          workspaceId,
+          {
+            amountCents: costCents,
+            reason: "receipt_extraction_failed",
+            moduleKey: "books",
+            metadata: { fileId },
+          },
+          actorId,
+        );
+      } catch (refundError) {
+        console.error("[books] could not return credit for a failed receipt scan:", refundError);
+      }
+    }
   }
 
   const payload = {

@@ -57,7 +57,7 @@ export default async function AdminAccessRequestsPage() {
       <AdminPageHeader
         icon={KeyRound}
         title="Temporary Customer-Approved Support Access"
-        subtitle="Explicit, time-limited support sessions (Principle #3, #4 & #15). Customer content is strictly isolated outside approved sessions."
+        subtitle="Explicit, time-limited support sessions. Customer content is strictly isolated outside approved sessions."
       />
 
       {/* Active & Approved Sessions */}

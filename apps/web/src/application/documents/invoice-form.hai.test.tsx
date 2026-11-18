@@ -58,7 +58,10 @@ describe("InvoiceForm hAI assisted draft", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Customer")).toHaveValue("00000000-0000-4000-8000-000000000001");
+      expect(screen.getByRole("combobox", { name: "Customer" })).toHaveTextContent("Acme");
+      expect(document.querySelector('input[name="customerId"]')).toHaveValue(
+        "00000000-0000-4000-8000-000000000001",
+      );
       expect(screen.getByLabelText("Line 1 unit price")).toHaveValue(250);
     });
     expect(screen.getByText("hAI prepared an unsaved draft")).toBeTruthy();

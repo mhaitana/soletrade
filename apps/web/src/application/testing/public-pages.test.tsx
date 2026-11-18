@@ -79,7 +79,7 @@ describe("Public Document Pages (Editorial Precision)", () => {
 
     expect(screen.getByText("INV-2026-0001")).toBeInTheDocument();
     expect(screen.getByText("Acme Services")).toBeInTheDocument();
-    const amounts = screen.getAllByText("AUD 110.00");
+    const amounts = screen.getAllByText("$110.00");
     expect(amounts.length).toBeGreaterThan(0);
     for (const amount of amounts) {
       expect(amount).toHaveClass("tabular-nums");
@@ -94,7 +94,7 @@ describe("Public Document Pages (Editorial Precision)", () => {
 
     expect(screen.getByText("QUO-2026-0001")).toBeInTheDocument();
     expect(screen.getByText("Acme Services")).toBeInTheDocument();
-    const amounts = screen.getAllByText("AUD 110.00");
+    const amounts = screen.getAllByText("$110.00");
     expect(amounts.length).toBeGreaterThan(0);
     for (const amount of amounts) {
       expect(amount).toHaveClass("tabular-nums");

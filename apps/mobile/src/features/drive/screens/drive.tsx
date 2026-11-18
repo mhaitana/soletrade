@@ -6,27 +6,27 @@ import { shareBinary } from "@/lib/sharing";
 import { router } from "expo-router";
 
 export function DriveScreen() {
-  const { bootstrap } = useSession();
+  const { bootstrap, refreshBootstrap } = useSession();
   if (
     bootstrap?.activeWorkspace?.modules.includes("drive") &&
     !bootstrap.activeWorkspace.capabilities.includes("view:drive")
   )
     return (
-      <Screen>
+      <Screen onRefresh={() => refreshBootstrap()}>
         <Copy variant="title">Drive</Copy>
         <Copy>Your workspace role does not include access to Drive.</Copy>
       </Screen>
     );
   if (!bootstrap?.activeWorkspace?.modules.includes("drive"))
     return (
-      <Screen>
+      <Screen onRefresh={() => refreshBootstrap()}>
         <Copy variant="title">Drive</Copy>
         <Copy>Enable Drive to record gig earnings, mileage and vehicle expenses.</Copy>
         <NavRow title="Subscription" href="/feature/store" />
       </Screen>
     );
   return (
-    <Screen>
+    <Screen onRefresh={() => refreshBootstrap()}>
       <Copy variant="title">Drive</Copy>
       <Copy muted>Your working day, from the first kilometre.</Copy>
       {bootstrap.activeWorkspace.capabilities.includes("create:drive") && (

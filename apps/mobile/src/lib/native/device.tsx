@@ -1,3 +1,4 @@
+import { pushRegistrationDue, type PushRegistration } from "@/lib/native/sync-policy";
 import { isQuietHour } from "@/lib/offline/policy";
 import { deleteState, readState, writeState } from "@/lib/offline/store";
 import { Button, Host } from "@expo/ui";
@@ -47,7 +48,15 @@ export async function deviceId() {
   }
   return value;
 }
-export async function registerPush(request: MobileRequest, userId: string) {
+/**
+ * Registers this device for push. With `onlyIfChanged`, the POST is skipped when the same token,
+ * device, timezone and account/workspace binding were already registered within the last 7 days.
+ */
+export async function registerPush(
+  request: MobileRequest,
+  userId: string,
+  options?: { onlyIfChanged?: { workspaceId: string } },
+) {
   if (!Device.isDevice) throw new Error("Push registration requires a physical device.");
   if (Platform.OS === "android")
     await Notifications.setNotificationChannelAsync("important", {
@@ -61,23 +70,38 @@ export async function registerPush(request: MobileRequest, userId: string) {
   if (!projectId) throw new Error("Push requires an EAS project ID in this build.");
   const token = await Notifications.getExpoPushTokenAsync({ projectId });
   const id = await deviceId();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const binding = {
+    deviceId: id,
+    platform: Platform.OS,
+    token: token.data,
+    timezone,
+    workspaceId: options?.onlyIfChanged?.workspaceId ?? "",
+  };
+  const recordKey = `push-registration:${userId}`;
+  if (options?.onlyIfChanged) {
+    const last = await readState<PushRegistration>(recordKey).catch(() => null);
+    if (!pushRegistrationDue(last, binding, Date.now())) return id;
+  }
   await request("/me/devices", {
     method: "POST",
     body: {
       deviceId: id,
       platform: Platform.OS,
       token: token.data,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone,
     },
     idempotencyKey: Crypto.randomUUID(),
   });
   await writeState(`push-device:${userId}`, id);
+  await writeState(recordKey, { ...binding, registeredAt: Date.now() } satisfies PushRegistration);
   return id;
 }
 export async function unregisterPush(request: MobileRequest, userId: string) {
   const id = await readState<string>(`push-device:${userId}`);
   if (id) await request(`/me/devices/${id}`, { method: "DELETE" });
   await deleteState(`push-device:${userId}`);
+  await deleteState(`push-registration:${userId}`);
   await Notifications.dismissAllNotificationsAsync();
 }
 export function listenForPush(open: (path: string, workspaceId: string) => void) {

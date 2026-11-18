@@ -11,6 +11,7 @@ import { formatDate } from "@/utils/format-date";
 import { loadQuotesPage } from "@/features/quotes/api/actions";
 import type { QuoteStatus } from "@/lib/domain/database-enums";
 import { ResponsiveFilter } from "@/components/ui/responsive-filter";
+import { QUOTE_STATUS_DISPLAY } from "@/lib/domain/quotes/status-display";
 
 export const metadata = { title: "Quotes" };
 
@@ -23,19 +24,6 @@ const STATUS_FILTERS: { key: "all" | QuoteStatus; label: string }[] = [
   { key: "expired", label: "Expired" },
   { key: "converted", label: "Converted" },
 ];
-
-const STATUS_BADGE: Record<
-  QuoteStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
-> = {
-  draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Sent", variant: "default" },
-  viewed: { label: "Sent", variant: "default" },
-  accepted: { label: "Accepted", variant: "outline" },
-  declined: { label: "Declined", variant: "destructive" },
-  expired: { label: "Expired", variant: "destructive" },
-  converted: { label: "Converted", variant: "secondary" },
-};
 
 const VALID_STATUSES: QuoteStatus[] = [
   "draft",
@@ -179,7 +167,7 @@ export default async function QuotesPage({
             </thead>
             <tbody className="divide-y divide-border">
               {data.quotes.map((q) => {
-                const badge = STATUS_BADGE[q.status];
+                const badge = QUOTE_STATUS_DISPLAY[q.status];
                 return (
                   <tr key={q.id} className="transition-colors hover:bg-muted/40">
                     <td className="px-4 py-3 font-mono text-xs">

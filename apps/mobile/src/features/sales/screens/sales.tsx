@@ -6,11 +6,11 @@ import { router } from "expo-router";
 import { View } from "react-native";
 
 export function SalesScreen() {
-  const { bootstrap } = useSession();
+  const { bootstrap, refreshBootstrap } = useSession();
   const modules = bootstrap?.activeWorkspace?.modules ?? [];
   const caps = bootstrap?.activeWorkspace?.capabilities ?? [];
   return (
-    <Screen>
+    <Screen onRefresh={() => refreshBootstrap()}>
       <Copy variant="title">Sales</Copy>
       <Copy muted>Good relationships. Clear proposals. Paid invoices.</Copy>
       <View style={{ flexDirection: "row", gap: spacing.sm }}>

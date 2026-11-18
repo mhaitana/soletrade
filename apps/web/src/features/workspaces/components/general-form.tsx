@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,10 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
     "h-9 max-md:h-11 w-full rounded-md border border-input bg-background px-3 text-sm max-md:text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
   const error = !state.ok ? state.error : "";
+
+  useEffect(() => {
+    if (state.ok) toast.success("Workspace settings saved");
+  }, [state]);
 
   const haiNotice = useHaiFormPrefill("settings.general", (fields) => {
     const applied: string[] = [];
@@ -236,7 +241,9 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettingsPageD
                 {error}
               </p>
             ) : state.ok ? (
-              <p className="text-sm text-muted-foreground">Saved.</p>
+              <p role="status" className="text-sm text-muted-foreground">
+                Saved.
+              </p>
             ) : null}
           </form>
         </CardContent>

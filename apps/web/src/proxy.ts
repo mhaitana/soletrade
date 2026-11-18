@@ -11,9 +11,9 @@ import { env } from "@/server/infrastructure/config/env";
  *
  * Public prefixes: marketing (/), /login, /signup, /pricing, the legal/support pages
  * (/privacy, /terms, /support), the auth email-link callback (/auth/), public
- * invoice/quote share pages (/i/, /q/), the invitation accept page (/invite/ -
- * handles signed-out first-time invitees), and /api/. Everything else requires a
- * session.
+ * invoice/quote share pages (/i/, /q/), the invitation accept page (/invite/{token},
+ * plus the bare /invite?token= form used by older emails - both handle signed-out
+ * first-time invitees), and /api/. Everything else requires a session.
  */
 
 const PUBLIC_PREFIXES = [
@@ -29,7 +29,7 @@ const PUBLIC_PREFIXES = [
   "/sw.js",
   "/i/",
   "/q/",
-  "/invite/",
+  "/invite",
   "/api",
 ];
 

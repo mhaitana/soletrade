@@ -12,6 +12,7 @@ import { formatCents } from "@/lib/domain/billing/pricing";
 import { formatDate } from "@/utils/format-date";
 import { loadInvoicesPage } from "@/features/invoices/api/actions";
 import type { InvoiceStatus } from "@/lib/domain/database-enums";
+import { INVOICE_STATUS_DISPLAY } from "@/lib/domain/invoices/status-display";
 
 export const metadata = { title: "Invoices" };
 
@@ -23,18 +24,6 @@ const STATUS_FILTERS: { key: "all" | InvoiceStatus; label: string }[] = [
   { key: "overdue", label: "Overdue" },
   { key: "void", label: "Void" },
 ];
-
-const STATUS_BADGE: Record<
-  InvoiceStatus,
-  { label: string; variant: "secondary" | "outline" | "success" | "destructive" }
-> = {
-  draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Sent", variant: "outline" },
-  viewed: { label: "Sent", variant: "outline" },
-  paid: { label: "Paid", variant: "success" },
-  void: { label: "Void", variant: "destructive" },
-  overdue: { label: "Overdue", variant: "destructive" },
-};
 
 export default async function InvoicesPage({
   searchParams,
@@ -183,7 +172,7 @@ export default async function InvoicesPage({
               {
                 header: "Status",
                 cell: (inv) => {
-                  const badge = STATUS_BADGE[inv.status];
+                  const badge = INVOICE_STATUS_DISPLAY[inv.status];
                   return <Badge variant={badge.variant}>{badge.label}</Badge>;
                 },
               },

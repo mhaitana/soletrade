@@ -18,6 +18,11 @@ vi.mock("@/server/application/auth/workspace-context", () => ({
 vi.mock("@/server/foundation/module-installations/index", () => ({
   isModuleEnabled: vi.fn().mockResolvedValue(true),
 }));
+// The page now includes the Scan a receipt control, which refreshes the route after a scan.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
 
 const WORKSPACE_ID = branded<"WorkspaceId">("00000000-0000-4000-8000-000000000001");
 const requests: URL[] = [];

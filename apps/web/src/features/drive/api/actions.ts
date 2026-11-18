@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
+import { createWithRequestId } from "@/server/application/request-id-create";
 import { getWorkspace } from "@/server/foundation/workspaces/index";
 import { authorize } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
@@ -26,6 +27,7 @@ import type { EarningInput, EarningRow, TripInput, TripRow } from "@/lib/domain/
 import { MAX_EARNINGS_BATCH_SIZE } from "@/lib/domain/drive/constants";
 import type { DriveSummary, WeeklyDrivePoint } from "@/lib/domain/drive/calc";
 import { type Period, parsePeriod, periodRange } from "@/utils/periods";
+import { RECORD_PAGE_SIZE, parsePage } from "@/utils/pagination";
 import { isDrivePlatform } from "@/config/drive-platforms";
 import { branded } from "@/types/ids";
 
@@ -37,6 +39,8 @@ const forbid = (msg = "You don't have permission to manage drive.") => ({
 // --- Earnings actions --------------------------------------------------------
 
 const createEarningSchema = z.object({
+  /** One id per form draft; resending it never creates a second record. */
+  requestId: z.string().uuid().optional(),
   platform: z.string().trim().min(1, "Pick a platform.").refine(isDrivePlatform, {
     message: "Pick a valid platform.",
   }),
@@ -75,7 +79,11 @@ export async function createEarningAction(input: unknown): Promise<CreateEarning
   };
 
   try {
-    const id = await createEarning(ctx.workspaceId, earningInput, ctx.user.id);
+    const { id } = await createWithRequestId(
+      parsed.data.requestId ? branded<"DriveEarningId">(parsed.data.requestId) : undefined,
+      (requestId) => createEarning(ctx.workspaceId, earningInput, ctx.user.id, requestId),
+      async (requestId) => (await getEarning(ctx.workspaceId, requestId)) !== null,
+    );
     revalidatePath("/drive");
     // The database transaction has already synchronized the Books mirror; invalidate the
     // cross-module views so soft navigation shows it immediately.
@@ -195,6 +203,8 @@ export async function updateEarningAction(input: unknown): Promise<UpdateEarning
 // --- Trips actions ------------------------------------------------------------
 
 const createTripSchema = z.object({
+  /** One id per form draft; resending it never creates a second record. */
+  requestId: z.string().uuid().optional(),
   platform: z.string().trim().min(1, "Pick a platform.").refine(isDrivePlatform, {
     message: "Pick a valid platform.",
   }),
@@ -232,7 +242,11 @@ export async function createTripAction(input: unknown): Promise<CreateTripResult
   };
 
   try {
-    const id = await createTrip(ctx.workspaceId, tripInput, ctx.user.id);
+    const { id } = await createWithRequestId(
+      parsed.data.requestId ? branded<"DriveTripId">(parsed.data.requestId) : undefined,
+      (requestId) => createTrip(ctx.workspaceId, tripInput, ctx.user.id, requestId),
+      async (requestId) => (await getTrip(ctx.workspaceId, requestId)) !== null,
+    );
     revalidatePath("/drive");
     // The database transaction has already synchronized the Books mileage mirror.
     revalidatePath("/books");
@@ -361,6 +375,8 @@ export type DrivePageData =
       weekly: WeeklyDrivePoint[];
       /** Workspace mileage rate (Wave 2) - the page surfaces it so users see the deduction basis. */
       mileageRateCentsPerKm: number;
+      page: number;
+      hasNext: boolean;
     }
   | { installed: false };
 
@@ -369,6 +385,7 @@ export async function loadDrivePage(params?: {
   platform?: string;
   search?: string;
   period?: Period;
+  page?: number;
 }): Promise<DrivePageData> {
   const ctx = await requireWorkspaceContext();
   const [enabled, workspace] = await Promise.all([
@@ -383,6 +400,9 @@ export async function loadDrivePage(params?: {
   const search = params?.search?.trim() ?? "";
   const platform = params?.platform || undefined;
   const range = periodRange(period, undefined, fyStartMonth);
+  const page = parsePage(params?.page, RECORD_PAGE_SIZE);
+  // One page of the visible list; the extra row says whether a next page exists.
+  const listWindow = { offset: (page - 1) * RECORD_PAGE_SIZE, limit: RECORD_PAGE_SIZE + 1 };
 
   // Fetch only the visible list. The cross-entity summary is calculated in Postgres and
   // returned as compact JSON instead of transferring up to 6,000 earnings/trip/expense rows.
@@ -393,7 +413,7 @@ export async function loadDrivePage(params?: {
           search: search || undefined,
           dateFrom: range.start ?? undefined,
           dateTo: range.end,
-          limit: 100,
+          ...listWindow,
         })
       : Promise.resolve<EarningRow[]>([]);
   const tripsPromise =
@@ -403,7 +423,7 @@ export async function loadDrivePage(params?: {
           search: search || undefined,
           dateFrom: range.start ?? undefined,
           dateTo: range.end,
-          limit: 100,
+          ...listWindow,
         })
       : Promise.resolve<TripRow[]>([]);
   const [earnings, trips, settings, databaseSummary] = await Promise.all([
@@ -432,11 +452,12 @@ export async function loadDrivePage(params?: {
       mileageDeductionCents,
   };
 
+  const visible = view === "trips" ? trips : earnings;
   return {
     installed: true,
     view,
-    earnings,
-    trips,
+    earnings: earnings.slice(0, RECORD_PAGE_SIZE),
+    trips: trips.slice(0, RECORD_PAGE_SIZE),
     canManage: authorize(ctx.role, "manage:drive").ok,
     platformFilter: platform ?? null,
     search,
@@ -445,6 +466,29 @@ export async function loadDrivePage(params?: {
     summary,
     weekly: summary.weekly,
     mileageRateCentsPerKm: settings.mileageRateCentsPerKm,
+    page,
+    hasNext: visible.length > RECORD_PAGE_SIZE,
+  };
+}
+
+export type DriveEntryFormData =
+  { installed: true; canManage: boolean; defaultCurrency: string } | { installed: false };
+
+/**
+ * What the new-entry page needs: the module gate, permission and currency. The page used
+ * to call `loadDrivePage`, which also fetched a list, settings and the period summary.
+ */
+export async function loadDriveEntryForm(): Promise<DriveEntryFormData> {
+  const ctx = await requireWorkspaceContext();
+  const [enabled, workspace] = await Promise.all([
+    isModuleEnabled(ctx.workspaceId, "drive"),
+    getWorkspace(ctx.workspaceId),
+  ]);
+  if (!enabled || !workspace) return { installed: false };
+  return {
+    installed: true,
+    canManage: authorize(ctx.role, "manage:drive").ok,
+    defaultCurrency: workspace.defaultCurrency,
   };
 }
 

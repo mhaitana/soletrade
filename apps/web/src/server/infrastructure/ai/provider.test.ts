@@ -63,4 +63,40 @@ describe("AI provider (platform/ai/provider)", () => {
     const model = getAIModel() as unknown as { provider: string };
     expect(model.provider).toMatch(/^openai/);
   });
+
+  it("falls back to the chat model for every tier until a tier override is set", async () => {
+    vi.stubEnv("AI_PROVIDER", "anthropic");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key-anthropic");
+    vi.stubEnv("ANTHROPIC_MODEL", "chat-model");
+    vi.stubEnv("ANTHROPIC_MODEL_LIGHT", "");
+    vi.stubEnv("ANTHROPIC_MODEL_VISION", "");
+    vi.resetModules();
+    const { aiModelLabel, getAIModel } = await import("@/server/infrastructure/ai/provider");
+    expect(aiModelLabel()).toBe("anthropic/chat-model");
+    expect(aiModelLabel("light")).toBe("anthropic/chat-model");
+    expect(aiModelLabel("vision")).toBe("anthropic/chat-model");
+    expect((getAIModel("vision") as unknown as { modelId: string }).modelId).toBe("chat-model");
+  });
+
+  it("uses a tier's own model when its override is set", async () => {
+    vi.stubEnv("AI_PROVIDER", "anthropic");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key-anthropic");
+    vi.stubEnv("ANTHROPIC_MODEL", "chat-model");
+    vi.stubEnv("ANTHROPIC_MODEL_LIGHT", "light-model");
+    vi.stubEnv("ANTHROPIC_MODEL_VISION", "vision-model");
+    vi.resetModules();
+    const { aiModelLabel, getAIModel } = await import("@/server/infrastructure/ai/provider");
+    expect(aiModelLabel("chat")).toBe("anthropic/chat-model");
+    expect(aiModelLabel("light")).toBe("anthropic/light-model");
+    expect((getAIModel("light") as unknown as { modelId: string }).modelId).toBe("light-model");
+    expect((getAIModel("vision") as unknown as { modelId: string }).modelId).toBe("vision-model");
+    expect((getAIModel() as unknown as { modelId: string }).modelId).toBe("chat-model");
+  });
+
+  it("labels the mock provider as mock", async () => {
+    vi.stubEnv("AI_PROVIDER", "mock");
+    vi.resetModules();
+    const { aiModelLabel } = await import("@/server/infrastructure/ai/provider");
+    expect(aiModelLabel("vision")).toBe("mock");
+  });
 });

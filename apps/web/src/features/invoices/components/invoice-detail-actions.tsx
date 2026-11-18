@@ -24,6 +24,13 @@ import type { InvoiceStatus } from "@/lib/domain/database-enums";
 
 type Action = { kind: "send" } | { kind: "markPaid" } | { kind: "void" } | { kind: "delete" };
 
+const SUCCESS_TOAST: Record<Action["kind"], string> = {
+  send: "Invoice sent.",
+  markPaid: "Invoice marked paid.",
+  void: "Invoice voided.",
+  delete: "Draft deleted.",
+};
+
 const DIALOG_COPY: Record<Action["kind"], { title: string; description: string; cta: string }> = {
   send: {
     title: "Send invoice?",
@@ -34,7 +41,7 @@ const DIALOG_COPY: Record<Action["kind"], { title: string; description: string; 
   markPaid: {
     title: "Mark invoice paid?",
     description:
-      "Records a manual / offline payment. No Stripe transaction is created in this phase.",
+      "Records a payment you received outside the app, such as a bank transfer or cash. A customer with an email address on file is sent a payment confirmation.",
     cta: "Mark paid",
   },
   void: {
@@ -64,6 +71,16 @@ export function InvoiceDetailActions({
   const isDraft = status === "draft";
   const isSent = status === "sent" || status === "viewed" || status === "overdue";
 
+  function openDialog(kind: Action["kind"]) {
+    setError("");
+    setPending({ kind });
+  }
+
+  function closeDialog() {
+    setError("");
+    setPending(null);
+  }
+
   async function run(kind: Action["kind"]) {
     setError("");
     startTransition(async () => {
@@ -77,10 +94,8 @@ export function InvoiceDetailActions({
         setError(res.error ?? "Action failed.");
         return;
       }
-      setPending(null);
-      if (kind === "send") {
-        toast.success("Invoice sent.");
-      }
+      closeDialog();
+      toast.success(SUCCESS_TOAST[kind]);
       if (kind === "delete") router.push("/invoices");
       router.refresh();
     });
@@ -91,7 +106,7 @@ export function InvoiceDetailActions({
       <div className="flex flex-wrap gap-2">
         {isDraft ? (
           <>
-            <Button onClick={() => setPending({ kind: "send" })} disabled={isPending}>
+            <Button onClick={() => openDialog("send")} disabled={isPending}>
               <Send className="size-4" aria-hidden />
               Send
             </Button>
@@ -101,17 +116,13 @@ export function InvoiceDetailActions({
                 Edit
               </Link>
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => setPending({ kind: "void" })}
-              disabled={isPending}
-            >
+            <Button variant="outline" onClick={() => openDialog("void")} disabled={isPending}>
               <XCircle className="size-4" aria-hidden />
               Void
             </Button>
             <Button
               variant="ghost"
-              onClick={() => setPending({ kind: "delete" })}
+              onClick={() => openDialog("delete")}
               disabled={isPending}
               className="text-destructive"
             >
@@ -122,15 +133,11 @@ export function InvoiceDetailActions({
         ) : null}
         {isSent ? (
           <>
-            <Button onClick={() => setPending({ kind: "markPaid" })} disabled={isPending}>
+            <Button onClick={() => openDialog("markPaid")} disabled={isPending}>
               <Check className="size-4" aria-hidden />
               Mark paid
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => setPending({ kind: "void" })}
-              disabled={isPending}
-            >
+            <Button variant="outline" onClick={() => openDialog("void")} disabled={isPending}>
               <XCircle className="size-4" aria-hidden />
               Void
             </Button>
@@ -138,13 +145,14 @@ export function InvoiceDetailActions({
         ) : null}
       </div>
 
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+      {/* The error lives inside the dialog: while it is open the page behind is inert and
+          hidden from assistive technology, so a message rendered there would go unseen. */}
+      <Dialog
+        open={pending !== null}
+        onOpenChange={(o) => {
+          if (!o && !isPending) closeDialog();
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{pending ? DIALOG_COPY[pending.kind].title : ""}</DialogTitle>
@@ -152,8 +160,13 @@ export function InvoiceDetailActions({
               {pending ? DIALOG_COPY[pending.kind].description : ""}
             </DialogDescription>
           </DialogHeader>
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
+            <Button variant="outline" onClick={closeDialog} disabled={isPending}>
               Cancel
             </Button>
             <Button

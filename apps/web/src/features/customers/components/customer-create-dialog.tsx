@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
+import { useRequestId } from "@/hooks/use-request-id";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +48,8 @@ export function CustomerCreateDialog({
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
   const [isPending, startTransition] = useTransition();
+  // The dialog stays mounted between customers, so start a new draft after each save.
+  const { requestId, renew: renewRequestId } = useRequestId();
 
   function reset() {
     setName("");
@@ -74,6 +78,7 @@ export function CustomerCreateDialog({
       let res: Awaited<ReturnType<typeof createCustomerAction>>;
       try {
         res = await createCustomerAction({
+          requestId,
           name: trimmedName,
           email: trimmedEmail,
           phone: "",
@@ -89,7 +94,9 @@ export function CustomerCreateDialog({
         setFieldErrors(res.fieldErrors);
         return;
       }
+      toast.success("Customer created");
       onCreated({ id: res.customerId, name: trimmedName, email: trimmedEmail, company: null });
+      renewRequestId();
       reset();
       setOpen(false);
     });
@@ -164,8 +171,8 @@ export function CustomerCreateDialog({
                   >
                     Check customers
                     <span className="sr-only"> (opens in a new tab)</span>
-                  </Link>{" "}
-                  before trying again.
+                  </Link>
+                  , or save again; this won’t create a second customer.
                 </>
               ) : (
                 error

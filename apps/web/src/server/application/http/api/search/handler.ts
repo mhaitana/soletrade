@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { tryWorkspaceContext } from "@/server/application/auth/workspace-context";
 import { searchWorkspace } from "@/server/application/http/api/search/search";
+import { rateLimit } from "@/server/infrastructure/rate-limit/index";
+
+/**
+ * Searches one member can run per minute. The palette debounces typing, so normal use stays
+ * far below this; it stops a script from turning search into a database load test.
+ */
+export const SEARCH_RATE_LIMIT = { max: 120, windowMs: 60_000 } as const;
 
 /**
  * Global search endpoint (Wave 3). The ⌘K command palette debounces GET requests here as
@@ -31,6 +38,12 @@ export async function GET(req: Request) {
 
   const ctx = await tryWorkspaceContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  if (!(await rateLimit(`search:user:${ctx.user.id}`, SEARCH_RATE_LIMIT))) {
+    return NextResponse.json(
+      { error: "Too many searches. Wait a moment and try again." },
+      { status: 429 },
+    );
+  }
 
   const groups = await searchWorkspace(ctx.workspaceId, parsed.data.q, {
     limitPerModule: parsed.data.limit,

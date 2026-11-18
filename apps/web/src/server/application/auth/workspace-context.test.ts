@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/server/application/auth/session", () => ({
   getCurrentUser: vi.fn(),
+  getSessionIdentity: vi.fn(),
 }));
 
 vi.mock("@/server/foundation/workspaces", () => ({
@@ -31,7 +32,7 @@ vi.mock("@/server/application/auth/admin-context", () => ({
 }));
 
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
-import { getCurrentUser } from "@/server/application/auth/session";
+import { getCurrentUser, getSessionIdentity } from "@/server/application/auth/session";
 import {
   getActiveWorkspaceId,
   setActiveWorkspaceId,
@@ -40,6 +41,7 @@ import { listUserWorkspaces } from "@/server/foundation/workspaces";
 import { branded } from "@/types/ids";
 
 const mockGetCurrentUser = vi.mocked(getCurrentUser);
+const mockGetSessionIdentity = vi.mocked(getSessionIdentity);
 const mockListUserWorkspaces = vi.mocked(listUserWorkspaces);
 const mockGetActiveWorkspaceId = vi.mocked(getActiveWorkspaceId);
 const mockSetActiveWorkspaceId = vi.mocked(setActiveWorkspaceId);
@@ -55,6 +57,7 @@ function setupMembership(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetSessionIdentity.mockResolvedValue({ id: UID(), email: "owner@example.com" });
   mockGetCurrentUser.mockResolvedValue({ id: UID(), email: "owner@example.com" });
   mockSetActiveWorkspaceId.mockResolvedValue(undefined);
 });
@@ -110,13 +113,41 @@ describe("requireWorkspaceContext", () => {
     await expect(requireWorkspaceContext()).rejects.toThrow("REDIRECT:/onboarding");
   });
 
-  it("redirects to /onboarding when there is no session (getCurrentUser null)", async () => {
+  it("redirects to /onboarding when there is no session", async () => {
     // tryWorkspaceContext maps a null session to null → requireWorkspaceContext redirects.
     // Route handlers consume the null directly (401); server components/actions redirect.
+    mockGetSessionIdentity.mockResolvedValue(null);
     mockGetCurrentUser.mockResolvedValue(null);
 
     await expect(requireWorkspaceContext()).rejects.toThrow("REDIRECT:/onboarding");
     expect(mockListUserWorkspaces).not.toHaveBeenCalled();
+  });
+
+  it("refuses a deleted account even though its memberships were read in parallel", async () => {
+    mockListUserWorkspaces.mockResolvedValue(setupMembership("owner"));
+    mockGetActiveWorkspaceId.mockResolvedValue(WID("ws-1"));
+    mockGetCurrentUser.mockResolvedValue(null);
+
+    await expect(requireWorkspaceContext()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+
+  it("starts the membership read without waiting for the account check", async () => {
+    let finishAccountCheck: (user: {
+      id: ReturnType<typeof UID>;
+      email: string;
+    }) => void = () => {};
+    mockGetCurrentUser.mockReturnValue(
+      new Promise((resolve) => {
+        finishAccountCheck = resolve;
+      }),
+    );
+    mockListUserWorkspaces.mockResolvedValue(setupMembership("owner"));
+    mockGetActiveWorkspaceId.mockResolvedValue(null);
+
+    const pending = requireWorkspaceContext();
+    await vi.waitFor(() => expect(mockListUserWorkspaces).toHaveBeenCalledWith(UID()));
+    finishAccountCheck({ id: UID(), email: "owner@example.com" });
+    await expect(pending).resolves.toMatchObject({ workspaceId: WID("ws-1"), role: "owner" });
   });
 
   it("never trusts the client: workspaceId comes from server-resolved membership", async () => {

@@ -1,4 +1,5 @@
 import { summarizePoints, type GPSPoint } from "@/lib/native/gps-policy";
+import { nextRouteSyncState, routeSyncPlan, type RouteSyncState } from "@/lib/native/sync-policy";
 import { assertBinding, maySyncRoute } from "@/lib/offline/policy";
 import {
   createDraft,
@@ -393,13 +394,24 @@ export async function listPrivateShifts(binding: Binding) {
     );
 }
 export async function reconcileRouteDeletions(binding: Binding, request: MobileRequest) {
+  const stateKey = `route-sync:${binding.userId}`;
+  const startedAt = Date.now();
+  const previous = await readState<RouteSyncState>(stateKey).catch(() => null);
+  const plan = routeSyncPlan(previous, startedAt);
+  const query = (cursor?: string | null) => {
+    const params = new URLSearchParams();
+    if (plan.since) params.set("since", plan.since);
+    if (cursor) params.set("cursor", cursor);
+    const text = params.toString();
+    return `/me/routes${text ? `?${text}` : ""}`;
+  };
   let cursor: string | null | undefined;
   do {
     const remote: {
       items?: RemotePrivateRoute[];
       deletedIds: string[];
       nextCursor?: string | null;
-    } = await request(`/me/routes${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+    } = await request(query(cursor));
     await applyRouteTombstones(binding, remote.deletedIds ?? []);
     await serial(async () => {
       for (const item of remote.items ?? []) {
@@ -421,6 +433,8 @@ export async function reconcileRouteDeletions(binding: Binding, request: MobileR
     });
     cursor = remote.nextCursor;
   } while (cursor);
+  // Record the pass start (not its end) so changes made while it ran are fetched next time.
+  await writeState(stateKey, nextRouteSyncState(previous, startedAt, plan.full));
   for (const row of await listState<boolean>(`route-tombstone:${binding.userId}:`)) {
     const id = row.key.split(":").at(-1)!;
     await request(`/me/routes/${id}`, {

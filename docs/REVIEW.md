@@ -1,5 +1,9 @@
 # soletrade Workspace - Full Review: UI/UX, Security, Performance
 
+> **Superseded** by [REVIEW_2026-11-17.md](REVIEW_2026-11-17.md). This July 2026 review predates the
+> monorepo move: its `src/...` paths no longer exist and many of its findings have been fixed.
+> Kept for history only.
+
 **Date:** 2026-07-07
 **Scope:** `src/app`, `src/shared`, `src/platform`, `src/modules`, `src/server`
 **Method:** Three parallel specialist agents examined actual code (151 tool calls across ~120 files). Findings cite real `file:line` references.

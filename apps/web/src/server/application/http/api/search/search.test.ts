@@ -14,6 +14,7 @@ import { branded } from "@/types/ids";
  */
 
 const listCustomersMock = vi.fn();
+const findCustomerIdsMatchingMock = vi.fn();
 const listFilesMock = vi.fn();
 const listInvoicesMock = vi.fn();
 const listQuotesMock = vi.fn();
@@ -28,6 +29,7 @@ vi.mock("@/server/foundation/module-installations/index", () => ({
 }));
 vi.mock("@/server/foundation/customers/index", () => ({
   listCustomers: (...a: unknown[]) => listCustomersMock(...a),
+  findCustomerIdsMatching: (...a: unknown[]) => findCustomerIdsMatchingMock(...a),
 }));
 vi.mock("@/server/foundation/files/index", () => ({
   listFiles: (...a: unknown[]) => listFilesMock(...a),
@@ -54,6 +56,7 @@ beforeEach(() => {
   // Default: nothing installed (so only customers + files run). Per-test overrides.
   getInstalledModulesMock.mockResolvedValue([]);
   listCustomersMock.mockResolvedValue([]);
+  findCustomerIdsMatchingMock.mockResolvedValue([]);
   listFilesMock.mockResolvedValue({ items: [], nextCursor: null });
   listInvoicesMock.mockResolvedValue([]);
   listQuotesMock.mockResolvedValue([]);
@@ -211,9 +214,27 @@ describe("searchWorkspace", () => {
       },
     ]);
     await searchWorkspace(WS, "  inv  ", { limitPerModule: 4 });
-    expect(listInvoicesMock).toHaveBeenCalledWith(WS, { search: "inv", limit: 4 });
+    expect(listInvoicesMock).toHaveBeenCalledWith(WS, {
+      search: "inv",
+      matchingCustomerIds: [],
+      limit: 4,
+    });
     expect(listCustomersMock).toHaveBeenCalledWith(WS, { search: "inv", limit: 4 });
     // Files always runs (platform surface, not module-gated).
     expect(listFilesMock).toHaveBeenCalledWith(WS, { search: "inv", limit: 4 });
+  });
+  it("looks up matching customers once and shares the ids with every document search", async () => {
+    const { searchWorkspace } = await import("@/server/application/http/api/search/search");
+    getInstalledModulesMock.mockResolvedValue(["invoices", "quotes", "books"]);
+    findCustomerIdsMatchingMock.mockResolvedValue(["customer-1", "customer-2"]);
+
+    await searchWorkspace(WS, "acme", { limitPerModule: 5 });
+
+    expect(findCustomerIdsMatchingMock).toHaveBeenCalledTimes(1);
+    expect(findCustomerIdsMatchingMock).toHaveBeenCalledWith(WS, "acme");
+    const shared = { search: "acme", matchingCustomerIds: ["customer-1", "customer-2"], limit: 5 };
+    expect(listInvoicesMock).toHaveBeenCalledWith(WS, shared);
+    expect(listQuotesMock).toHaveBeenCalledWith(WS, shared);
+    expect(listTransactionsMock).toHaveBeenCalledWith(WS, shared);
   });
 });

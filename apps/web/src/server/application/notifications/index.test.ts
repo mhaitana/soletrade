@@ -16,6 +16,11 @@ vi.mock("@/server/application/notifications/attachments", () => ({
   renderQuoteAttachment: vi.fn().mockResolvedValue(null),
 }));
 
+// Customer emails name the sending business; keep that workspace lookup offline too.
+vi.mock("@/server/application/notifications/merchant", () => ({
+  resolveMerchantName: vi.fn().mockResolvedValue("Acme Plumbing"),
+}));
+
 vi.mock("@/server/foundation/notifications/store", () => ({
   memberIdsWithPermission: vi.fn().mockResolvedValue([]),
   createNotification: vi.fn(),
@@ -81,7 +86,7 @@ describe("notifications (event-driven email)", () => {
     await publish("InvoiceSent", meta());
     expect(sends).toHaveLength(1);
     expect(sends[0]?.to).toBe("customer@globex.com");
-    expect(sends[0]?.subject).toBe("Invoice INV-2026-0009");
+    expect(sends[0]?.subject).toBe("Invoice INV-2026-0009 from Acme Plumbing");
     expect(sends[0]?.text).toContain(`/i/tok-xyz`);
     expect(sends[0]?.html).toContain(`href="`);
   });
@@ -94,14 +99,14 @@ describe("notifications (event-driven email)", () => {
   it("sends an overdue email on InvoiceOverdue with the red accent", async () => {
     await publish("InvoiceOverdue", meta());
     expect(sends).toHaveLength(1);
-    expect(sends[0]?.subject).toBe("Overdue: Invoice INV-2026-0009");
+    expect(sends[0]?.subject).toBe("Overdue: Invoice INV-2026-0009 from Acme Plumbing");
     expect(sends[0]?.html).toContain("#DC2626");
   });
 
   it("sends a receipt on InvoicePaid (stripe source)", async () => {
     await publish("InvoicePaid", { ...meta(), source: "stripe" });
     expect(sends).toHaveLength(1);
-    expect(sends[0]?.subject).toBe("Receipt: Invoice INV-2026-0009");
+    expect(sends[0]?.subject).toBe("Receipt: Invoice INV-2026-0009 from Acme Plumbing");
     expect(sends[0]?.html).toContain("#059669");
   });
 
@@ -137,7 +142,7 @@ describe("notifications (quote-sent email)", () => {
     await publish("QuoteSent", quoteMeta());
     expect(sends).toHaveLength(1);
     expect(sends[0]?.to).toBe("buyer@globex.com");
-    expect(sends[0]?.subject).toBe("Quote QUO-2026-0042");
+    expect(sends[0]?.subject).toBe("Quote QUO-2026-0042 from Acme Plumbing");
     expect(sends[0]?.text).toContain(`/q/quo-tok-abc`);
     expect(sends[0]?.html).toContain(`href="`);
   });

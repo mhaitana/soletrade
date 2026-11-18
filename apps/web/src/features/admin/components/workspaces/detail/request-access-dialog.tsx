@@ -30,7 +30,7 @@ export function RequestAccessDialog({
         </Button>
       }
       title={`Request support access to ${workspaceName}`}
-      description="Creates a pending access request the customer must approve. Access is time-limited and scoped (Principle #3 & #15). The customer sees your reason and explanation."
+      description="Creates a pending access request the customer must approve. Access is time-limited and scoped. The customer sees your reason and explanation."
       hidden={{ workspaceId }}
       fields={[
         {

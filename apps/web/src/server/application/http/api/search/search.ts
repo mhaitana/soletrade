@@ -1,6 +1,6 @@
 import "server-only";
 import { getInstalledModules } from "@/server/foundation/module-installations/index";
-import { listCustomers } from "@/server/foundation/customers/index";
+import { findCustomerIdsMatching, listCustomers } from "@/server/foundation/customers/index";
 import type { CustomerRow } from "@/lib/domain/customers/types";
 import { listFiles } from "@/server/foundation/files/index";
 import type { FileRecord } from "@/lib/domain/files/types";
@@ -151,14 +151,20 @@ export async function searchWorkspace(
   if (!term || term.length < 2) return [];
 
   const limit = Math.min(Math.max(opts?.limitPerModule ?? 6, 1), 20);
-  const installed = await getInstalledModules(workspaceId);
+  // Invoices, quotes and transactions all match on customer name; look those customers up
+  // once here rather than once per module.
+  const [installed, matchingCustomerIds] = await Promise.all([
+    getInstalledModules(workspaceId),
+    findCustomerIdsMatching(workspaceId, term),
+  ]);
   const has = (k: ModuleKey) => installed.includes(k);
+  const documentSearch = { search: term, matchingCustomerIds, limit };
 
   const [customers, invoices, quotes, transactions, drive, files] = await Promise.all([
     listCustomers(workspaceId, { search: term, limit }),
-    has("invoices") ? listInvoices(workspaceId, { search: term, limit }) : Promise.resolve([]),
-    has("quotes") ? listQuotes(workspaceId, { search: term, limit }) : Promise.resolve([]),
-    has("books") ? listTransactions(workspaceId, { search: term, limit }) : Promise.resolve([]),
+    has("invoices") ? listInvoices(workspaceId, documentSearch) : Promise.resolve([]),
+    has("quotes") ? listQuotes(workspaceId, documentSearch) : Promise.resolve([]),
+    has("books") ? listTransactions(workspaceId, documentSearch) : Promise.resolve([]),
     has("drive")
       ? Promise.all([
           listEarnings(workspaceId, { search: term, limit }),

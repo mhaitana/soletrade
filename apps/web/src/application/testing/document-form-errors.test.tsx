@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { InvoiceForm } from "@/application/documents/invoice-form";
 import { QuoteForm } from "@/application/documents/quote-form";
 
@@ -35,8 +35,22 @@ const customers = [
   },
 ];
 
+beforeAll(() => {
+  // The customer picker is a popover list; jsdom lacks the layout APIs it calls.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
 async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText("Customer"), customers[0]!.id);
+  await user.click(screen.getByRole("combobox", { name: "Customer" }));
+  await user.click(await screen.findByRole("option", { name: /Aster Labs/ }));
   await user.type(screen.getByLabelText("Line 1 description"), "Consulting");
   await user.type(screen.getByLabelText("Line 1 unit price"), "125");
 }
@@ -65,7 +79,7 @@ describe("document form request errors", () => {
 
     const error = await screen.findByRole("alert");
     expect(error).toHaveTextContent(/couldn.t confirm whether this invoice was saved/i);
-    expect(error).toHaveTextContent(/before trying again/i);
+    expect(error).toHaveTextContent(/or save again; this won.t create a second invoice/i);
     expect(error).not.toHaveTextContent("private backend detail");
     const checkInvoices = within(error).getByRole("link", {
       name: /check invoices.*opens in a new tab/i,
@@ -77,7 +91,8 @@ describe("document form request errors", () => {
 
     await user.click(await screen.findByRole("button", { name: "Create invoice" }));
 
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/invoices"));
+    // A created invoice opens on its own page rather than dropping the user on the list.
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/invoices/invoice-1"));
     expect(mocks.createInvoice).toHaveBeenCalledTimes(2);
   });
 
@@ -93,7 +108,7 @@ describe("document form request errors", () => {
 
     const error = await screen.findByRole("alert");
     expect(error).toHaveTextContent(/couldn.t confirm whether this quote was saved/i);
-    expect(error).toHaveTextContent(/before trying again/i);
+    expect(error).toHaveTextContent(/or save again; this won.t create a second quote/i);
     expect(error).not.toHaveTextContent("private backend detail");
     const checkQuotes = within(error).getByRole("link", {
       name: /check quotes.*opens in a new tab/i,
@@ -105,7 +120,7 @@ describe("document form request errors", () => {
 
     await user.click(await screen.findByRole("button", { name: "Create quote" }));
 
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/quotes"));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/quotes/quote-1"));
     expect(mocks.createQuote).toHaveBeenCalledTimes(2);
   });
 
@@ -135,7 +150,7 @@ describe("document form request errors", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
 
     await act(async () => resolveSave({ ok: true, invoiceId: "invoice-1" }));
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/invoices"));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/invoices/invoice-1"));
   });
 
   it("locks quote fields and Cancel while a save is pending", async () => {
@@ -157,6 +172,6 @@ describe("document form request errors", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
 
     await act(async () => resolveSave({ ok: true, quoteId: "quote-1" }));
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/quotes"));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/quotes/quote-1"));
   });
 });

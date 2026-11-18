@@ -7,21 +7,10 @@ import { formatCents } from "@/lib/domain/billing/pricing";
 import { formatDate } from "@/utils/format-date";
 import { loadInvoice } from "@/features/invoices/api/actions";
 import { InvoiceDetailActions } from "@/features/invoices/components/invoice-detail-actions";
-import type { InvoiceStatus } from "@/lib/domain/database-enums";
+import { INVOICE_STATUS_DISPLAY } from "@/lib/domain/invoices/status-display";
+import { CopyLinkButton } from "@/components/copy-link-button";
 
 export const metadata = { title: "Invoice" };
-
-const STATUS_BADGE: Record<
-  InvoiceStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
-> = {
-  draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Sent", variant: "default" },
-  viewed: { label: "Viewed", variant: "default" },
-  paid: { label: "Paid", variant: "outline" },
-  void: { label: "Void", variant: "destructive" },
-  overdue: { label: "Overdue", variant: "destructive" },
-};
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -39,7 +28,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   }
 
   const inv = data.invoice;
-  const badge = STATUS_BADGE[inv.status];
+  const badge = INVOICE_STATUS_DISPLAY[inv.status];
 
   return (
     <div className="space-y-6">
@@ -51,7 +40,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </div>
           <p className="text-sm text-muted-foreground">
             {inv.customerName ? (
-              <Link href={`/customers`} className="hover:underline">
+              <Link
+                href={inv.customerId ? `/customers/${inv.customerId}` : "/customers"}
+                className="hover:underline"
+              >
                 {inv.customerName}
               </Link>
             ) : (
@@ -69,6 +61,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           {data.canManage ? <InvoiceDetailActions invoiceId={inv.id} status={inv.status} /> : null}
         </div>
       </div>
+
+      {inv.publicToken && inv.status !== "draft" ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-4">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Customer payment link
+            </p>
+            <p className="mt-1 break-all font-mono text-sm">/i/{inv.publicToken}</p>
+          </div>
+          <CopyLinkButton path={`/i/${inv.publicToken}`} label="Copy customer link" />
+        </div>
+      ) : null}
 
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>

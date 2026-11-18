@@ -68,7 +68,7 @@ describe("CustomerForm", () => {
 
     const error = await screen.findByRole("alert");
     expect(error).toHaveTextContent(/couldn.t confirm whether this customer was saved/i);
-    expect(error).toHaveTextContent(/before trying again/i);
+    expect(error).toHaveTextContent(/or save again; this won.t create a second customer/i);
     expect(error).not.toHaveTextContent("private backend detail");
     const checkCustomers = within(error).getByRole("link", {
       name: /check customers.*opens in a new tab/i,
@@ -85,12 +85,18 @@ describe("CustomerForm", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/customers"));
     expect(createCustomerAction).toHaveBeenNthCalledWith(2, {
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
       name: "Aster Labs",
       email: "billing@aster.test",
       phone: "+61 400 000 000",
       company: "Aster Pty Ltd",
       notes: "Prefers email",
     });
+    // The retry resends the first attempt's id, so the server cannot create a second copy.
+    const [first, second] = vi
+      .mocked(createCustomerAction)
+      .mock.calls.map(([input]) => (input as { requestId: string }).requestId);
+    expect(second).toBe(first);
   });
 
   it("locks the editable form and Cancel button while a save is pending", async () => {

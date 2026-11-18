@@ -80,7 +80,11 @@ async function handle(request: Request, context: Context) {
       if (!["POST", "PATCH", "DELETE"].includes(method))
         throw new MobileApiError("METHOD_NOT_ALLOWED", "That operation is not supported.", 405);
       const body = await readMobileBody(request);
-      if (resource[0] === "assistant" && resource.at(-1) === "messages" && method === "POST")
+      if (
+        resource[0] === "assistant" &&
+        (resource.at(-1) === "messages" || resource.at(-1) === "approvals") &&
+        method === "POST"
+      )
         return runMobileStream(request, ctx, key, body, (streamCtx) =>
           writeMobileResource(streamCtx, resource, "POST", body),
         );

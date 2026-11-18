@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/server/infrastructure/db/types";
 import { getDataClient } from "@/server/infrastructure/db/client";
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
+import { countCustomers } from "@/server/foundation/customers/index";
 import { getInstalledModules } from "@/server/foundation/module-installations/index";
 import { branded } from "@/types/ids";
 import { loadDashboardPage } from "@/features/dashboard/api/actions";
@@ -19,6 +20,9 @@ vi.mock("@/server/foundation/workspaces/index", () => ({
     defaultCurrency: "AUD",
     fyStartMonth: 7,
   }),
+}));
+vi.mock("@/server/foundation/customers/index", () => ({
+  countCustomers: vi.fn().mockResolvedValue(0),
 }));
 vi.mock("@/server/foundation/activity/index", () => ({
   listActivity: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
@@ -40,6 +44,7 @@ let responseStatus: number;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(countCustomers).mockResolvedValue(0);
   requests.length = 0;
   receiptCount = 137;
   responseStatus = 200;

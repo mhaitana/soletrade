@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ListPagination } from "@/components/list-pagination";
+import { RECORD_PAGE_SIZE, pageHref, parsePage } from "@/utils/pagination";
 import { loadCustomersPage } from "@/features/customers/api/actions";
 import { CustomersTable } from "@/features/customers/components/customers-table";
 
@@ -10,11 +12,14 @@ export const metadata = { title: "Customers" };
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; page?: string | string[] }>;
 }) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q : undefined;
-  const data = await loadCustomersPage(q);
+  const data = await loadCustomersPage({
+    search: q,
+    page: parsePage(sp.page, RECORD_PAGE_SIZE),
+  });
 
   return (
     <div className="space-y-6">
@@ -60,7 +65,25 @@ export default async function CustomersPage({
         ) : null}
       </form>
 
-      <CustomersTable customers={data.customers} canManage={data.canManage} />
+      {data.customers.length === 0 && data.page > 1 ? (
+        <div className="rounded-lg border border-dashed border-border p-10 text-center">
+          <p className="text-sm text-muted-foreground">No customers on this page.</p>
+          <p className="mt-1 text-sm">
+            <Link href={pageHref("/customers", 1, { q })} className="text-primary hover:underline">
+              Return to first page
+            </Link>
+          </p>
+        </div>
+      ) : (
+        <CustomersTable customers={data.customers} canManage={data.canManage} searchTerm={q} />
+      )}
+
+      <ListPagination
+        pathname="/customers"
+        page={data.page}
+        hasNext={data.hasNext}
+        filters={{ q }}
+      />
     </div>
   );
 }

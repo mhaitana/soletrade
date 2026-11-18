@@ -15,6 +15,7 @@ vi.mock("@/server/infrastructure/config/env", () => ({
 vi.mock("@/server/infrastructure/ai/provider", () => ({
   isMockProvider: () => true,
   getAIModel: vi.fn(),
+  aiModelLabel: () => "mock",
 }));
 vi.mock("@/server/foundation/billing/state", () => ({ getBillingState: b.billing }));
 vi.mock("@/server/foundation/billing/credits", () => ({ consumeCredit: b.charge }));

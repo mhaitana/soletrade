@@ -66,7 +66,7 @@ describe("CustomerCreateDialog", () => {
 
     const error = await screen.findByRole("alert");
     expect(error).toHaveTextContent(/couldn.t confirm whether this customer was saved/i);
-    expect(error).toHaveTextContent(/before trying again/i);
+    expect(error).toHaveTextContent(/or save again; this won.t create a second customer/i);
     expect(error).not.toHaveTextContent("private backend detail");
     const checkCustomers = within(error).getByRole("link", {
       name: /check customers.*opens in a new tab/i,

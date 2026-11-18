@@ -1,0 +1,33 @@
+# Weekly dependency update pull requests. Grouped so a week's minor and patch updates
+# arrive as one reviewable PR per area instead of dozens; major versions stay separate
+# because they need a deliberate upgrade (Next.js, Expo and the AI SDK all have breaking
+# releases, and Expo packages must move together with the SDK).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+        exclude-patterns:
+          - "expo"
+          - "expo-*"
+          - "@expo/*"
+          - "react-native"
+          - "react-native-*"
+    ignore:
+      # Expo and React Native versions are chosen by the Expo SDK upgrade, not one by one.
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

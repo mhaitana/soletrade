@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRequestId } from "@/hooks/use-request-id";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +16,8 @@ import {
   type UpdateTransactionResult,
 } from "@/features/books/api/actions";
 import { ReceiptUpload } from "@/features/books/components/receipt-upload";
-import type { CustomerRow } from "@/lib/domain/customers/types";
+import type { PickerCustomer } from "@/types/customer-picker";
+import { CustomerCombobox } from "@/components/customer-combobox";
 import type { TransactionRow } from "@/lib/domain/books/types";
 import type { BookType } from "@/lib/domain/database-enums";
 import type { FileId } from "@/types/ids";
@@ -26,6 +29,9 @@ import {
   resolvePickerId,
   useHaiFormPrefill,
 } from "@/components/assisted-form/hai-form-prefill";
+
+const TRANSACTION_SAVE_UNCONFIRMED =
+  "We couldn’t confirm whether this transaction was saved. Saving again is safe: it won’t create a copy.";
 
 type Result = CreateTransactionResult | UpdateTransactionResult;
 
@@ -65,12 +71,13 @@ export function BookForm({
 }: {
   mode: "create" | "edit";
   tx?: TransactionRow;
-  customers: CustomerRow[];
+  customers: PickerCustomer[];
   defaultCurrency: string;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
+  const { requestId } = useRequestId();
   const [error, setError] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
 
@@ -196,11 +203,18 @@ export function BookForm({
     };
 
     startTransition(async () => {
-      const res: Result =
-        isEdit && tx
-          ? await updateTransactionAction({ transactionId: tx.id, ...input })
-          : await createTransactionAction(input);
+      let res: Result;
+      try {
+        res =
+          isEdit && tx
+            ? await updateTransactionAction({ transactionId: tx.id, ...input })
+            : await createTransactionAction({ requestId, ...input });
+      } catch {
+        setError(TRANSACTION_SAVE_UNCONFIRMED);
+        return;
+      }
       if (res.ok) {
+        toast.success(isEdit ? "Transaction updated" : "Transaction added");
         router.push("/books");
         router.refresh();
         return;
@@ -288,21 +302,14 @@ export function BookForm({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="customerId">Customer</Label>
-          <select
+          <CustomerCombobox
             id="customerId"
             name="customerId"
+            customers={customers}
             value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">None</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.company ? ` · ${c.company}` : ""}
-              </option>
-            ))}
-          </select>
+            onValueChange={setCustomerId}
+            noneLabel="None"
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="gstIncluded">GST included</Label>

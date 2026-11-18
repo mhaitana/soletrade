@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import { tryWorkspaceContext } from "@/server/application/auth/workspace-context";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import { isModuleEnabled } from "@/server/foundation/module-installations/index";
-import { listTransactions } from "@/server/domains/books/index";
-import { summarizeTransactions } from "@/lib/domain/books/calc";
+import { getBookSummary } from "@/server/domains/books/index";
 import { parsePeriod, periodRange, type Period } from "@/utils/periods";
 import { getWorkspace } from "@/server/foundation/workspaces/index";
 import { renderPdf, pdfResponse } from "@/server/infrastructure/pdf/index";
@@ -12,8 +11,9 @@ import { BooksPlDocument } from "@/server/domains/books/documents/books-pl-docum
 
 /**
  * Books P&L report PDF (Wave 4). Streams a printable P&L for `?period=` (reusing the books page's
- * period selector, so the "Download report" button is a simple link). Aggregation reuses the pure
- * `summarizeTransactions` - single source of truth with the on-page summary. Auth: resolved
+ * period selector, so the "Download report" button is a simple link). Totals come from the same
+ * Postgres summary function as the on-page figures, so the PDF always matches the page and is
+ * exact for any number of transactions. Auth: resolved
  * workspace context (401) + `view:books` (403) + books module installed (404).
  */
 
@@ -43,20 +43,10 @@ export async function GET(request: Request): Promise<Response> {
   const fyStartMonth = workspace?.fyStartMonth ?? 7;
   const range = periodRange(period, undefined, fyStartMonth);
 
-  const rows = await listTransactions(ctx.workspaceId, {
+  const summary = await getBookSummary(ctx.workspaceId, {
     dateFrom: range.start ?? undefined,
     dateTo: range.end,
-    limit: 2000,
   });
-  const summary = summarizeTransactions(
-    rows.map((t) => ({
-      type: t.type,
-      amountCents: t.amountCents,
-      date: t.date,
-      category: t.category,
-      gstCents: t.gstCents,
-    })),
-  );
 
   // Build the element before the try/catch - see invoices pdf route for rationale.
   const element = (

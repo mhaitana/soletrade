@@ -3,7 +3,10 @@ import { getCurrentUser } from "@/server/application/auth/session";
 import { getInvitationByToken } from "@/server/foundation/members/index";
 import type { PublicInvitation } from "@/lib/domain/members/types";
 import { Logo } from "@/components/logo";
+import { Button } from "@/components/ui/button";
+import { formatDate } from "@/utils/format-date";
 import { InviteAcceptForm } from "@/features/members/components/invite/invite-accept-form";
+import { switchInviteAccountAction } from "@/features/members/api/invite/actions";
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -17,10 +20,6 @@ function roleLabel(role: string): string {
   return r === "Readonly" ? "Read-only" : r;
 }
 
-function formatDate(d: Date): string {
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const inv = await getInvitationByToken(token);
@@ -31,16 +30,17 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   // `Date.now()` during render (react-hooks/purity rule).
   const unavailable = !inv || inv.status !== "pending" || inv.expired;
 
-  const nextParam = `/invite?token=${encodeURIComponent(token)}`;
+  // Return path after sign-in / sign-up: the path-based accept route (this page).
+  const nextParam = `/invite/${encodeURIComponent(token)}`;
 
   return (
-    <div className="min-h-dvh bg-[#F8FAFC] text-foreground">
+    <main className="min-h-dvh bg-background text-foreground">
       <div className="mx-auto max-w-md px-4 py-6 sm:py-10">
         <header className="mb-6">
           <Logo variant="full" href={null} />
         </header>
 
-        <div className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">
+        <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
           {unavailable ? (
             <div className="space-y-3">
               <h1 className="text-xl font-semibold">This invitation is no longer available</h1>
@@ -63,7 +63,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -106,18 +106,12 @@ function InviteBody({
             Sign in or create your account with <strong>{inv.email}</strong> to accept.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Link
-              href={`/login?next=${encodeURIComponent(nextParam)}`}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            >
-              Sign in
-            </Link>
-            <Link
-              href={`/signup?next=${encodeURIComponent(nextParam)}`}
-              className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium"
-            >
-              Create account
-            </Link>
+            <Button asChild>
+              <Link href={`/login?next=${encodeURIComponent(nextParam)}`}>Sign in</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/signup?next=${encodeURIComponent(nextParam)}`}>Create account</Link>
+            </Button>
           </div>
         </div>
       ) : emailMatches ? (
@@ -128,12 +122,13 @@ function InviteBody({
             You&apos;re signed in as <strong>{user.email}</strong>, but this invitation was sent to{" "}
             <strong>{inv.email}</strong>. Sign out and sign in as the invited email to accept.
           </p>
-          <Link
-            href={`/login?next=${encodeURIComponent(nextParam)}`}
-            className="text-sm text-primary hover:underline"
-          >
-            Sign in as {inv.email} →
-          </Link>
+          {/* A plain link to /login would bounce back to the dashboard while this session
+              exists, so sign out first and return here afterwards. */}
+          <form action={switchInviteAccountAction.bind(null, token)}>
+            <Button type="submit" variant="outline" className="w-full sm:w-auto">
+              Sign out and continue as {inv.email}
+            </Button>
+          </form>
         </div>
       )}
     </div>

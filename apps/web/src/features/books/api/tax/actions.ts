@@ -7,8 +7,8 @@ import { getWorkspace } from "@/server/foundation/workspaces/index";
 import { authorize } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import { isModuleEnabled } from "@/server/foundation/module-installations/index";
-import { listTransactions } from "@/server/domains/books/index";
-import { summarizeGst, type GstSummary } from "@/lib/domain/books/calc";
+import { getGstMonthly } from "@/server/domains/books/index";
+import { summarizeGstMonthly, type GstSummary } from "@/lib/domain/books/calc";
 import { currentQuarter, listTaxPeriods, lodgeTaxPeriod } from "@/server/domains/books/tax";
 import type { TaxPeriodRow } from "@/lib/domain/books/tax-types";
 
@@ -33,8 +33,8 @@ export type TaxPageData =
 /**
  * Load the GST/BAS page. The summary is readable by any member with `view:books`;
  * lodgement needs `manage:books` (the page surfaces the Lodge button only when
- * `canManage`). Fetches up to 2000 transactions for the GST aggregation (matches the
- * Books summary cap) + the lodged-quarter snapshots.
+ * `canManage`). GST is totalled per month in Postgres and bucketed into quarters here, so
+ * the figures stay exact for any number of transactions; plus the lodged-quarter snapshots.
  */
 export async function loadTaxPage(): Promise<TaxPageData> {
   const ctx = await requireWorkspaceContext();
@@ -46,16 +46,13 @@ export async function loadTaxPage(): Promise<TaxPageData> {
   const fyStartMonth = workspace.fyStartMonth;
 
   const now = new Date();
-  const [rows, lodgedPeriods, canManage] = await Promise.all([
-    listTransactions(ctx.workspaceId, { limit: 2000 }),
+  const [months, lodgedPeriods] = await Promise.all([
+    getGstMonthly(ctx.workspaceId),
     listTaxPeriods(ctx.workspaceId),
-    Promise.resolve(authorize(ctx.role, "manage:books").ok),
   ]);
+  const canManage = authorize(ctx.role, "manage:books").ok;
 
-  const gstSummary = summarizeGst(
-    rows.map((r) => ({ type: r.type, gstCents: r.gstCents, date: r.date })),
-    fyStartMonth,
-  );
+  const gstSummary = summarizeGstMonthly(months, fyStartMonth);
 
   return {
     installed: true,

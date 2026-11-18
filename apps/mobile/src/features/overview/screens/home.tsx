@@ -45,6 +45,24 @@ export function HomeScreen() {
             : "view:quote";
       return active?.modules.includes(module) && active.capabilities.includes(permission);
     }) ?? [];
+  const kpiTarget = (id: string) => {
+    const has = (module: string, capability: string) =>
+      !!active?.modules.includes(module as never) && !!active.capabilities.includes(capability);
+    const books = has("books", "view:books"),
+      invoices = has("invoices", "view:invoice"),
+      drive = has("drive", "view:drive");
+    if (id === "outstanding") return invoices ? "invoices" : undefined;
+    if (id === "income")
+      return books
+        ? "books/transactions"
+        : invoices
+          ? "invoices"
+          : drive
+            ? "drive/earnings"
+            : undefined;
+    // Expenses and net income come from Books, or from Drive when the workspace has no Books.
+    return books ? "books/transactions" : drive ? "drive/expenses" : undefined;
+  };
   const activity =
     overview && active?.capabilities.includes("view:activity")
       ? (state.data?.activity ?? []).slice(0, 5)
@@ -69,7 +87,7 @@ export function HomeScreen() {
     ).catch(() => undefined);
   }, [overview, active, userId, workspaceId, state.syncedAt, state.denied]);
   return (
-    <Screen>
+    <Screen onRefresh={() => state.refresh()}>
       <Copy variant="caption" muted>
         {new Date().toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" })}
       </Copy>
@@ -108,14 +126,18 @@ export function HomeScreen() {
             </Copy>
             <Group title="At a glance">
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-                {overview.kpis.slice(0, 4).map((item) => (
-                  <View key={item.id} style={{ width: "48%", minWidth: 140, flexGrow: 1 }}>
-                    <KpiTile
-                      label={item.label}
-                      value={formatMoney(item.cents, overview.currency)}
-                    />
-                  </View>
-                ))}
+                {overview.kpis.slice(0, 4).map((item) => {
+                  const target = kpiTarget(item.id);
+                  return (
+                    <View key={item.id} style={{ width: "48%", minWidth: 140, flexGrow: 1 }}>
+                      <KpiTile
+                        label={item.label}
+                        value={formatMoney(item.cents, overview.currency)}
+                        onPress={target ? () => router.push(listHref(target) as never) : undefined}
+                      />
+                    </View>
+                  );
+                })}
               </View>
               {!overview.kpis.length && (
                 <Copy muted>No financial activity is available for your workspace role.</Copy>

@@ -15,6 +15,7 @@ import {
   unwrapMaybe,
   unwrapVoid,
 } from "@/server/infrastructure/db/helpers";
+import type { Json } from "@/server/infrastructure/db/types";
 import { branded, type AiConversationId, type UserId, type WorkspaceId } from "@/types/ids";
 
 /**
@@ -24,8 +25,9 @@ import { branded, type AiConversationId, type UserId, type WorkspaceId } from "@
  * route handler is the only caller; it always passes the session-resolved
  * `workspaceId` + `userId` - never a client-supplied id without an ownership check.
  *
- * Only `user` and `assistant` text rows are stored (tool calls/results are not
- * persisted - the assistant re-derives real data each turn via read-only tools).
+ * One row is one chat message. `parts` keeps every part as the chat showed it (text, tool
+ * calls with results and approval state, action previews); `content` keeps the plain text
+ * for older app builds. Messages saved before parts were stored have content only.
  */
 
 /** List a user's conversations in a workspace, most-recently-active first. */
@@ -53,9 +55,15 @@ export async function listConversations(
   }));
 }
 
+/** The most messages of one conversation returned by `getConversation`. */
+export const CONVERSATION_MESSAGE_LIMIT = 1000;
+
 /**
- * Load one conversation with its messages, oldest-first. Returns `null` when the
- * conversation doesn't exist OR isn't owned by this user in this workspace - the
+ * Load one conversation with its messages, oldest-first. A conversation longer than
+ * `CONVERSATION_MESSAGE_LIMIT` returns its most recent messages: the query reads
+ * newest-first and the result is reversed. (Reading oldest-first with a limit dropped
+ * the newest turns instead, including the message the user had just sent.) Returns `null`
+ * when the conversation doesn't exist OR isn't owned by this user in this workspace - the
  * caller maps that to a 404 (IDOR-safe: no leaking that it belongs to someone else).
  */
 export async function getConversation(
@@ -79,11 +87,13 @@ export async function getConversation(
   const msgs = await unwrap(
     supabase
       .from("ai_messages")
-      .select("role, content, created_at")
+      .select("id, role, content, parts, created_at")
       .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
-      .limit(1000),
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(CONVERSATION_MESSAGE_LIMIT),
   );
+  msgs.reverse();
 
   return {
     id: branded<"AiConversationId">(conv.id),
@@ -91,8 +101,10 @@ export async function getConversation(
     writeEnabled: conv.write_enabled,
     updatedAt: parsePgTimestamp(conv.updated_at),
     messages: msgs.map((m) => ({
+      id: m.id,
       role: m.role,
       content: m.content,
+      parts: Array.isArray(m.parts) ? (m.parts as unknown[]) : null,
       createdAt: parsePgTimestamp(m.created_at),
     })),
   };
@@ -124,21 +136,23 @@ export async function createConversation(
   return branded<"AiConversationId">(row.id);
 }
 
-/**
- * Append a message to a conversation and bump its `updatedAt`. Verifies ownership
- * first (IDOR-safe) - a throw if the conversation isn't this user's in this
- * workspace, so the caller surfaces a 404/403 rather than silently writing to a
- * row the user doesn't own.
- */
-export async function appendMessage(
+/** A message to store: `parts` as the chat shows them; `content` is derived by the caller. */
+export interface MessageInput {
+  /** Server-generated id; the database generates one when omitted. */
+  id?: string;
+  role: "user" | "assistant";
+  content: string;
+  parts?: unknown[];
+}
+
+/** Throw unless the conversation is this user's in this workspace (IDOR-safe). */
+async function assertOwned(
   workspaceId: WorkspaceId,
   userId: UserId,
   conversationId: AiConversationId,
-  input: { role: "user" | "assistant"; content: string },
 ): Promise<void> {
-  const supabase = getDataClient();
   const owned = await unwrapMaybe(
-    supabase
+    getDataClient()
       .from("ai_conversations")
       .select("id")
       .eq("id", conversationId)
@@ -150,18 +164,86 @@ export async function appendMessage(
   if (!owned) {
     throw new Error("AI conversation not found for this user in this workspace.");
   }
+}
+
+async function touchConversation(conversationId: AiConversationId): Promise<void> {
   await unwrapVoid(
-    supabase.from("ai_messages").insert({
-      conversation_id: conversationId,
-      role: input.role,
-      content: input.content,
-    }),
-  );
-  await unwrapVoid(
-    supabase
+    getDataClient()
       .from("ai_conversations")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", conversationId),
+  );
+}
+
+/**
+ * Append a message to a conversation and bump its `updatedAt`. Verifies ownership
+ * first (IDOR-safe) - a throw if the conversation isn't this user's in this
+ * workspace, so the caller surfaces a 404/403 rather than silently writing to a
+ * row the user doesn't own. Returns the stored message id.
+ */
+export async function appendMessage(
+  workspaceId: WorkspaceId,
+  userId: UserId,
+  conversationId: AiConversationId,
+  input: MessageInput,
+): Promise<string> {
+  await assertOwned(workspaceId, userId, conversationId);
+  const rows = await unwrap(
+    getDataClient()
+      .from("ai_messages")
+      .insert({
+        ...(input.id ? { id: input.id } : {}),
+        conversation_id: conversationId,
+        role: input.role,
+        content: input.content,
+        ...(input.parts ? { parts: input.parts as Json } : {}),
+      })
+      .select("id"),
+  );
+  const row = rows[0];
+  if (!row) throw new Error("Failed to store the AI message.");
+  await touchConversation(conversationId);
+  return row.id;
+}
+
+/**
+ * Replace a stored message's text and parts, e.g. when an approved change finishes and
+ * the reply continues in the same message. Scoped to the conversation, which is checked
+ * for ownership first; a message id from another conversation updates nothing.
+ */
+export async function updateMessage(
+  workspaceId: WorkspaceId,
+  userId: UserId,
+  conversationId: AiConversationId,
+  messageId: string,
+  input: { content: string; parts: unknown[] },
+): Promise<void> {
+  await assertOwned(workspaceId, userId, conversationId);
+  await unwrapVoid(
+    getDataClient()
+      .from("ai_messages")
+      .update({ content: input.content, parts: input.parts as Json })
+      .eq("id", messageId)
+      .eq("conversation_id", conversationId),
+  );
+  await touchConversation(conversationId);
+}
+
+/** Delete messages from a conversation (regenerating a reply). Ownership-checked. */
+export async function deleteMessages(
+  workspaceId: WorkspaceId,
+  userId: UserId,
+  conversationId: AiConversationId,
+  messageIds: readonly string[],
+): Promise<void> {
+  if (messageIds.length === 0) return;
+  await assertOwned(workspaceId, userId, conversationId);
+  await unwrapVoid(
+    getDataClient()
+      .from("ai_messages")
+      .delete()
+      .eq("conversation_id", conversationId)
+      .in("id", [...messageIds]),
   );
 }
 

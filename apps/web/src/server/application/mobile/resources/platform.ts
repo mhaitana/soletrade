@@ -152,10 +152,20 @@ export async function readPlatform(
         });
         return page(rows, q);
       }
-      if (p.length === 3)
-        return found(
+      if (p.length === 3) {
+        const conversation = found(
           await svc.getConversation(w, ctx.user.id, branded<"AiConversationId">(id(p[2]))),
         );
+        // The changes hAI's last reply is waiting on, with the server's preview of each, so
+        // the app can show approval cards after a reload.
+        const { pendingApprovals, storedToUIMessage } = await import("@/lib/assistant/messages");
+        const last = conversation.messages.at(-1);
+        return {
+          ...conversation,
+          pendingApprovals:
+            last?.role === "assistant" ? pendingApprovals(storedToUIMessage(last)) : [],
+        };
+      }
       return missing();
     }
     default:

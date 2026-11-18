@@ -3,7 +3,7 @@ export type { WorkspaceContext } from "@/lib/domain/auth/workspace-context-types
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/server/application/auth/session";
+import { getCurrentUser, getSessionIdentity } from "@/server/application/auth/session";
 
 import { getActiveWorkspaceId } from "@/server/application/auth/workspace-cookie";
 import { listUserWorkspaces } from "@/server/foundation/workspaces";
@@ -36,17 +36,19 @@ import { tryAdminContext } from "@/server/application/auth/admin-context";
  * where cookie writes are allowed.
  */
 async function resolveWorkspaceContext(): Promise<WorkspaceContext | null> {
-  const user = await getCurrentUser();
-  if (!user) return null;
+  const identity = await getSessionIdentity();
+  if (!identity) return null;
 
-  // The cookie lookup is local request work, so start it alongside the only DB
-  // query needed to resolve the workspace. Each membership row already carries
+  // The deleted-account check, the membership read and the cookie lookup all need only
+  // the token's subject, so they run together instead of one after another. Memberships
+  // are discarded unless the account check passes. Each membership row already carries
   // its role; re-querying the selected row used to add a serial round trip.
-  const [memberships, cookieId] = await Promise.all([
-    listUserWorkspaces(user.id),
+  const [user, memberships, cookieId] = await Promise.all([
+    getCurrentUser(),
+    listUserWorkspaces(identity.id),
     getActiveWorkspaceId(),
   ]);
-  if (memberships.length === 0) return null;
+  if (!user || memberships.length === 0) return null;
 
   const fromCookie = cookieId ? memberships.find((m) => m.workspaceId === cookieId) : undefined;
   const chosen: WorkspaceMembership = fromCookie ?? memberships[0]!;

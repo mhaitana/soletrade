@@ -28,7 +28,7 @@ export default async function AdminPromotionsPage() {
       <AdminPageHeader
         icon={Tag}
         title="Promotions & Coupons Management"
-        subtitle="Stripe-backed discounts and coupon campaigns (Principle #7)."
+        subtitle="Stripe-backed discounts and coupon campaigns."
         action={<CreatePromotionDialog />}
       />
 

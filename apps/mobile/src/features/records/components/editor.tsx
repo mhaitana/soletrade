@@ -104,14 +104,15 @@ export function EditorScreen() {
       live = false;
     };
   }, [params.draftId, editing, path, resource, userId, workspaceId]);
-  // Hydrate a server-loaded edit form once its version arrives.
+  // Hydrate a server-loaded edit form once its version arrives. A saved copy shown while the
+  // network refresh is still running must not seed the form; wait for the attempt to settle.
   useEffect(() => {
-    if (remote.data && !hydrated.current) {
+    if (remote.data && !remote.refreshing && !hydrated.current) {
       hydrated.current = true;
       setEditSnapshot(remote.data);
       setValues(toFormValues(resource, { ...remote.data, ...prefill }));
     }
-  }, [remote.data, resource, prefill]);
+  }, [remote.data, remote.refreshing, resource, prefill]);
   const update = (key: string, value: unknown) =>
     setValues((previous) => ({ ...previous, [key]: value }));
   const save = async (body: Record<string, unknown>) => {
@@ -209,7 +210,7 @@ export function EditorScreen() {
         <Copy>Your role cannot change this record.</Copy>
       </Screen>
     );
-  if (editing && (remote.denied || (!editSnapshot && !remote.data)))
+  if (editing && (remote.denied || (!editSnapshot && (!remote.data || remote.refreshing))))
     return (
       <Screen>
         {remote.error ? (
@@ -231,7 +232,7 @@ export function EditorScreen() {
         </Copy>
       )}
       {error && <ErrorNotice message={error} />}
-      {remote.cached && (
+      {remote.cached && !remote.refreshing && (
         <Copy muted>Showing a saved copy. Connect before editing this record.</Copy>
       )}
       {resource === "invoices" || resource === "quotes" ? (

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DriveEarningForm } from "@/features/drive/components/drive-earning-form";
 import { DriveEarningsForm } from "@/features/drive/components/drive-earnings-form";
 import { DriveTripForm } from "@/features/drive/components/drive-trip-form";
-import { loadDrivePage } from "@/features/drive/api/actions";
+import { loadDriveEntryForm } from "@/features/drive/api/actions";
 
 export const metadata = { title: "New entry" };
 
@@ -16,7 +16,7 @@ export default async function NewDriveEntryPage({
   const sp = await searchParams;
   const rawType = typeof sp.type === "string" ? sp.type : undefined;
   const type = rawType === "trip" || rawType === "earnings" ? rawType : "earning";
-  const data = await loadDrivePage({ view: type === "trip" ? "trips" : "earnings" });
+  const data = await loadDriveEntryForm();
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="drive" />;
   if (!data.canManage) {

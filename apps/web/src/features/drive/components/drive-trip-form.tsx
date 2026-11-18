@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRequestId } from "@/hooks/use-request-id";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +34,7 @@ export function DriveTripForm({ mode, trip }: { mode: "create" | "edit"; trip?: 
   const router = useRouter();
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
+  const { requestId } = useRequestId();
   const [error, setError] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
 
@@ -98,8 +101,9 @@ export function DriveTripForm({ mode, trip }: { mode: "create" | "edit"; trip?: 
       const res: Result =
         isEdit && trip
           ? await updateTripAction({ tripId: trip.id, ...input })
-          : await createTripAction(input);
+          : await createTripAction({ requestId, ...input });
       if (res.ok) {
+        toast.success(isEdit ? "Trip updated" : "Trip logged");
         router.push("/drive");
         router.refresh();
         return;

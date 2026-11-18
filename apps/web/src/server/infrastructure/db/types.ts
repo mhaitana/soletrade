@@ -487,6 +487,8 @@ type GeneratedDatabase = {
           conversation_id: string;
           created_at: string;
           id: string;
+          metadata: Json | null;
+          parts: Json | null;
           role: Database["public"]["Enums"]["ai_message_role"];
         };
         Insert: {
@@ -494,6 +496,8 @@ type GeneratedDatabase = {
           conversation_id: string;
           created_at?: string;
           id?: string;
+          metadata?: Json | null;
+          parts?: Json | null;
           role: Database["public"]["Enums"]["ai_message_role"];
         };
         Update: {
@@ -501,6 +505,8 @@ type GeneratedDatabase = {
           conversation_id?: string;
           created_at?: string;
           id?: string;
+          metadata?: Json | null;
+          parts?: Json | null;
           role?: Database["public"]["Enums"]["ai_message_role"];
         };
         Relationships: [
@@ -509,6 +515,79 @@ type GeneratedDatabase = {
             columns: ["conversation_id"];
             isOneToOne: false;
             referencedRelation: "ai_conversations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_tool_actions: {
+        Row: {
+          completed_at: string | null;
+          conversation_id: string;
+          created_at: string;
+          decided_at: string | null;
+          error: string | null;
+          id: string;
+          input: Json;
+          preview: Json | null;
+          result: Json | null;
+          status: Database["public"]["Enums"]["ai_tool_action_status"];
+          tool_call_id: string;
+          tool_name: string;
+          user_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          completed_at?: string | null;
+          conversation_id: string;
+          created_at?: string;
+          decided_at?: string | null;
+          error?: string | null;
+          id?: string;
+          input: Json;
+          preview?: Json | null;
+          result?: Json | null;
+          status?: Database["public"]["Enums"]["ai_tool_action_status"];
+          tool_call_id: string;
+          tool_name: string;
+          user_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          completed_at?: string | null;
+          conversation_id?: string;
+          created_at?: string;
+          decided_at?: string | null;
+          error?: string | null;
+          id?: string;
+          input?: Json;
+          preview?: Json | null;
+          result?: Json | null;
+          status?: Database["public"]["Enums"]["ai_tool_action_status"];
+          tool_call_id?: string;
+          tool_name?: string;
+          user_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_tool_actions_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_conversations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_tool_actions_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_tool_actions_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
             referencedColumns: ["id"];
           },
         ];
@@ -2887,12 +2966,25 @@ type GeneratedDatabase = {
         };
         Returns: Json;
       };
+      get_credit_balance: {
+        Args: {
+          p_currency?: string;
+          p_workspace_id: string;
+        };
+        Returns: number;
+      };
       get_drive_summary: {
         Args: {
           p_date_from?: string;
           p_date_to?: string;
           p_mileage_rate_cents_per_km?: number;
           p_platform?: string;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
+      get_gst_monthly: {
+        Args: {
           p_workspace_id: string;
         };
         Returns: Json;
@@ -2922,6 +3014,10 @@ type GeneratedDatabase = {
       is_workspace_member: {
         Args: { p_user_id: string; p_workspace_id: string };
         Returns: boolean;
+      };
+      list_due_credit_expiries: {
+        Args: { p_limit?: number; p_now: string };
+        Returns: Json;
       };
       show_limit: { Args: never; Returns: number };
       show_trgm: { Args: { "": string }; Returns: string[] };
@@ -2955,6 +3051,7 @@ type GeneratedDatabase = {
         | "security_auditor"
         | "read_only_admin";
       ai_message_role: "user" | "assistant";
+      ai_tool_action_status: "pending" | "approved" | "denied" | "running" | "succeeded" | "failed";
       billing_credit_entry_type:
         | "support_adjustment"
         | "service_interruption"
@@ -3130,6 +3227,7 @@ export const Constants = {
         "read_only_admin",
       ],
       ai_message_role: ["user", "assistant"],
+      ai_tool_action_status: ["pending", "approved", "denied", "running", "succeeded", "failed"],
       billing_credit_entry_type: [
         "support_adjustment",
         "service_interruption",

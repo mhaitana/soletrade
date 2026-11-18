@@ -89,6 +89,15 @@ const envSchema = z.object({
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
   OPENAI_MODEL: z.string().default("gpt-4o"),
   /**
+   * Optional per-task model overrides. Unset or empty falls back to the chat model above,
+   * so nothing changes until one is set. `LIGHT` is for short, cheap text tasks (titles,
+   * phrasing); `VISION` reads receipts.
+   */
+  ANTHROPIC_MODEL_LIGHT: z.string().optional(),
+  ANTHROPIC_MODEL_VISION: z.string().optional(),
+  OPENAI_MODEL_LIGHT: z.string().optional(),
+  OPENAI_MODEL_VISION: z.string().optional(),
+  /**
    * Per-extraction credit cost in integer cents (Wave 2). 0 = free (dev default). When > 0,
    * `extractReceipt` consumes this many credits before calling the model; insufficient credit
    * throws and the extraction is rejected with a clear error. Production can set this to

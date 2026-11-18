@@ -25,7 +25,7 @@ export async function mobileBootstrap(request: Request): Promise<MobileBootstrap
     activeWorkspace: null,
   };
   if (!candidate) return result;
-  const ctx = await requireMobileContext(request, candidate);
+  const ctx = await requireMobileContext(request, candidate, user);
   const [workspace, modules, billing, count] = await Promise.all([
     getWorkspace(ctx.workspaceId),
     getInstalledModules(ctx.workspaceId),

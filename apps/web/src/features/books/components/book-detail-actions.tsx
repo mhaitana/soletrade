@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,16 @@ export function BookDetailActions({ txId }: { txId: string }) {
   const [pending, setPending] = useState<Action | null>(null);
   const [error, setError] = useState<string>("");
 
+  function openDialog(kind: Action["kind"]) {
+    setError("");
+    setPending({ kind });
+  }
+
+  function closeDialog() {
+    setError("");
+    setPending(null);
+  }
+
   function run() {
     setError("");
     startTransition(async () => {
@@ -40,6 +51,8 @@ export function BookDetailActions({ txId }: { txId: string }) {
         setError(res.error ?? "Action failed.");
         return;
       }
+      closeDialog();
+      toast.success("Transaction deleted.");
       router.push("/books");
       router.refresh();
     });
@@ -56,7 +69,7 @@ export function BookDetailActions({ txId }: { txId: string }) {
         </Button>
         <Button
           variant="ghost"
-          onClick={() => setPending({ kind: "delete" })}
+          onClick={() => openDialog("delete")}
           disabled={isPending}
           className="text-destructive"
         >
@@ -65,13 +78,14 @@ export function BookDetailActions({ txId }: { txId: string }) {
         </Button>
       </div>
 
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+      {/* The error lives inside the dialog: while it is open the page behind is inert and
+          hidden from assistive technology, so a message rendered there would go unseen. */}
+      <Dialog
+        open={pending !== null}
+        onOpenChange={(o) => {
+          if (!o && !isPending) closeDialog();
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{pending ? DIALOG_COPY[pending.kind].title : ""}</DialogTitle>
@@ -79,8 +93,13 @@ export function BookDetailActions({ txId }: { txId: string }) {
               {pending ? DIALOG_COPY[pending.kind].description : ""}
             </DialogDescription>
           </DialogHeader>
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
+            <Button variant="outline" onClick={closeDialog} disabled={isPending}>
               Cancel
             </Button>
             <Button

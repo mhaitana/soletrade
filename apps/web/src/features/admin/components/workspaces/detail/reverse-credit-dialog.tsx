@@ -21,7 +21,7 @@ export function ReverseCreditDialog({
         </Button>
       }
       title="Reverse credit entry?"
-      description={`Appends a reversing entry to the ledger. The original entry is never edited or deleted (Principle #7 & #12). Reversing: "${entryReason}".`}
+      description={`Appends a reversing entry to the ledger. The original entry is never edited or deleted. Reversing: "${entryReason}".`}
       hidden={{ entryId, workspaceId }}
       fields={[
         {

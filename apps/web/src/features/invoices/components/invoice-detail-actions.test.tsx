@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InvoiceDetailActions } from "@/features/invoices/components/invoice-detail-actions";
 import * as actions from "@/features/invoices/api/actions";
@@ -90,10 +90,24 @@ describe("InvoiceDetailActions", () => {
       expect(sendInvoiceActionMock).toHaveBeenCalled();
     });
 
-    // Radix Dialog hides background nodes with aria-hidden when open, so query the
-    // error text inside the dialog's accessible tree.
-    expect(screen.getByText("Not authorized.")).toBeTruthy();
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    // The error must be inside the dialog: Radix makes the page behind inert and hides it
+    // from assistive technology while the dialog is open.
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Not authorized.");
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("confirms a manual payment with a toast and plain-language copy", async () => {
+    markInvoicePaidActionMock.mockResolvedValue({ ok: true });
+    render(<InvoiceDetailActions invoiceId="00000000-0000-0000-0000-000000000001" status="sent" />);
+
+    await userEvent.click(screen.getByRole("button", { name: /mark paid/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/payment you received outside the app/i)).toBeTruthy();
+    expect(within(dialog).queryByText(/in this phase/i)).toBeNull();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Mark paid" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(toast.success).toHaveBeenCalledWith("Invoice marked paid.");
   });
 });

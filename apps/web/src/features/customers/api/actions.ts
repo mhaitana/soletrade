@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
+import { createWithRequestId } from "@/server/application/request-id-create";
 import { authorize } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/server/foundation/customers/index";
 import type { CustomerRow } from "@/lib/domain/customers/types";
 import { branded } from "@/types/ids";
+import { RECORD_PAGE_SIZE, parsePage } from "@/utils/pagination";
 
 const forbid = (msg = "You don't have permission to manage customers.") => ({
   ok: false as const,
@@ -24,6 +26,8 @@ const optionalString = z.string().trim().max(120).optional();
 const emailField = z.string().email("Enter a valid email.").optional().or(z.literal(""));
 
 const createSchema = z.object({
+  /** One id per form draft; resending it never creates a second record. */
+  requestId: z.string().uuid().optional(),
   name: z.string().trim().min(1, "Name is required.").max(120, "Name is too long."),
   email: emailField,
   phone: optionalString,
@@ -49,7 +53,12 @@ export async function createCustomerAction(input: unknown): Promise<CreateCustom
   if (!(await authorizeOrAudit(ctx, "manage:customer")).ok) return forbid();
 
   try {
-    const id = await createCustomer(ctx.workspaceId, parsed.data, ctx.user.id);
+    const { requestId, ...input } = parsed.data;
+    const { id } = await createWithRequestId(
+      requestId ? branded<"CustomerId">(requestId) : undefined,
+      (customerId) => createCustomer(ctx.workspaceId, input, ctx.user.id, customerId),
+      async (customerId) => (await getCustomer(ctx.workspaceId, customerId)) !== null,
+    );
     revalidatePath("/customers");
     return { ok: true, customerId: id };
   } catch (err) {
@@ -131,16 +140,30 @@ export async function deleteCustomerAction(input: unknown): Promise<DeleteCustom
 export type CustomersPageData = {
   customers: CustomerRow[];
   canManage: boolean;
+  page: number;
+  hasNext: boolean;
 };
 
-/** Server-only data loader for the customers page. */
-export async function loadCustomersPage(search?: string): Promise<CustomersPageData> {
+/** Server-only data loader for the customers page: one page, newest first. */
+export async function loadCustomersPage(params?: {
+  search?: string;
+  page?: number;
+}): Promise<CustomersPageData> {
   const ctx = await requireWorkspaceContext();
-  const [customers, canManage] = await Promise.all([
-    listCustomers(ctx.workspaceId, search ? { search } : undefined),
-    Promise.resolve(authorize(ctx.role, "manage:customer").ok),
-  ]);
-  return { customers, canManage };
+  const search = params?.search?.trim();
+  const page = parsePage(params?.page, RECORD_PAGE_SIZE);
+  // One extra row says whether a next page exists without a count query.
+  const rows = await listCustomers(ctx.workspaceId, {
+    ...(search ? { search } : {}),
+    offset: (page - 1) * RECORD_PAGE_SIZE,
+    limit: RECORD_PAGE_SIZE + 1,
+  });
+  return {
+    customers: rows.slice(0, RECORD_PAGE_SIZE),
+    canManage: authorize(ctx.role, "manage:customer").ok,
+    page,
+    hasNext: rows.length > RECORD_PAGE_SIZE,
+  };
 }
 
 /** Single-customer loader for an edit view (workspace-isolated). */

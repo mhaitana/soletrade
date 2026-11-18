@@ -603,7 +603,7 @@ export function ResourceDetailScreen() {
   return (
     <Screen>
       <Copy variant="title">{entityTitle(entity)}</Copy>
-      {state.cached && <Copy muted>Saved copy. Connect to make changes.</Copy>}
+      {state.cached && !state.refreshing && <Copy muted>Saved copy. Connect to make changes.</Copy>}
       {(error || state.error) && <ErrorNotice message={error || state.error!} />}
       <Group>
         <RecordFields value={entity} />

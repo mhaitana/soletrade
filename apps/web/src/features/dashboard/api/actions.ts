@@ -13,10 +13,15 @@ import { percentDelta, type Delta } from "@/utils/delta";
 import type { SparklinePoint } from "@/components/sparkline";
 import { MODULES, type ModuleKey } from "@/config/modules";
 import type { WorkspaceId } from "@/types/ids";
-import { getInvoiceDashboardSummary } from "@/server/domains/invoices/index";
+import { getInvoiceDashboardSummary, countNonDraftInvoices } from "@/server/domains/invoices/index";
 import { getBookSummary } from "@/server/domains/books/index";
 import { getDriveSummary } from "@/server/domains/drive/index";
-import { getQuoteDashboardSummary } from "@/server/domains/quotes/index";
+import { getQuoteDashboardSummary, countNonDraftQuotes } from "@/server/domains/quotes/index";
+import { countCustomers } from "@/server/foundation/customers/index";
+import {
+  buildSetupChecklist,
+  type SetupChecklist,
+} from "@/features/dashboard/utils/setup-checklist";
 import { countExtractions } from "@/server/domains/books/receipt-extraction";
 import { consolidateBusinessIncome, type PeriodIncome } from "@soletrade/contracts/business-income";
 
@@ -89,6 +94,8 @@ export interface DashboardData {
   moduleCards: ModuleCardData[];
   attentionItems: AttentionItemData[];
   activity: ActivityPage;
+  /** Getting-started checklist built from real data; null when complete or not applicable to the viewer's role. */
+  setup: SetupChecklist | null;
   /** True when zero modules are installed - the page renders the onboarding stub instead. */
   onboarding: boolean;
 }
@@ -327,7 +334,20 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
 
   // Fetch only installed modules; each runs its own parallel fetches internally. All four
   // run concurrently here alongside the activity feed.
-  const [invoices, books, drive, quotes, pendingReceiptCount, activity] = await Promise.all([
+  // Setup checklist: only for viewers who can act on it (owners/admins, or anyone while no module
+  // is installed yet). Cheap head counts, each gated by the same module + permission checks.
+  const wantsSetup = installed.length === 0 || authorize(ctx.role, "manage:module").ok;
+  const [
+    invoices,
+    books,
+    drive,
+    quotes,
+    pendingReceiptCount,
+    activity,
+    customerCount,
+    sentInvoiceCount,
+    sentQuoteCount,
+  ] = await Promise.all([
     has("invoices") ? invoicesCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("books") ? booksCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("drive") ? driveCard(ctx.workspaceId, currentRange, previousRange, currency) : null,
@@ -336,6 +356,15 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
       ? countExtractions(ctx.workspaceId, { status: "pending" })
       : Promise.resolve(0),
     listActivity(ctx.workspaceId, { limit: 5 }),
+    wantsSetup && authorize(ctx.role, "view:customer").ok
+      ? countCustomers(ctx.workspaceId)
+      : Promise.resolve(0),
+    wantsSetup && has("invoices") && authorize(ctx.role, "view:invoice").ok
+      ? countNonDraftInvoices(ctx.workspaceId)
+      : Promise.resolve(0),
+    wantsSetup && has("quotes") && authorize(ctx.role, "view:quote").ok
+      ? countNonDraftQuotes(ctx.workspaceId)
+      : Promise.resolve(0),
   ]);
 
   // Build the 4 headline KPI cards. A card whose module isn't installed shows an enable CTA.
@@ -446,6 +475,13 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
     moduleCards,
     attentionItems,
     activity,
+    setup: wantsSetup
+      ? buildSetupChecklist({
+          installedModules: installed,
+          customerCount,
+          sentDocumentCount: sentInvoiceCount + sentQuoteCount,
+        })
+      : null,
     onboarding: installed.length === 0,
   };
 }

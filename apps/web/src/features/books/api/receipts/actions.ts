@@ -9,9 +9,12 @@ import { isModuleEnabled } from "@/server/foundation/module-installations/index"
 import {
   applyExtraction,
   extractReceipt,
+  getExtraction,
   listExtractions,
   rejectExtraction,
 } from "@/server/domains/books/receipt-extraction";
+import { rateLimit } from "@/server/infrastructure/rate-limit/index";
+import { env } from "@/server/infrastructure/config/env";
 import type { ExtractionRow } from "@/lib/domain/books/receipt-extraction-types";
 import { branded } from "@/types/ids";
 import { DOCUMENT_PAGE_SIZE, parsePage } from "@/utils/pagination";
@@ -33,6 +36,9 @@ export type ReceiptsPageData =
       statusFilter: ExtractionStatus | null;
       page: number;
       hasNext: boolean;
+      /** Credit charged per scan in cents (0 = free). Shown beside the scan button. */
+      scanCostCents: number;
+      currency: string;
     }
   | { installed: false };
 
@@ -67,6 +73,8 @@ export async function loadReceiptsPage(params?: {
     statusFilter,
     page,
     hasNext: extractions.length > DOCUMENT_PAGE_SIZE,
+    scanCostCents: env.RECEIPT_EXTRACTION_COST_CENTS,
+    currency: "AUD",
   };
 }
 
@@ -77,12 +85,23 @@ const extractSchema = z.object({ fileId: z.string().uuid() });
 export type ExtractReceiptResult =
   { ok: true; extractionId: string } | { ok: false; error: string };
 
+/**
+ * Read an uploaded receipt with the vision model and add it to the review queue. Each call
+ * can cost model usage and workspace credit, so it is rate-limited per user. A scan the
+ * model could not read is stored as rejected (and any credit returned); that is reported
+ * here as a failure rather than as success, so the user is not told a receipt is waiting
+ * for review when nothing usable was extracted.
+ */
 export async function extractReceiptAction(input: unknown): Promise<ExtractReceiptResult> {
   const parsed = extractSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid file." };
 
   const ctx = await requireWorkspaceContext();
   if (!(await authorizeOrAudit(ctx, "manage:books")).ok) return forbid();
+
+  if (!(await rateLimit(`receipt:${ctx.user.id}`, { max: 10, windowMs: 60_000 }))) {
+    return { ok: false, error: "Too many receipts at once. Try again in a minute." };
+  }
 
   try {
     const id = await extractReceipt(
@@ -91,6 +110,14 @@ export async function extractReceiptAction(input: unknown): Promise<ExtractRecei
       ctx.user.id,
     );
     revalidatePath("/books/receipts");
+    const extraction = await getExtraction(ctx.workspaceId, id).catch(() => null);
+    if (extraction?.status === "rejected") {
+      return {
+        ok: false,
+        error:
+          "That receipt could not be read. Try a clearer photo or PDF, or enter the transaction by hand. Any credit charged for the scan was returned.",
+      };
+    }
     return { ok: true, extractionId: id };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to extract receipt.";

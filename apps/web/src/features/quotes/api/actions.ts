@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
+import { createWithRequestId } from "@/server/application/request-id-create";
 import { authorize } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import { isModuleEnabled } from "@/server/foundation/module-installations/index";
-import { getCustomer, listCustomers } from "@/server/foundation/customers/index";
-import type { CustomerRow } from "@/lib/domain/customers/types";
+import { getCustomer, listCustomerOptions } from "@/server/foundation/customers/index";
+import type { PickerCustomer } from "@/types/customer-picker";
 import {
   createQuote,
   deleteQuote,
@@ -48,6 +49,8 @@ const sectionSchema = z.object({
 });
 
 const createSchema = z.object({
+  /** One id per form draft; resending it never creates a second record. */
+  requestId: z.string().uuid().optional(),
   customerId: z.string().uuid("Pick a customer."),
   issueDate: z.coerce.date(),
   validUntil: z.coerce.date().nullable().optional(),
@@ -104,21 +107,27 @@ export async function createQuoteAction(input: unknown): Promise<CreateQuoteResu
   }));
 
   try {
-    const id = await createQuote(
-      ctx.workspaceId,
-      {
-        customerId: branded<"CustomerId">(parsed.data.customerId),
-        issueDate: parsed.data.issueDate,
-        validUntil: parsed.data.validUntil ?? null,
-        currency: parsed.data.currency,
-        taxRate: parsed.data.taxRate,
-        pricesIncludeTax: parsed.data.pricesIncludeTax,
-        notes: parsed.data.notes ?? null,
-        termsConditions: parsed.data.termsConditions ?? null,
-        lineItems,
-        sections,
-      },
-      ctx.user.id,
+    const { id } = await createWithRequestId(
+      parsed.data.requestId ? branded<"QuoteId">(parsed.data.requestId) : undefined,
+      (requestId) =>
+        createQuote(
+          ctx.workspaceId,
+          {
+            customerId: branded<"CustomerId">(parsed.data.customerId),
+            issueDate: parsed.data.issueDate,
+            validUntil: parsed.data.validUntil ?? null,
+            currency: parsed.data.currency,
+            taxRate: parsed.data.taxRate,
+            pricesIncludeTax: parsed.data.pricesIncludeTax,
+            notes: parsed.data.notes ?? null,
+            termsConditions: parsed.data.termsConditions ?? null,
+            lineItems,
+            sections,
+          },
+          ctx.user.id,
+          requestId,
+        ),
+      async (requestId) => (await getQuote(ctx.workspaceId, requestId)) !== null,
     );
     revalidatePath("/quotes");
     return { ok: true, quoteId: id };
@@ -336,7 +345,7 @@ export type QuoteEditData =
   | {
       installed: true;
       quote: QuoteWithItems | null;
-      customers: CustomerRow[];
+      customers: PickerCustomer[];
       defaultCurrency: string;
       canManage: boolean;
     }
@@ -348,7 +357,7 @@ export async function loadQuoteForEdit(quoteId: string): Promise<QuoteEditData> 
 
   const [quote, customers, workspace, canManage] = await Promise.all([
     getQuote(ctx.workspaceId, branded<"QuoteId">(quoteId)),
-    listCustomers(ctx.workspaceId),
+    listCustomerOptions(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:quote").ok),
   ]);
@@ -363,13 +372,13 @@ export async function loadQuoteForEdit(quoteId: string): Promise<QuoteEditData> 
 
 /** Customer list for the new-quote form (module-gated). */
 export async function loadCustomersForQuote(): Promise<
-  | { installed: true; customers: CustomerRow[]; defaultCurrency: string; canManage: boolean }
+  | { installed: true; customers: PickerCustomer[]; defaultCurrency: string; canManage: boolean }
   | { installed: false }
 > {
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "quotes"))) return { installed: false };
   const [customers, workspace, canManage] = await Promise.all([
-    listCustomers(ctx.workspaceId),
+    listCustomerOptions(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "create:quote").ok),
   ]);

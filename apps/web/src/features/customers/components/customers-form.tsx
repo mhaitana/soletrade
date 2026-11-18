@@ -1,8 +1,10 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useRef, type FormEvent } from "react";
+import { useRequestId } from "@/hooks/use-request-id";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +35,7 @@ export function CustomerForm({
   const router = useRouter();
   const isEdit = mode === "edit";
   const formRef = useRef<HTMLFormElement>(null);
+  const { requestId } = useRequestId();
 
   const [state, action, pending] = useActionState(
     async (_prev: Result | null, formData: FormData): Promise<Result> => {
@@ -47,7 +50,7 @@ export function CustomerForm({
         if (isEdit && customer) {
           return await updateCustomerAction({ customerId: customer.id, ...input });
         }
-        return await createCustomerAction(input);
+        return await createCustomerAction({ requestId, ...input });
       } catch {
         return {
           ok: false,
@@ -59,8 +62,11 @@ export function CustomerForm({
   );
 
   useEffect(() => {
-    if (state?.ok) router.push("/customers");
-  }, [state, router]);
+    if (state?.ok) {
+      toast.success(isEdit ? "Customer updated" : "Customer created");
+      router.push("/customers");
+    }
+  }, [state, router, isEdit]);
 
   const error = state && !state.ok ? state.error : "";
   const fieldErrors = state && !state.ok ? state.fieldErrors : undefined;
@@ -194,8 +200,8 @@ export function CustomerForm({
                 >
                   Check customers
                   <span className="sr-only"> (opens in a new tab)</span>
-                </Link>{" "}
-                before trying again.
+                </Link>
+                , or save again; this won’t create a second customer.
               </>
             ) : (
               error

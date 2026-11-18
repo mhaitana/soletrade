@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,6 +135,9 @@ export function DriveEarningsForm({
           })),
         });
         if (result.ok) {
+          toast.success(
+            enteredRows.length === 1 ? "Earning logged" : `${enteredRows.length} earnings logged`,
+          );
           router.push("/drive");
           router.refresh();
           return;

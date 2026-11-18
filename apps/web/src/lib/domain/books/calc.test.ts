@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   fiscalQuarter,
   summarizeGst,
+  summarizeGstMonthly,
   summarizeTransactions,
+  type GstMonthlyPoint,
   type GstSummaryInput,
   type TransactionSummaryInput,
 } from "@/lib/domain/books/calc";
@@ -301,5 +303,67 @@ describe("summarizeGst", () => {
   it("abs's gstCents so a stray negative doesn't inflate totals", () => {
     const s = summarizeGst([grow({ type: "income", gstCents: -1000 })]);
     expect(s.gstCollectedCents).toBe(1000);
+  });
+});
+
+describe("summarizeGstMonthly", () => {
+  /** Collapse raw rows into the per-month totals the database function returns. */
+  function toMonthly(rows: readonly GstSummaryInput[]): GstMonthlyPoint[] {
+    const months = new Map<string, GstMonthlyPoint>();
+    for (const r of rows) {
+      const month = r.date.toISOString().slice(0, 7);
+      const point = months.get(month) ?? { month, gstCollectedCents: 0, gstPaidCents: 0 };
+      if (r.type === "income") point.gstCollectedCents += Math.abs(r.gstCents);
+      else point.gstPaidCents += Math.abs(r.gstCents);
+      months.set(month, point);
+    }
+    return [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  it("returns zeros + empty byQuarter for no months", () => {
+    expect(summarizeGstMonthly([])).toEqual({
+      gstCollectedCents: 0,
+      gstPaidCents: 0,
+      netGstCents: 0,
+      byQuarter: [],
+    });
+  });
+
+  it("matches summarizeGst for the same transactions, for every financial-year start", () => {
+    // 1,500 rows across three years: more than the data API returns in one response,
+    // which is why the page no longer adds up fetched rows.
+    const rows: GstSummaryInput[] = Array.from({ length: 1500 }, (_, i) => ({
+      type: i % 3 === 0 ? "expense" : "income",
+      gstCents: (i % 7 === 0 ? -1 : 1) * (100 + (i % 37)),
+      date: new Date(Date.UTC(2025 + (i % 3), i % 12, 1 + (i % 28), i % 24)),
+    }));
+    for (let fyStartMonth = 1; fyStartMonth <= 12; fyStartMonth++) {
+      expect(summarizeGstMonthly(toMonthly(rows), fyStartMonth)).toEqual(
+        summarizeGst(rows, fyStartMonth),
+      );
+    }
+  });
+
+  it("keeps a month with transactions but no GST as a zero quarter, like summarizeGst", () => {
+    const s = summarizeGstMonthly([{ month: "2026-08", gstCollectedCents: 0, gstPaidCents: 0 }]);
+    expect(s.byQuarter).toEqual([
+      {
+        label: "2026-Q1",
+        fiscalYear: 2026,
+        quarter: 1,
+        gstCollectedCents: 0,
+        gstPaidCents: 0,
+        netGstCents: 0,
+      },
+    ]);
+  });
+
+  it("ignores a malformed month key instead of mis-bucketing it", () => {
+    const s = summarizeGstMonthly([
+      { month: "not-a-month", gstCollectedCents: 500, gstPaidCents: 0 },
+      { month: "2026-08", gstCollectedCents: 100, gstPaidCents: 40 },
+    ]);
+    expect(s.gstCollectedCents).toBe(100);
+    expect(s.netGstCents).toBe(60);
   });
 });

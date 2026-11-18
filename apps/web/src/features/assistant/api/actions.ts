@@ -7,6 +7,7 @@ import {
   deleteConversation,
   getConversation,
   listConversations,
+  renameConversation,
   setConversationWriteEnabled,
   type Conversation,
   type ConversationSummary,
@@ -84,4 +85,60 @@ export async function setWriteEnabledAction(input: unknown): Promise<SetWriteEna
   );
   revalidatePath("/assistant");
   return { ok: true, enabled: parsed.data.enabled };
+}
+
+const renameSchema = z.object({
+  conversationId: z.string().uuid(),
+  title: z.string().trim().min(1, "Enter a name.").max(80, "Keep the name under 80 characters."),
+});
+
+export type RenameConversationResult = { ok: true; title: string } | { ok: false; error: string };
+
+/** Rename one of the signed-in person's conversations. IDOR-safe like the other actions. */
+export async function renameConversationAction(input: unknown): Promise<RenameConversationResult> {
+  const ctx = await requireWorkspaceContext();
+  const parsed = renameSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid request." };
+  }
+  await renameConversation(
+    ctx.workspaceId,
+    ctx.user.id,
+    branded<"AiConversationId">(parsed.data.conversationId),
+    parsed.data.title,
+  );
+  revalidatePath("/assistant");
+  return { ok: true, title: parsed.data.title };
+}
+
+export interface PanelConversation {
+  id: string;
+  messages: { id: string; role: "user" | "assistant"; content: string; parts: unknown[] | null }[];
+}
+
+/**
+ * The conversation the side panel was showing before the page reloaded, or null when it
+ * is gone (deleted, or it belongs to another workspace or person).
+ */
+export async function loadPanelConversationAction(
+  input: unknown,
+): Promise<PanelConversation | null> {
+  const ctx = await requireWorkspaceContext();
+  const parsed = deleteSchema.safeParse(input);
+  if (!parsed.success) return null;
+  const conversation = await getConversation(
+    ctx.workspaceId,
+    ctx.user.id,
+    branded<"AiConversationId">(parsed.data.conversationId),
+  );
+  if (!conversation) return null;
+  return {
+    id: conversation.id as string,
+    messages: conversation.messages.map(({ id, role, content, parts }) => ({
+      id,
+      role,
+      content,
+      parts,
+    })),
+  };
 }

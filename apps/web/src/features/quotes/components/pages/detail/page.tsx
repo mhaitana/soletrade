@@ -7,22 +7,10 @@ import { formatCents } from "@/lib/domain/billing/pricing";
 import { formatDate } from "@/utils/format-date";
 import { loadQuote } from "@/features/quotes/api/actions";
 import { QuoteDetailActions } from "@/features/quotes/components/quote-detail-actions";
-import type { QuoteStatus } from "@/lib/domain/database-enums";
+import { QUOTE_STATUS_DISPLAY } from "@/lib/domain/quotes/status-display";
+import { CopyLinkButton } from "@/components/copy-link-button";
 
 export const metadata = { title: "Quote" };
-
-const STATUS_BADGE: Record<
-  QuoteStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
-> = {
-  draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Sent", variant: "default" },
-  viewed: { label: "Viewed", variant: "default" },
-  accepted: { label: "Accepted", variant: "outline" },
-  declined: { label: "Declined", variant: "destructive" },
-  expired: { label: "Expired", variant: "destructive" },
-  converted: { label: "Converted", variant: "secondary" },
-};
 
 export default async function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -40,7 +28,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
   }
 
   const q = data.quote;
-  const badge = STATUS_BADGE[q.status];
+  const badge = QUOTE_STATUS_DISPLAY[q.status];
 
   return (
     <div className="space-y-6">
@@ -52,7 +40,10 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
           </div>
           <p className="text-sm text-muted-foreground">
             {q.customerName ? (
-              <Link href={`/customers`} className="hover:underline">
+              <Link
+                href={q.customerId ? `/customers/${q.customerId}` : "/customers"}
+                className="hover:underline"
+              >
                 {q.customerName}
               </Link>
             ) : (
@@ -87,11 +78,14 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
       ) : null}
 
       {q.publicToken ? (
-        <div className="rounded-md border border-border bg-muted/30 p-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Public link</p>
-          <p className="mt-1 break-all font-mono text-sm" data-testid="quote-public-link">
-            /q/{q.publicToken}
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-4">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer link</p>
+            <p className="mt-1 break-all font-mono text-sm" data-testid="quote-public-link">
+              /q/{q.publicToken}
+            </p>
+          </div>
+          <CopyLinkButton path={`/q/${q.publicToken}`} label="Copy customer link" />
         </div>
       ) : null}
 

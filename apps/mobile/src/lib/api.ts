@@ -20,6 +20,7 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+export const HAI_CAPABILITIES = "approvals";
 export function apiUrl(path: string) {
   if (!path.startsWith("/") || path.startsWith("//"))
     throw new Error("API path must begin with one slash.");
@@ -29,7 +30,7 @@ export function apiUrl(path: string) {
 export async function authenticatedFetch(
   path: string,
   token: string,
-  options: RequestOptions = {},
+  options: RequestOptions & { signal?: AbortSignal } = {},
 ) {
   const operationId =
     options.idempotencyKey ??
@@ -40,11 +41,15 @@ export async function authenticatedFetch(
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
+      // What this build can show. The server only lets hAI propose changes to builds that
+      // can show an approval card; older builds get the change declined with a reason.
+      "X-Hai-Capabilities": HAI_CAPABILITIES,
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       ...(operationId ? { "Idempotency-Key": operationId } : {}),
       ...(options.version ? { "If-Match": options.version } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: options.signal,
   });
   if (!response.ok) {
     const payload = await response

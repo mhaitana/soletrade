@@ -63,8 +63,7 @@ export default async function FilesPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Files</h1>
         <p className="text-sm text-muted-foreground">
-          Receipts and documents. Bytes are stored in Supabase Storage; this page lists the
-          metadata.
+          Receipts and documents uploaded to this workspace.
         </p>
       </div>
 

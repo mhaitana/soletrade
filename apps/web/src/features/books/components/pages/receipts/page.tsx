@@ -8,6 +8,7 @@ import { formatCents } from "@/lib/domain/billing/pricing";
 import { categoryLabel } from "@/config/books-categories";
 import { loadReceiptsPage } from "@/features/books/api/receipts/actions";
 import { ReceiptReviewCard } from "@/features/books/components/receipts/receipt-review-card";
+import { ScanReceipt } from "@/features/books/components/receipts/scan-receipt";
 import { ResponsiveFilter } from "@/components/ui/responsive-filter";
 import { pageHref, parsePage } from "@/utils/pagination";
 
@@ -77,11 +78,16 @@ export default async function ReceiptsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Receipts</h1>
-        <p className="text-sm text-muted-foreground">
-          Review extracted receipts and apply them as transactions.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Receipts</h1>
+          <p className="text-sm text-muted-foreground">
+            Scan a receipt, check what was read, then apply it as a transaction.
+          </p>
+        </div>
+        <ScanReceipt
+          costLabel={data.scanCostCents > 0 ? formatCents(data.scanCostCents, data.currency) : null}
+        />
       </div>
 
       <ResponsiveFilter label="Filter extractions by status" items={statusFilterItems} />
@@ -93,7 +99,7 @@ export default async function ReceiptsPage({
               ? "No receipts on this page."
               : data.statusFilter
                 ? `No ${data.statusFilter} receipts.`
-                : "No receipts extracted yet. Upload a receipt on a transaction to start."}
+                : "No receipts scanned yet. Use Scan a receipt to add one."}
           </p>
           {data.page > 1 ? (
             <p className="mt-1 text-sm">

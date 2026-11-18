@@ -116,7 +116,9 @@ async function queryUserWorkspaces(userId: UserId): Promise<WorkspaceMembership[
   const rows = await unwrap(
     supabase
       .from("workspace_members")
-      .select(`role, workspaces ( ${WORKSPACE_COLUMNS} )`)
+      // Only what the switcher and context resolver use; the full column set includes
+      // payment settings and was read on every page render.
+      .select("role, workspaces ( id, name, slug, deleted_at )")
       .eq("user_id", userId)
       .is("deleted_at", null),
   );

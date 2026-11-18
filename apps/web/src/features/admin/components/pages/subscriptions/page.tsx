@@ -24,7 +24,7 @@ export default async function AdminSubscriptionsPage() {
       <AdminPageHeader
         icon={CreditCard}
         title="Subscription & Billing Administration"
-        subtitle="Monitor Stripe-reconciled subscriptions across all tenant workspaces (Principle #6 & #11)."
+        subtitle="Monitor Stripe-reconciled subscriptions across all tenant workspaces."
       />
 
       <AdminTable caption="Workspace subscriptions">

@@ -87,6 +87,64 @@ describe("CommandPalette", () => {
     expect(screen.getByRole("option", { name: "Dashboard" })).toBeInTheDocument();
   });
 
+  it("reaches sub-pages that have no sidebar entry once the query matches them", () => {
+    fetchMock.mockReturnValue(new Promise<Response>(() => {}));
+    render(
+      <CommandPalette
+        open
+        onOpenChange={vi.fn()}
+        installedModules={["books", "drive"]}
+        role="owner"
+      />,
+    );
+    // Not listed until asked for, so the default list stays short.
+    expect(screen.queryByRole("option", { name: "GST / BAS" })).not.toBeInTheDocument();
+
+    changeQuery("gst");
+    fireEvent.click(screen.getByRole("option", { name: "GST / BAS" }));
+    expect(push).toHaveBeenCalledWith("/books/tax");
+  });
+
+  it("hides module sub-pages when the module is not installed", () => {
+    fetchMock.mockReturnValue(new Promise<Response>(() => {}));
+    render(
+      <CommandPalette open onOpenChange={vi.fn()} installedModules={["invoices"]} role="owner" />,
+    );
+    changeQuery("receipts");
+    expect(screen.queryByRole("option", { name: "Receipts" })).not.toBeInTheDocument();
+  });
+
+  it("offers the create actions the role is allowed to use", () => {
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <CommandPalette
+        open
+        onOpenChange={onOpenChange}
+        installedModules={["invoices", "books"]}
+        role="owner"
+      />,
+    );
+    expect(screen.getByRole("option", { name: /New invoice/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /New transaction/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /New customer/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /New quote/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("option", { name: /New invoice/ }));
+    expect(push).toHaveBeenCalledWith("/invoices/new");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+
+    rerender(
+      <CommandPalette
+        open
+        onOpenChange={onOpenChange}
+        installedModules={["invoices", "books"]}
+        role="readonly"
+      />,
+    );
+    expect(screen.queryByRole("option", { name: /New invoice/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /New customer/ })).not.toBeInTheDocument();
+  });
+
   it("keeps server matches whose searchable fields are absent from the display label", async () => {
     fetchMock.mockResolvedValue(response(results("Airport parking")));
     render(

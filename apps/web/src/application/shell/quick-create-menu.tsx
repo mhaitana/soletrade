@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Car, FilePlus2, Plus, Receipt, UserPlus, type LucideIcon } from "lucide-react";
+import { Plus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,42 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ModuleKey } from "@/config/modules";
-import { can, type Permission } from "@/lib/domain/permissions/index";
+import { buildModuleCreateActions } from "@/config/navigation";
+import { can } from "@/lib/domain/permissions/index";
 import type { WorkspaceRole } from "@/lib/domain/database-enums";
-
-const MODULE_ACTIONS: Record<
-  ModuleKey,
-  { href: string; label: string; description: string; icon: LucideIcon; permission: Permission }
-> = {
-  invoices: {
-    href: "/invoices/new",
-    label: "New invoice",
-    description: "Bill a customer",
-    icon: Receipt,
-    permission: "create:invoice",
-  },
-  quotes: {
-    href: "/quotes/new",
-    label: "New quote",
-    description: "Send a proposal",
-    icon: FilePlus2,
-    permission: "create:quote",
-  },
-  books: {
-    href: "/books/new",
-    label: "New transaction",
-    description: "Record income or an expense",
-    icon: BookOpen,
-    permission: "create:books",
-  },
-  drive: {
-    href: "/drive/new",
-    label: "New drive entry",
-    description: "Log earnings or mileage",
-    icon: Car,
-    permission: "create:drive",
-  },
-};
 
 export function QuickCreateMenu({
   installedModules,
@@ -56,9 +23,7 @@ export function QuickCreateMenu({
   installedModules: ModuleKey[];
   role: WorkspaceRole;
 }) {
-  const availableActions = installedModules
-    .map((key) => ({ key, ...MODULE_ACTIONS[key] }))
-    .filter((action) => can(role, action.permission));
+  const availableActions = buildModuleCreateActions(installedModules, role);
   const canCreateCustomer = can(role, "create:customer");
   const canEnableModule = can(role, "manage:module");
 

@@ -1,22 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
 import { createInvoicePaymentIntentAction } from "@/features/invoices/api/public/actions";
 import type { PublicInvoiceView } from "@/lib/domain/invoices/types";
-
-function money(cents: number, currency: string): string {
-  return `${currency} ${(cents / 100).toFixed(2)}`;
-}
+import { formatCents } from "@/lib/domain/billing/pricing";
 
 type Stage = "loading" | "paying" | "succeeded" | "failed";
 
 function PayButtonForm({ invoice }: { invoice: PublicInvoiceView }) {
   const stripe = useStripe();
   const elements = useElements();
+  const router = useRouter();
   const [stage, setStage] = useState<Stage>("paying");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
@@ -40,20 +39,25 @@ function PayButtonForm({ invoice }: { invoice: PublicInvoiceView }) {
       return;
     }
     setStage("succeeded");
+    // Re-read the page so the header badge and amount label follow the payment. The paid
+    // status arrives by webhook, so this may still show "Awaiting payment" for a moment;
+    // the confirmation below does not depend on it.
+    router.refresh();
   }
 
   if (stage === "succeeded") {
     return (
       <div
-        className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4"
+        className="flex items-center gap-3 rounded-2xl border border-success/20 bg-success/10 p-4 text-success"
         role="status"
         aria-live="polite"
       >
-        <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-500" aria-hidden />
+        <CheckCircle2 className="size-5 shrink-0" aria-hidden />
         <div className="text-sm">
-          <p className="font-medium text-emerald-800">Payment successful</p>
-          <p className="text-emerald-700">
-            Paid {money(invoice.totalCents, invoice.currency)}. A confirmation will appear shortly.
+          <p className="font-semibold">Payment successful</p>
+          <p className="text-foreground">
+            Paid {formatCents(invoice.totalCents, invoice.currency)}. A confirmation will appear
+            shortly.
           </p>
         </div>
       </div>
@@ -72,9 +76,10 @@ function PayButtonForm({ invoice }: { invoice: PublicInvoiceView }) {
       ) : null}
       <Button
         type="submit"
+        size="lg"
         disabled={submitting}
-        className="w-full bg-[#635BFF] text-white hover:bg-[#635BFF]/90"
-        aria-label={`Pay ${money(invoice.totalCents, invoice.currency)}`}
+        className="w-full"
+        aria-label={`Pay ${formatCents(invoice.totalCents, invoice.currency)}`}
       >
         {submitting ? (
           <>
@@ -82,7 +87,7 @@ function PayButtonForm({ invoice }: { invoice: PublicInvoiceView }) {
             Processing…
           </>
         ) : (
-          `Pay ${money(invoice.totalCents, invoice.currency)}`
+          `Pay ${formatCents(invoice.totalCents, invoice.currency)}`
         )}
       </Button>
     </form>

@@ -2,8 +2,15 @@ import type { CustomerInput, CustomerPatch, CustomerRow } from "@/lib/domain/cus
 export type { CustomerInput, CustomerPatch, CustomerRow } from "@/lib/domain/customers/types";
 import "server-only";
 import { getDataClient } from "@/server/infrastructure/db/client";
-import { parsePgTimestamp, pgQuote, unwrap, unwrapMaybe } from "@/server/infrastructure/db/helpers";
+import {
+  parsePgTimestamp,
+  pgQuote,
+  unwrap,
+  unwrapCount,
+  unwrapMaybe,
+} from "@/server/infrastructure/db/helpers";
 import { branded, type CustomerId, type UserId, type WorkspaceId } from "@/types/ids";
+import type { PickerCustomer } from "@/types/customer-picker";
 import { publishEvent } from "@/server/infrastructure/events";
 
 /** Maps a snake_case PostgREST customers row to the camelCase `CustomerRow`. */
@@ -111,6 +118,71 @@ export async function listCustomers(
       .range(Math.max(0, opts?.offset ?? 0), Math.max(0, opts?.offset ?? 0) + limit - 1),
   );
   return rows.map(toCustomerRow);
+}
+
+/** Most customers a form picker loads; far above any small business's customer list. */
+export const CUSTOMER_OPTIONS_LIMIT = 5000;
+/** The data API returns at most 1,000 rows per request. */
+const OPTIONS_CHUNK = 1000;
+
+/**
+ * Picker fields for every active customer, ordered by name, for the customer field on
+ * invoice, quote and Books forms. Forms used to call `listCustomers` and silently showed
+ * only the 100 newest customers. Reads in chunks to get past the 1,000-row cap.
+ */
+export async function listCustomerOptions(workspaceId: WorkspaceId): Promise<PickerCustomer[]> {
+  const supabase = getDataClient();
+  const options: PickerCustomer[] = [];
+  for (let offset = 0; offset < CUSTOMER_OPTIONS_LIMIT; offset += OPTIONS_CHUNK) {
+    const rows = await unwrap(
+      supabase
+        .from("customers")
+        .select("id,name,email,company")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .order("name", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + OPTIONS_CHUNK - 1),
+    );
+    for (const row of rows) {
+      options.push({ id: row.id, name: row.name, email: row.email, company: row.company });
+    }
+    if (rows.length < OPTIONS_CHUNK) break;
+  }
+  return options;
+}
+
+/**
+ * Ids of the workspace's customers whose name or company contains `search`, ignoring case.
+ * Soft-deleted customers are included so their past documents stay findable. Invoice, quote
+ * and transaction searches match on these ids; a caller that searches several modules
+ * resolves them once and passes them in, instead of each list repeating the lookup.
+ */
+export async function findCustomerIdsMatching(
+  workspaceId: WorkspaceId,
+  search: string,
+): Promise<string[]> {
+  const term = pgQuote(`%${search.trim()}%`);
+  const rows = await unwrap(
+    getDataClient()
+      .from("customers")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .or(`name.ilike.${term},company.ilike.${term}`),
+  );
+  return rows.map((row) => row.id);
+}
+
+/** Number of active (not soft-deleted) customers in the workspace (head count, no rows fetched). */
+export async function countCustomers(workspaceId: WorkspaceId): Promise<number> {
+  const supabase = getDataClient();
+  return unwrapCount(
+    supabase
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null),
+  );
 }
 
 /**

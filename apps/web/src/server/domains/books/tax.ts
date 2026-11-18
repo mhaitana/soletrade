@@ -9,6 +9,7 @@ import {
   unwrapVoid,
 } from "@/server/infrastructure/db/helpers";
 import { writeAudit } from "@/server/foundation/audit";
+import { getBookSummary } from "@/server/domains/books/index";
 import { fiscalQuarter } from "@/lib/domain/books/calc";
 import { branded, type UserId, type WorkspaceId } from "@/types/ids";
 
@@ -92,24 +93,13 @@ export async function lodgeTaxPeriod(
   const { start, end } = quarterRange(fiscalYear, quarter, fyStartMonth);
 
   const supabase = getDataClient();
-  // Sum GST collected (income) and paid (expense) for the quarter from transactions.
-  // `date` is a `timestamp without time zone`; pass ISO-with-Z (matches Drizzle's Date
-  // serialization - the local Supabase Postgres session is UTC, so the cast is exact).
-  const txRows = await unwrap(
-    supabase
-      .from("book_transactions")
-      .select("type, gst_cents")
-      .eq("workspace_id", workspaceId)
-      .gte("date", start.toISOString())
-      .lte("date", end.toISOString()),
-  );
-  let gstCollectedCents = 0;
-  let gstPaidCents = 0;
-  for (const r of txRows) {
-    const gst = Math.abs(r.gst_cents ?? 0);
-    if (r.type === "income") gstCollectedCents += gst;
-    else gstPaidCents += gst;
-  }
+  // GST collected (income) and paid (expense) for the quarter, summed in Postgres by the
+  // same function the Books summary uses. Summing fetched rows here would silently stop at
+  // the data API's 1,000-row cap and lodge a wrong figure for a busy quarter.
+  const { gstCollectedCents, gstPaidCents } = await getBookSummary(workspaceId, {
+    dateFrom: start,
+    dateTo: end,
+  });
   const netGstCents = gstCollectedCents - gstPaidCents;
   const lodgedAt = new Date();
   const lodgedAtIso = lodgedAt.toISOString();

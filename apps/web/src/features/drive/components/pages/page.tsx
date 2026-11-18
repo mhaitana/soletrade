@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ModuleNotInstalledCard } from "@/components/module-not-installed-card";
+import { ListPagination } from "@/components/list-pagination";
 import { formatCents } from "@/lib/domain/billing/pricing";
 import { formatDate } from "@/utils/format-date";
 import { DRIVE_PLATFORMS, platformLabel } from "@/config/drive-platforms";
 import { formatKm } from "@/lib/domain/drive/calc";
 import { PERIODS, parsePeriod, type Period } from "@/utils/periods";
+import { RECORD_PAGE_SIZE, pageHref, parsePage } from "@/utils/pagination";
 import { loadDrivePage, type DriveView } from "@/features/drive/api/actions";
 import { DriveSummary } from "@/features/drive/components/drive-summary";
 import { SwipeQuickLog } from "@/features/drive/components/swipe-quick-log";
@@ -60,6 +62,7 @@ export default async function DrivePage({
     platform?: string | string[];
     search?: string | string[];
     period?: string | string[];
+    page?: string | string[];
   }>;
 }) {
   const sp = await searchParams;
@@ -71,7 +74,13 @@ export default async function DrivePage({
   const platform =
     rawPlatform && DRIVE_PLATFORMS.some((p) => p.key === rawPlatform) ? rawPlatform : undefined;
   const period = parsePeriod(rawPeriod);
-  const data = await loadDrivePage({ view, platform, search: rawSearch, period });
+  const data = await loadDrivePage({
+    view,
+    platform,
+    search: rawSearch,
+    period,
+    page: parsePage(sp.page, RECORD_PAGE_SIZE),
+  });
 
   if (!data.installed) return <ModuleNotInstalledCard moduleKey="drive" />;
 
@@ -82,6 +91,13 @@ export default async function DrivePage({
     period: data.period,
   };
   const list = data.view === "trips" ? data.trips : data.earnings;
+  // Page links keep the active view and filters; defaults stay implicit, as in hrefWith.
+  const pageFilters = {
+    view: data.view !== "earnings" ? data.view : null,
+    platform: data.platformFilter,
+    search: data.search,
+    period: data.period !== "year" ? data.period : null,
+  };
   const hasFilters = Boolean(
     data.search || data.platformFilter || data.view !== "earnings" || data.period !== "year",
   );
@@ -215,13 +231,24 @@ export default async function DrivePage({
       {list.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
           <p className="text-sm text-muted-foreground">
-            {data.search || data.platformFilter
-              ? `No ${data.view === "trips" ? "trips" : "earnings"} match your filters.`
-              : data.view === "trips"
-                ? "No mileage trips yet."
-                : "No earnings yet."}
+            {data.page > 1
+              ? `No ${data.view === "trips" ? "trips" : "earnings"} on this page.`
+              : data.search || data.platformFilter
+                ? `No ${data.view === "trips" ? "trips" : "earnings"} match your filters.`
+                : data.view === "trips"
+                  ? "No mileage trips yet."
+                  : "No earnings yet."}
           </p>
-          {data.canManage && !data.search && !data.platformFilter ? (
+          {data.page > 1 ? (
+            <p className="mt-1 text-sm">
+              <Link
+                href={pageHref("/drive", 1, pageFilters)}
+                className="text-primary hover:underline"
+              >
+                Return to first page
+              </Link>
+            </p>
+          ) : data.canManage && !data.search && !data.platformFilter ? (
             <p className="mt-1 text-sm">
               <Link
                 href={`/drive/new?type=${data.view === "trips" ? "trip" : "earning"}`}
@@ -321,6 +348,13 @@ export default async function DrivePage({
           </table>
         </div>
       )}
+
+      <ListPagination
+        pathname="/drive"
+        page={data.page}
+        hasNext={data.hasNext}
+        filters={pageFilters}
+      />
     </div>
   );
 }

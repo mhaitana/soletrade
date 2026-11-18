@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRequestId } from "@/hooks/use-request-id";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +18,7 @@ import {
   type UpdateQuoteResult,
 } from "@/features/quotes/api/actions";
 import type { PickerCustomer } from "@/types/customer-picker";
+import { CustomerCombobox } from "@/components/customer-combobox";
 import type { QuoteWithItems } from "@/lib/domain/quotes/types";
 import {
   HaiPrefillNotice,
@@ -81,6 +84,7 @@ export function QuoteForm({
   const router = useRouter();
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
+  const { requestId } = useRequestId();
   const [error, setError] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
 
@@ -282,13 +286,19 @@ export function QuoteForm({
         res =
           isEdit && quote
             ? await updateQuoteAction({ quoteId: quote.id, ...input })
-            : await createQuoteAction(input);
+            : await createQuoteAction({ requestId, ...input });
       } catch {
         setError(QUOTE_SAVE_UNCONFIRMED);
         return;
       }
       if (res.ok) {
-        router.push("/quotes");
+        if (isEdit) {
+          toast.success("Quote updated");
+          router.push("/quotes");
+        } else {
+          toast.success("Quote created");
+          router.push("quoteId" in res ? `/quotes/${res.quoteId}` : "/quotes");
+        }
         router.refresh();
         return;
       }
@@ -307,22 +317,15 @@ export function QuoteForm({
           <div className="space-y-1.5">
             <Label htmlFor="customerId">Customer</Label>
             <div className="flex gap-2">
-              <select
+              <CustomerCombobox
                 id="customerId"
                 name="customerId"
+                customers={customerList}
                 value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">Pick a customer…</option>
-                {customerList.map((c) => (
-                  <option key={c.id} value={c.id} disabled={!c.email}>
-                    {c.name}
-                    {c.company ? ` · ${c.company}` : ""}
-                    {!c.email ? " (no email - add one)" : ""}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setCustomerId}
+                unavailableReason={(c) => (c.email ? null : "no email - add one")}
+                invalid={Boolean(fieldErr("customerId"))}
+              />
               {renderCustomerCreate((c) => {
                 setCustomerList((prev) => (prev.some((p) => p.id === c.id) ? prev : [...prev, c]));
                 setCustomerId(c.id);
@@ -578,8 +581,8 @@ export function QuoteForm({
                 >
                   Check quotes
                   <span className="sr-only"> (opens in a new tab)</span>
-                </Link>{" "}
-                before trying again.
+                </Link>
+                , or save again; this won’t create a second quote.
               </>
             ) : (
               error

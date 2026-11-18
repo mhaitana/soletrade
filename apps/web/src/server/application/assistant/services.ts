@@ -1,17 +1,19 @@
 import "server-only";
 export { isMockProvider, getAIModel } from "@/server/infrastructure/ai/provider";
 export {
-  streamAssistant,
+  streamAssistantTurn,
   streamAssistantError,
-  streamMockAssistant,
+  streamMockAssistantTurn,
   assistantErrorMessage,
-  type StreamAssistantOptions,
+  type StreamAssistantTurnOptions,
 } from "@/server/infrastructure/ai/stream";
 export {
   listConversations,
   getConversation,
   createConversation,
   appendMessage,
+  updateMessage,
+  deleteMessages,
   deleteConversation,
   renameConversation,
   setConversationWriteEnabled,

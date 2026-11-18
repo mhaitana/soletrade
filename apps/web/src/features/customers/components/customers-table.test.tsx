@@ -121,3 +121,23 @@ describe("CustomersTable deletion", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
   });
 });
+
+describe("CustomersTable empty states", () => {
+  it("shows a no-match state with a clear-search link when a search returned nothing", () => {
+    render(<CustomersTable customers={[]} canManage searchTerm="zed" />);
+
+    expect(screen.getByText(/No customers match/)).toHaveTextContent("zed");
+    expect(screen.getByRole("link", { name: "Clear search" })).toHaveAttribute(
+      "href",
+      "/customers",
+    );
+    expect(screen.queryByText("No customers yet.")).not.toBeInTheDocument();
+  });
+
+  it("keeps the first-customer prompt when there is no search", () => {
+    render(<CustomersTable customers={[]} canManage />);
+
+    expect(screen.getByText("No customers yet.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add your first customer" })).toBeInTheDocument();
+  });
+});

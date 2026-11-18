@@ -29,6 +29,7 @@ import {
   renderInvoiceAttachment,
   renderQuoteAttachment,
 } from "@/server/application/notifications/attachments";
+import { resolveMerchantName } from "@/server/application/notifications/merchant";
 
 /**
  * Notifications platform (Phase 5c + Phase 8 quotes). Subscribes **cross-module side
@@ -53,7 +54,10 @@ import {
 async function onInvoiceSent(event: BusEvent): Promise<void> {
   const m = coerceInvoiceEmailMeta(event.metadata);
   if (!m || !m.customerEmail) return; // no email on file - nothing to send
-  const { subject, html, text } = invoiceSentEmail(m, env.NEXT_PUBLIC_APP_URL);
+  // Customer emails say which business they are from; the workspace name is looked up here
+  // (these handlers run after the response, so the extra read costs the user nothing).
+  const merchantName = await resolveMerchantName(event.workspaceId);
+  const { subject, html, text } = invoiceSentEmail({ ...m, merchantName }, env.NEXT_PUBLIC_APP_URL);
   // Best-effort PDF attachment (Wave 4 G5) - render failure doesn't block the email.
   const attachment =
     event.entityType === "invoice" && event.entityId
@@ -71,7 +75,11 @@ async function onInvoiceSent(event: BusEvent): Promise<void> {
 async function onInvoiceOverdue(event: BusEvent): Promise<void> {
   const m = coerceInvoiceEmailMeta(event.metadata);
   if (!m || !m.customerEmail) return;
-  const { subject, html, text } = invoiceOverdueEmail(m, env.NEXT_PUBLIC_APP_URL);
+  const merchantName = await resolveMerchantName(event.workspaceId);
+  const { subject, html, text } = invoiceOverdueEmail(
+    { ...m, merchantName },
+    env.NEXT_PUBLIC_APP_URL,
+  );
   await sendEmail({ to: m.customerEmail, subject, html, text });
 }
 
@@ -82,7 +90,11 @@ async function onInvoicePaid(event: BusEvent): Promise<void> {
     event.metadata?.source === "manual" || event.metadata?.source === "stripe"
       ? event.metadata.source
       : "stripe";
-  const { subject, html, text } = invoicePaidEmail({ ...m, source }, env.NEXT_PUBLIC_APP_URL);
+  const merchantName = await resolveMerchantName(event.workspaceId);
+  const { subject, html, text } = invoicePaidEmail(
+    { ...m, source, merchantName },
+    env.NEXT_PUBLIC_APP_URL,
+  );
   await sendEmail({ to: m.customerEmail, subject, html, text });
 }
 
@@ -90,7 +102,8 @@ async function onInvoicePaid(event: BusEvent): Promise<void> {
 async function onQuoteSent(event: BusEvent): Promise<void> {
   const m = coerceQuoteEmailMeta(event.metadata);
   if (!m || !m.customerEmail) return; // no email on file - nothing to send
-  const { subject, html, text } = quoteSentEmail(m, env.NEXT_PUBLIC_APP_URL);
+  const merchantName = await resolveMerchantName(event.workspaceId);
+  const { subject, html, text } = quoteSentEmail({ ...m, merchantName }, env.NEXT_PUBLIC_APP_URL);
   // Best-effort PDF attachment (Wave 4 G5) - render failure doesn't block the email.
   const attachment =
     event.entityType === "quote" && event.entityId
@@ -165,32 +178,40 @@ async function onQuoteDeclined(event: BusEvent): Promise<void> {
 }
 
 /**
+ * Every notification handler is a best-effort side effect (email via the provider, PDF
+ * attachment rendering, one in-app row per member). None of it is read later in the request
+ * that published the event, so it runs after the response has been sent rather than making
+ * the user, the customer on a public page or the Stripe webhook wait for it.
+ */
+const AFTER_RESPONSE = { deferred: true } as const;
+
+/**
  * Subscribe the invoice + quote email handlers. Returns an unsubscribe (for tests); in
  * production this is fire-and-forget - wired once at startup in `src/instrumentation.ts`.
  */
 export function registerNotifications(): () => void {
-  const u1 = onEvent("InvoiceSent", onInvoiceSent);
-  const u2 = onEvent("InvoiceOverdue", onInvoiceOverdue);
-  const u3 = onEvent("InvoicePaid", onInvoicePaid);
-  const u4 = onEvent("QuoteSent", onQuoteSent);
-  const u5 = onEvent("QuoteAccepted", onQuoteAccepted);
-  const u6 = onEvent("QuoteDeclined", onQuoteDeclined);
-  const u12 = onEvent("MemberInvited", onMemberInvited);
+  const u1 = onEvent("InvoiceSent", onInvoiceSent, AFTER_RESPONSE);
+  const u2 = onEvent("InvoiceOverdue", onInvoiceOverdue, AFTER_RESPONSE);
+  const u3 = onEvent("InvoicePaid", onInvoicePaid, AFTER_RESPONSE);
+  const u4 = onEvent("QuoteSent", onQuoteSent, AFTER_RESPONSE);
+  const u5 = onEvent("QuoteAccepted", onQuoteAccepted, AFTER_RESPONSE);
+  const u6 = onEvent("QuoteDeclined", onQuoteDeclined, AFTER_RESPONSE);
+  const u12 = onEvent("MemberInvited", onMemberInvited, AFTER_RESPONSE);
   // In-app bell notifications (Phase 11c) - merchant-facing events get a row per
   // qualifying member so the bell badge lights up. Best-effort: a DB hiccup is
   // caught + logged so it can't break the event bus or the email side.
-  const u7 = onEvent("InvoicePaid", onInvoicePaidInApp);
-  const u8 = onEvent("InvoiceOverdue", onInvoiceOverdueInApp);
-  const u9 = onEvent("QuoteAccepted", onQuoteAcceptedInApp);
-  const u10 = onEvent("QuoteDeclined", onQuoteDeclinedInApp);
-  const u11 = onEvent("QuoteExpired", onQuoteExpiredInApp);
+  const u7 = onEvent("InvoicePaid", onInvoicePaidInApp, AFTER_RESPONSE);
+  const u8 = onEvent("InvoiceOverdue", onInvoiceOverdueInApp, AFTER_RESPONSE);
+  const u9 = onEvent("QuoteAccepted", onQuoteAcceptedInApp, AFTER_RESPONSE);
+  const u10 = onEvent("QuoteDeclined", onQuoteDeclinedInApp, AFTER_RESPONSE);
+  const u11 = onEvent("QuoteExpired", onQuoteExpiredInApp, AFTER_RESPONSE);
   // Wave 4 - coverage gaps: InvoiceVoided / CreditIssued / RefundIssued / InvoiceViewed /
   // QuoteViewed were already published but had no subscriber.
-  const u13 = onEvent("InvoiceVoided", onInvoiceVoidedInApp);
-  const u14 = onEvent("CreditIssued", onCreditIssuedInApp);
-  const u15 = onEvent("RefundIssued", onRefundIssued);
-  const u16 = onEvent("InvoiceViewed", onInvoiceViewedInApp);
-  const u17 = onEvent("QuoteViewed", onQuoteViewedInApp);
+  const u13 = onEvent("InvoiceVoided", onInvoiceVoidedInApp, AFTER_RESPONSE);
+  const u14 = onEvent("CreditIssued", onCreditIssuedInApp, AFTER_RESPONSE);
+  const u15 = onEvent("RefundIssued", onRefundIssued, AFTER_RESPONSE);
+  const u16 = onEvent("InvoiceViewed", onInvoiceViewedInApp, AFTER_RESPONSE);
+  const u17 = onEvent("QuoteViewed", onQuoteViewedInApp, AFTER_RESPONSE);
   return () => {
     u1();
     u2();

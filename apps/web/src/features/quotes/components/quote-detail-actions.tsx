@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { FileText, Pencil, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +52,16 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
   const isDraft = status === "draft";
   const isAccepted = status === "accepted";
 
+  function openDialog(kind: Action["kind"]) {
+    setError("");
+    setPending({ kind });
+  }
+
+  function closeDialog() {
+    setError("");
+    setPending(null);
+  }
+
   async function run(kind: Action["kind"]) {
     setError("");
     startTransition(async () => {
@@ -61,6 +72,10 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
           setError(res.error);
           return;
         }
+        // Close on success: the page behind refreshes to the sent state, and leaving the
+        // confirmation open invited a second send.
+        closeDialog();
+        toast.success("Quote sent.");
         router.refresh();
       } else if (kind === "delete") {
         const res = await deleteQuoteAction(input);
@@ -68,6 +83,8 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
           setError(res.error);
           return;
         }
+        closeDialog();
+        toast.success("Draft deleted.");
         router.push("/quotes");
       } else if (kind === "convert") {
         const res = await convertQuoteToInvoiceAction(input);
@@ -75,6 +92,8 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
           setError(res.error);
           return;
         }
+        closeDialog();
+        toast.success("Draft invoice created from this quote.");
         router.push(`/invoices/${res.invoiceId}`);
         router.refresh();
       }
@@ -86,7 +105,7 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
       <div className="flex flex-wrap gap-2">
         {isDraft ? (
           <>
-            <Button onClick={() => setPending({ kind: "send" })} disabled={isPending}>
+            <Button onClick={() => openDialog("send")} disabled={isPending}>
               <Send className="size-4" aria-hidden />
               Send
             </Button>
@@ -98,7 +117,7 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
             </Button>
             <Button
               variant="ghost"
-              onClick={() => setPending({ kind: "delete" })}
+              onClick={() => openDialog("delete")}
               disabled={isPending}
               className="text-destructive"
             >
@@ -108,20 +127,21 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
           </>
         ) : null}
         {isAccepted ? (
-          <Button onClick={() => setPending({ kind: "convert" })} disabled={isPending}>
+          <Button onClick={() => openDialog("convert")} disabled={isPending}>
             <FileText className="size-4" aria-hidden />
             Convert to invoice
           </Button>
         ) : null}
       </div>
 
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+      {/* The error lives inside the dialog: while it is open the page behind is inert and
+          hidden from assistive technology, so a message rendered there would go unseen. */}
+      <Dialog
+        open={pending !== null}
+        onOpenChange={(o) => {
+          if (!o && !isPending) closeDialog();
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{pending ? DIALOG_COPY[pending.kind].title : ""}</DialogTitle>
@@ -129,8 +149,13 @@ export function QuoteDetailActions({ quoteId, status }: { quoteId: string; statu
               {pending ? DIALOG_COPY[pending.kind].description : ""}
             </DialogDescription>
           </DialogHeader>
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPending(null)} disabled={isPending}>
+            <Button variant="outline" onClick={closeDialog} disabled={isPending}>
               Cancel
             </Button>
             <Button

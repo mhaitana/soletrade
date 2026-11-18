@@ -22,7 +22,7 @@ export default async function AdminAuditLogPage() {
       <AdminPageHeader
         icon={FileText}
         title="Immutable Admin Audit Log"
-        subtitle="Tamper-evident operational trail of all administrative actions (Principle #2 & #5)."
+        subtitle="Tamper-evident operational trail of all administrative actions."
       />
 
       <AdminTable caption="Admin audit events">

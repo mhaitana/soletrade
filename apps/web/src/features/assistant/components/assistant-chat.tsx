@@ -1,39 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
-import { Bot, Plus, Send, Square, Trash2, Zap } from "lucide-react";
+import { Bot, Pencil, Plus, Send, Square, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { brand } from "@/config/brand";
+import { storedToUIMessage, type HaiUIMessage } from "@/lib/assistant/messages";
 import {
   deleteConversationAction,
+  renameConversationAction,
   setWriteEnabledAction,
   type AssistantPageData,
 } from "@/features/assistant/api/actions";
 import {
-  HaiToolPart,
+  toolCallIdsOf,
   useHaiToolNavigation,
 } from "@/features/assistant/hooks/use-hai-tool-navigation";
+import { useHaiChat } from "@/features/assistant/hooks/use-hai-chat";
+import { HaiChatError, HaiMessage } from "@/features/assistant/components/hai-message";
 
 /**
- * AI assistant chat client (Phase 10). Uses the AI SDK v5 `useChat` hook with a
- * `DefaultChatTransport` pointed at `POST /api/assistant`. The transport is customized:
+ * The assistant page chat. The conversation is stored on the server (whole messages,
+ * including tool calls and their approval state), so reopening it shows exactly what
+ * happened, and changes still waiting for approval can be approved after a reload.
  *
- * - `prepareSendMessagesRequest` sends only `{ conversationId, message }` (the route
- *   reconstructs full history from the persisted conversation - the client doesn't send
- *   the whole transcript).
- * - `fetch` intercepts the response to capture the `X-Conversation-Id` header (set by
- *   the route when it creates a new conversation on the first send) and updates the URL
- *   via `history.replaceState` (no Next.js navigation → no remount → the in-flight stream
- *   is preserved). The sidebar is refreshed on `onFinish`.
- *
- * Messages render from `message.parts` (text only this phase - tool calls are server-
- * side and opaque to the client). Plain text + `whitespace-pre-wrap`; no markdown.
+ * The first message creates the conversation; the route returns its id in
+ * `X-Conversation-Id`, and the URL is updated with `history.replaceState` so the stream
+ * in flight is not interrupted. The sidebar refreshes when each reply finishes.
  */
 const SUGGESTED_PROMPTS = [
   "How's my business doing this month?",
@@ -41,13 +47,6 @@ const SUGGESTED_PROMPTS = [
   "What's my cash position?",
   "Who are my recent customers?",
 ];
-
-function messageText(m: UIMessage): string {
-  return m.parts
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-}
 
 function formatDate(d: Date): string {
   return d.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
@@ -61,11 +60,17 @@ export function AssistantChat({
   activeConversation: AssistantPageData["activeConversation"];
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const initialId = activeConversation?.id ?? null;
-  const [conversationId, setConversationId] = useState<string | null>(initialId);
   const [input, setInput] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // Deleting a conversation and switching write tools on both ask first.
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [confirmWrite, setConfirmWrite] = useState(false);
+  const [renameDraft, setRenameDraft] = useState<string | null>(null);
+  const [renameError, setRenameError] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [title, setTitle] = useState<string | null>(activeConversation?.title ?? null);
   // Write-tools opt-in (Phase 11d). Seeded from the server-loaded conversation; the
   // hard boundary is the `write_enabled` DB flag, toggled via `setWriteEnabledAction`.
   const [writeEnabled, setWriteEnabled] = useState<boolean>(
@@ -73,73 +78,47 @@ export function AssistantChat({
   );
   const [writeToggling, setWriteToggling] = useState(false);
 
-  // Initial messages from the server-loaded conversation. `useState` lazy init runs once
-  // (the component remounts via `key={c}` when switching conversations, re-running this).
-  const [initialMessages] = useState<UIMessage[]>(
-    () =>
-      (activeConversation?.messages ?? []).map((m, i) => ({
-        id: `init-${i}`,
-        role: m.role,
-        parts: [{ type: "text", text: m.content }],
-      })) as UIMessage[],
+  // Stored messages, whole. `useState` lazy init runs once; the page remounts this
+  // component (`key={c}`) when switching conversations.
+  const [initialMessages] = useState<HaiUIMessage[]>(() =>
+    (activeConversation?.messages ?? []).map(storedToUIMessage),
   );
+  // Tool calls that already ran before this page load must not navigate again.
+  const [settled] = useState(() => toolCallIdsOf(initialMessages));
 
-  // The transport is created once (useState lazy init). It only sends the standard
-  // `{ messages }` body - `conversationId` is added per-send via `sendMessage`'s `body`
-  // option (so the latest id is used without recreating the transport). The `fetch`
-  // wrapper captures the `X-Conversation-Id` response header the route sets when it
-  // creates a new conversation, updates the URL via `history.replaceState` (no Next.js
-  // navigation → no remount → the in-flight stream is preserved), and stashes the id in
-  // state for subsequent sends. `setConversationId` is stable, so the closure is safe.
-  const [transport] = useState(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/assistant",
-        fetch: async (url, init) => {
-          const res = await globalThis.fetch(url, init);
-          const id = res.headers.get("X-Conversation-Id");
-          if (id) {
-            setConversationId((prev) => prev ?? id);
-            window.history.replaceState(null, "", `/assistant?c=${id}`);
-          }
-          return res;
-        },
-      }),
-  );
-
-  const { messages, sendMessage, status, stop, error } = useChat({
-    id: initialId ?? "assistant-new",
-    messages: initialMessages,
-    transport,
-    onFinish: () => {
-      router.refresh();
-    },
+  const chat = useHaiChat({
+    chatId: initialId ?? "assistant-new",
+    conversationId: initialId,
+    initialMessages,
+    onConversationCreated: (id) => window.history.replaceState(null, "", `/assistant?c=${id}`),
+    onFinish: () => router.refresh(),
   });
-  useHaiToolNavigation(messages);
-
-  const busy = status === "submitted" || status === "streaming";
+  const { messages, busy, error, conversationId } = chat;
+  useHaiToolNavigation(messages, settled);
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const text = input.trim();
-    if (!text || busy) return;
+    if (!input.trim() || busy) return;
+    chat.send(input);
     setInput("");
-    void sendMessage(
-      { text },
-      {
-        body: {
-          conversationId,
-          pageContext: { pathname, search: window.location.search },
-        },
-      },
-    );
   }
 
   async function onDelete(id: string) {
+    setDeleteError("");
     setPendingDelete(id);
-    const res = await deleteConversationAction({ conversationId: id });
+    let ok = false;
+    try {
+      ok = (await deleteConversationAction({ conversationId: id })).ok;
+    } catch {
+      ok = false;
+    }
     setPendingDelete(null);
-    if (!res.ok) return;
+    if (!ok) {
+      // Keep the confirmation open and say so: silently doing nothing looked like success.
+      setDeleteError("The conversation could not be deleted. Please try again.");
+      return;
+    }
+    setConfirmDelete(null);
     if (id === conversationId || id === initialId) {
       router.push("/assistant");
     } else {
@@ -147,10 +126,32 @@ export function AssistantChat({
     }
   }
 
+  async function onRename(e: FormEvent) {
+    e.preventDefault();
+    const id = conversationId;
+    if (!id || renameDraft === null) return;
+    setRenaming(true);
+    setRenameError("");
+    try {
+      const result = await renameConversationAction({ conversationId: id, title: renameDraft });
+      if (!result.ok) {
+        setRenameError(result.error);
+        return;
+      }
+      setTitle(result.title);
+      setRenameDraft(null);
+      router.refresh();
+    } catch {
+      setRenameError("The conversation could not be renamed. Please try again.");
+    } finally {
+      setRenaming(false);
+    }
+  }
+
   async function toggleWrite(next: boolean): Promise<void> {
     // Write-tools need a persisted conversation (created on first send). Before that,
     // the toggle is disabled in the UI; this guard is defense-in-depth.
-    const id = conversationId ?? initialId;
+    const id = conversationId;
     if (!id) return;
     setWriteToggling(true);
     setWriteEnabled(next); // optimistic
@@ -164,9 +165,10 @@ export function AssistantChat({
     }
   }
 
-  const activeId = conversationId ?? initialId;
+  const activeId = conversationId;
   const hasMessages = messages.length > 0;
   const canToggleWrite = Boolean(activeId); // needs a persisted conversation
+  const displayTitle = title ?? initialConversations.find((c) => c.id === activeId)?.title ?? null;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -187,6 +189,7 @@ export function AssistantChat({
           ) : (
             initialConversations.map((c) => {
               const isActive = c.id === activeId;
+              const label = isActive && displayTitle ? displayTitle : c.title;
               return (
                 <div
                   key={c.id as string}
@@ -202,14 +205,17 @@ export function AssistantChat({
                     className="flex-1 truncate"
                     aria-current={isActive ? "page" : undefined}
                   >
-                    {c.title}
+                    {label}
                   </Link>
                   <button
                     type="button"
-                    onClick={() => void onDelete(c.id as string)}
+                    onClick={() => {
+                      setDeleteError("");
+                      setConfirmDelete({ id: c.id as string, title: label });
+                    }}
                     disabled={pendingDelete === (c.id as string)}
-                    aria-label={`Delete conversation ${c.title}`}
-                    className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-rose-600 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50 max-lg:size-11 max-lg:p-0 max-lg:opacity-100"
+                    aria-label={`Delete conversation ${label}`}
+                    className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50 max-lg:size-11 max-lg:p-0 max-lg:opacity-100"
                   >
                     <Trash2 className="size-3.5" aria-hidden />
                   </button>
@@ -224,37 +230,62 @@ export function AssistantChat({
       <section className="order-1 flex min-h-[60vh] flex-col lg:order-2">
         <Card className="flex min-h-[60vh] flex-1 flex-col">
           <header className="flex items-center gap-2 border-b px-4 py-3">
-            <Bot className="size-5 text-primary" aria-hidden />
-            <h1 className="text-sm font-semibold">{brand.assistantName} assistant</h1>
-            <div className="ml-auto flex items-center gap-1.5">
+            <Bot className="size-5 shrink-0 text-primary" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm font-semibold">{brand.assistantName} assistant</h1>
+              {activeId && displayTitle ? (
+                <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                  <span className="truncate">{displayTitle}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRenameError("");
+                      setRenameDraft(displayTitle);
+                    }}
+                    disabled={busy}
+                    aria-label="Rename conversation"
+                    title="Rename conversation"
+                    className="grid shrink-0 place-items-center rounded p-1 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50 max-md:size-11"
+                  >
+                    <Pencil className="size-3" aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 role="switch"
                 aria-checked={writeEnabled}
                 disabled={!canToggleWrite || writeToggling || busy}
-                onClick={() => void toggleWrite(!writeEnabled)}
+                onClick={() => {
+                  // Turning write tools on is a deliberate step, so it asks first; turning
+                  // them off never needs a second thought.
+                  if (writeEnabled) void toggleWrite(false);
+                  else setConfirmWrite(true);
+                }}
                 title={
                   canToggleWrite
                     ? writeEnabled
-                      ? "Write tools on - assistant will ask before creating anything"
-                      : "Allow the assistant to create customers, invoices, quotes, transactions"
+                      ? "Write tools on - every change waits for your approval"
+                      : "Allow the assistant to propose changes in this conversation"
                     : "Send a message first to enable write tools"
                 }
                 className={cn(
                   "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-10 max-md:px-3 max-md:py-2 max-md:text-sm",
                   writeEnabled
-                    ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                    ? "border-warning/50 bg-warning/10 text-foreground"
                     : "border-border text-muted-foreground hover:bg-muted/40",
                 )}
               >
-                <Zap className="size-3.5" aria-hidden />
+                <Zap className={cn("size-3.5", writeEnabled && "text-warning")} aria-hidden />
                 <span>{writeEnabled ? "Write tools on" : "Write tools off"}</span>
               </button>
             </div>
           </header>
 
-          {/* Messages */}
-          <div className="flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
+          {/* Messages. Only the status line is announced, not every streamed token. */}
+          <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {!hasMessages ? (
               <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
                 <Bot className="size-10 text-muted-foreground" aria-hidden />
@@ -269,17 +300,7 @@ export function AssistantChat({
                     <button
                       key={p}
                       type="button"
-                      onClick={() =>
-                        void sendMessage(
-                          { text: p },
-                          {
-                            body: {
-                              conversationId,
-                              pageContext: { pathname, search: window.location.search },
-                            },
-                          },
-                        )
-                      }
+                      onClick={() => chat.send(p)}
                       disabled={busy}
                       className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50 max-md:min-h-11 max-md:px-4 max-md:py-2 max-md:text-sm"
                     >
@@ -289,49 +310,28 @@ export function AssistantChat({
                 </div>
               </div>
             ) : (
-              messages.map((m) => {
-                const text = messageText(m);
-                const isUser = m.role === "user";
-                return (
-                  <div key={m.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-                    <div
-                      className={cn(
-                        "max-w-[85%] space-y-2 text-sm",
-                        isUser &&
-                          "whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-primary-foreground",
-                      )}
-                    >
-                      {isUser
-                        ? text
-                        : m.parts.map((part, index) => {
-                            if (part.type === "text" && part.text) {
-                              return (
-                                <div
-                                  key={`${m.id}-text-${index}`}
-                                  className="whitespace-pre-wrap rounded-lg bg-muted px-3 py-2 text-foreground"
-                                >
-                                  {part.text}
-                                </div>
-                              );
-                            }
-                            if (isToolUIPart(part)) {
-                              return <HaiToolPart key={part.toolCallId} part={part} />;
-                            }
-                            return null;
-                          })}
-                      {!isUser && !text && busy && !m.parts.some(isToolUIPart) ? (
-                        <div className="rounded-lg bg-muted px-3 py-2 text-foreground">…</div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })
+              messages.map((m, index) => (
+                <HaiMessage
+                  key={m.id}
+                  message={m}
+                  busy={busy}
+                  isLatest={index === messages.length - 1}
+                  onDecide={chat.decide}
+                  onRegenerate={chat.regenerate}
+                  className="max-w-[85%]"
+                />
+              ))
             )}
             {error ? (
-              <p className="text-center text-xs text-rose-600" role="alert">
-                {error.message || "Something went wrong. Please try again."}
-              </p>
+              <HaiChatError
+                error={error}
+                fallback="Something went wrong. Please try again."
+                onRetry={hasMessages ? chat.retry : undefined}
+              />
             ) : null}
+            <p className="sr-only" aria-live="polite">
+              {busy ? `${brand.assistantName} is answering…` : ""}
+            </p>
           </div>
 
           {/* Input */}
@@ -347,6 +347,7 @@ export function AssistantChat({
               }}
               placeholder={`Ask ${brand.assistantName} about this page or your business…`}
               rows={1}
+              maxLength={4000}
               disabled={busy}
               aria-label="Message"
               className="max-h-32 min-h-11 flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary disabled:opacity-50"
@@ -356,7 +357,7 @@ export function AssistantChat({
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => stop()}
+                onClick={() => void chat.stop()}
                 aria-label="Stop"
               >
                 <Square className="size-4" aria-hidden />
@@ -369,14 +370,13 @@ export function AssistantChat({
           </form>
         </Card>
         <p className="mt-2 px-1 text-xs text-muted-foreground">
-          The assistant uses read-only access to your workspace data. Verify important figures in
-          the relevant module.{" "}
           {writeEnabled
-            ? "Write tools are on - the assistant will ask for confirmation before creating anything. "
-            : ""}
+            ? "Write tools are on: the assistant can propose creating, changing, sending and deleting records in this conversation. Nothing changes until you approve it, and everything it does is recorded in the audit log. "
+            : "The assistant can look things up and prepare unsaved drafts, but cannot change your records in this conversation. "}
+          Verify important figures in the relevant module.{" "}
           {activeConversation ? (
             <>
-              Started{" "}
+              Last active{" "}
               <time dateTime={activeConversation.updatedAt.toISOString()} suppressHydrationWarning>
                 {formatDate(activeConversation.updatedAt)}
               </time>
@@ -387,6 +387,119 @@ export function AssistantChat({
           )}
         </p>
       </section>
+
+      <Dialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && pendingDelete === null) setConfirmDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this conversation?</DialogTitle>
+            <DialogDescription>
+              {confirmDelete ? `"${confirmDelete.title}" and its messages` : "This conversation"}{" "}
+              will be permanently deleted. Records the assistant created or changed are not
+              affected.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {deleteError}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDelete(null)}
+              disabled={pendingDelete !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmDelete && void onDelete(confirmDelete.id)}
+              disabled={pendingDelete !== null}
+            >
+              {pendingDelete !== null ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={renameDraft !== null}
+        onOpenChange={(open) => {
+          if (!open && !renaming) setRenameDraft(null);
+        }}
+      >
+        <DialogContent>
+          <form onSubmit={(e) => void onRename(e)} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Rename conversation</DialogTitle>
+              <DialogDescription>Only you see this name.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="conversation-title">Name</Label>
+              <Input
+                id="conversation-title"
+                value={renameDraft ?? ""}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                maxLength={80}
+                autoFocus
+                aria-invalid={renameError ? true : undefined}
+                aria-describedby={renameError ? "conversation-title-error" : undefined}
+              />
+              {renameError ? (
+                <p id="conversation-title-error" className="text-sm text-destructive" role="alert">
+                  {renameError}
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRenameDraft(null)}
+                disabled={renaming}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={renaming || !renameDraft?.trim()}>
+                {renaming ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmWrite} onOpenChange={setConfirmWrite}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Turn on write tools for this conversation?</DialogTitle>
+            <DialogDescription>
+              The assistant will be able to propose creating, changing, sending, marking paid,
+              voiding and deleting records here, including emailing an invoice to a customer. Each
+              change is shown to you first with what it will do, and nothing is saved, sent or
+              deleted until you approve it. Every action is recorded in the audit log. You can
+              switch this off at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmWrite(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmWrite(false);
+                void toggleWrite(true);
+              }}
+            >
+              Turn on
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

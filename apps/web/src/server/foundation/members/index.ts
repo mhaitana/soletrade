@@ -112,7 +112,7 @@ export async function inviteMember(
     entityType: "member",
     entityId: row.id,
     // The token carries the accept link (the notifications platform builds
-    // `${origin}/invite?token=...` from it). The handler also resolves the
+    // `${origin}/invite/{token}` from it). The handler also resolves the
     // workspace name + inviter name from the DB for the email body.
     metadata: { email: email.toLowerCase(), role, token },
   });
@@ -340,7 +340,7 @@ export async function listPendingInvitations(workspaceId: WorkspaceId) {
   }));
 }
 
-/** A public invitation lookup by token (for the `/invite?token=...` accept page). Returns
+/** A public invitation lookup by token (for the `/invite/{token}` accept page). Returns
  *  the invitation + workspace name + inviter name, or `null` if the token doesn't match a
  *  pending, unexpired invitation. Does not leak whether the token exists vs is revoked vs
  *  expired - the page renders the same "not available" state for all. */

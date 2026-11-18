@@ -14,15 +14,15 @@ import type { ModuleKey } from "@/config/modules";
  */
 
 const listInvoicesMock = vi.fn();
-const summarizeInvoicesMock = vi.fn();
+const getInvoiceDashboardSummaryMock = vi.fn();
 const listQuotesMock = vi.fn();
-const summarizeQuotesMock = vi.fn();
+const getQuoteDashboardSummaryMock = vi.fn();
 const listTransactionsMock = vi.fn();
-const summarizeTransactionsMock = vi.fn();
+const getBookSummaryMock = vi.fn();
 const listEarningsMock = vi.fn();
 const listTripsMock = vi.fn();
 const listExpensesMock = vi.fn();
-const summarizeDriveMock = vi.fn();
+const getDriveSummaryMock = vi.fn();
 const listCustomersMock = vi.fn();
 const listActivityMock = vi.fn();
 // Write-tool mocks (Phase 11d).
@@ -53,10 +53,17 @@ const createEarningMock = vi.fn();
 const createTripMock = vi.fn();
 const createExpenseMock = vi.fn();
 const listVehiclesMock = vi.fn();
+// Receipt extraction mocks.
+const extractReceiptMock = vi.fn();
+const getExtractionMock = vi.fn();
+vi.mock("@/server/domains/books/receipt-extraction", () => ({
+  extractReceipt: (...a: unknown[]) => extractReceiptMock(...a),
+  getExtraction: (...a: unknown[]) => getExtractionMock(...a),
+}));
 
 vi.mock("@/server/domains/invoices/index", () => ({
   listInvoices: (...a: unknown[]) => listInvoicesMock(...a),
-  summarizeInvoices: (...a: unknown[]) => summarizeInvoicesMock(...a),
+  getInvoiceDashboardSummary: (...a: unknown[]) => getInvoiceDashboardSummaryMock(...a),
   createInvoice: (...a: unknown[]) => createInvoiceMock(...a),
   sendInvoice: (...a: unknown[]) => sendInvoiceMock(...a),
   voidInvoice: (...a: unknown[]) => voidInvoiceMock(...a),
@@ -65,13 +72,13 @@ vi.mock("@/server/domains/invoices/index", () => ({
 }));
 vi.mock("@/server/domains/quotes/index", () => ({
   listQuotes: (...a: unknown[]) => listQuotesMock(...a),
-  summarizeQuotes: (...a: unknown[]) => summarizeQuotesMock(...a),
+  getQuoteDashboardSummary: (...a: unknown[]) => getQuoteDashboardSummaryMock(...a),
   createQuote: (...a: unknown[]) => createQuoteMock(...a),
   getQuote: (...a: unknown[]) => getQuoteMock(...a),
 }));
 vi.mock("@/server/domains/books/index", () => ({
   listTransactions: (...a: unknown[]) => listTransactionsMock(...a),
-  summarizeTransactions: (...a: unknown[]) => summarizeTransactionsMock(...a),
+  getBookSummary: (...a: unknown[]) => getBookSummaryMock(...a),
   createTransaction: (...a: unknown[]) => createTransactionMock(...a),
   updateTransaction: (...a: unknown[]) => updateTransactionMock(...a),
   deleteTransaction: (...a: unknown[]) => deleteTransactionMock(...a),
@@ -80,7 +87,7 @@ vi.mock("@/server/domains/drive/index", () => ({
   listEarnings: (...a: unknown[]) => listEarningsMock(...a),
   listTrips: (...a: unknown[]) => listTripsMock(...a),
   listExpenses: (...a: unknown[]) => listExpensesMock(...a),
-  summarizeDrive: (...a: unknown[]) => summarizeDriveMock(...a),
+  getDriveSummary: (...a: unknown[]) => getDriveSummaryMock(...a),
   createEarning: (...a: unknown[]) => createEarningMock(...a),
   createTrip: (...a: unknown[]) => createTripMock(...a),
   createExpense: (...a: unknown[]) => createExpenseMock(...a),
@@ -128,7 +135,18 @@ async function run(
 beforeEach(() => {
   vi.clearAllMocks();
   getWorkspaceMock.mockResolvedValue({ defaultCurrency: "AUD" });
+  // Number lookups after a create default to "nothing found" (number: null) unless a test says otherwise.
+  getInvoiceMock.mockResolvedValue(null);
+  getQuoteMock.mockResolvedValue(null);
+  writeAuditMock.mockResolvedValue(undefined);
 });
+
+/** The `assistant.action` audit rows written during a test (excludes service-level rows). */
+function assistantActionAudits(): Record<string, unknown>[] {
+  return writeAuditMock.mock.calls
+    .map((call) => call[0] as Record<string, unknown>)
+    .filter((row) => row.action === "assistant.action");
+}
 
 describe("buildAssistantTools - gating", () => {
   it("publishes openForm as a plain object while retaining strict validation", async () => {
@@ -311,15 +329,19 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     const { buildAssistantTools } = await import("@/server/application/assistant/tools");
     const c = ctx("readonly");
     const tools = buildAssistantTools(c, ALL_MODULES);
-    const out = (await run(tools.listInvoices, { status: "overdue", limit: 5 })) as Record<
-      string,
-      unknown
-    >[];
-    expect(out).toHaveLength(1);
-    const row = out[0]!;
+    const out = (await run(tools.listInvoices, { status: "overdue", limit: 5 })) as {
+      items: Record<string, unknown>[];
+      returned: number;
+      hasMore: boolean;
+      href: string;
+    };
+    expect(out).toMatchObject({ returned: 1, hasMore: false, href: "/invoices" });
+    expect(out.items).toHaveLength(1);
+    const row = out.items[0]!;
     // Trimmed shape - scoped id but no workspaceId/notes; money as integer cents; dates as ISO.
     expect(row).toMatchObject({
       id: "secret-id",
+      href: "/invoices/secret-id",
       number: "INV-001",
       status: "overdue",
       totalCents: 12500,
@@ -331,9 +353,10 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     expect(row).not.toHaveProperty("workspaceId");
     expect(row).not.toHaveProperty("notes");
     // The service was called with the ctx workspaceId, never a client-supplied one.
+    // One extra row is requested to detect `hasMore`.
     expect(listInvoicesMock).toHaveBeenCalledWith(c.workspaceId, {
       status: "overdue",
-      limit: 5,
+      limit: 6,
     });
   });
 
@@ -344,8 +367,94 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     await run(tools.listInvoices, { limit: 99999 });
     expect(listInvoicesMock).toHaveBeenCalledWith(expect.anything(), {
       status: undefined,
-      limit: 200, // max is 200.
+      limit: 101, // max is 100, plus one row to detect hasMore.
     });
+  });
+
+  it("list tools report hasMore and drop the extra probe row when the service returns limit + 1 rows", async () => {
+    const rows = Array.from({ length: 4 }, (_, i) => ({
+      id: `inv-${i}`,
+      number: `INV-00${i}`,
+      status: "sent",
+      totalCents: 100,
+      currency: "AUD",
+      issueDate: new Date("2026-01-15T00:00:00.000Z"),
+      paidAt: null,
+      customerName: null,
+    }));
+    listInvoicesMock.mockResolvedValue(rows);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    const out = (await run(tools.listInvoices, { limit: 3 })) as {
+      items: { id: string }[];
+      returned: number;
+      hasMore: boolean;
+    };
+    expect(listInvoicesMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ limit: 4 }),
+    );
+    expect(out.hasMore).toBe(true);
+    expect(out.returned).toBe(3);
+    expect(out.items.map((r) => r.id)).toEqual(["inv-0", "inv-1", "inv-2"]);
+  });
+
+  it("list tools report hasMore: false when the service returns fewer rows than limit + 1", async () => {
+    listInvoicesMock.mockResolvedValue([
+      { id: "inv-0", number: "INV-000", status: "sent", issueDate: new Date(), paidAt: null },
+      { id: "inv-1", number: "INV-001", status: "sent", issueDate: new Date(), paidAt: null },
+    ]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    const out = (await run(tools.listInvoices, { limit: 3 })) as {
+      items: unknown[];
+      returned: number;
+      hasMore: boolean;
+    };
+    expect(out).toMatchObject({ returned: 2, hasMore: false });
+    expect(out.items).toHaveLength(2);
+  });
+
+  it("every list tool returns { items, returned, hasMore, href } and probes with limit + 1", async () => {
+    const date = new Date("2026-07-06T00:00:00.000Z");
+    const row = { id: "r1", date, issueDate: date, paidAt: null };
+    for (const mock of [
+      listInvoicesMock,
+      listQuotesMock,
+      listTransactionsMock,
+      listEarningsMock,
+      listTripsMock,
+      listExpensesMock,
+      listCustomersMock,
+    ]) {
+      mock.mockResolvedValue([row]);
+    }
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES);
+    const cases: [string, ReturnType<typeof vi.fn>, string, string | undefined][] = [
+      ["listInvoices", listInvoicesMock, "/invoices", "/invoices/r1"],
+      ["listQuotes", listQuotesMock, "/quotes", "/quotes/r1"],
+      ["listTransactions", listTransactionsMock, "/books", "/books/r1"],
+      ["listDriveEarnings", listEarningsMock, "/drive", undefined],
+      ["listDriveTrips", listTripsMock, "/drive", undefined],
+      ["listDriveExpenses", listExpensesMock, "/drive/expenses", undefined],
+      ["listCustomers", listCustomersMock, "/customers", "/customers/r1"],
+    ];
+    for (const [name, mock, listHref, rowHref] of cases) {
+      const out = (await run(tools[name])) as {
+        items: Record<string, unknown>[];
+        returned: number;
+        hasMore: boolean;
+        href: string;
+      };
+      expect(out, name).toMatchObject({ returned: 1, hasMore: false, href: listHref });
+      expect(out.items[0]?.href, name).toBe(rowHref);
+      // Default limit is 20, so the service is asked for 21.
+      expect(mock, name).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ limit: 21 }),
+      );
+    }
   });
 
   it("listCustomers returns id + trimmed rows (no workspaceId/notes/createdAt)", async () => {
@@ -363,10 +472,16 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     ]);
     const { buildAssistantTools } = await import("@/server/application/assistant/tools");
     const tools = buildAssistantTools(ctx("readonly"), []);
-    const out = (await run(tools.listCustomers, { search: "jane" })) as Record<string, unknown>[];
+    const result = (await run(tools.listCustomers, { search: "jane" })) as {
+      items: Record<string, unknown>[];
+      href: string;
+    };
+    const out = result.items;
+    expect(result.href).toBe("/customers");
     // id is returned so the model can call updateCustomer / attach to invoices.
     expect(out[0]).toMatchObject({
       id: "cust-1",
+      href: "/customers/cust-1",
       name: "Jane Co",
       email: "jane@example.com",
       company: "Jane Co Pty",
@@ -378,23 +493,15 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
   });
 
   it("getWorkspaceOverview returns null KPIs for uninstalled/unauthorized modules and real values for installed ones", async () => {
-    listTransactionsMock.mockResolvedValue([
-      { type: "income", amountCents: 10000, date: new Date(), category: "sales" },
-    ]);
-    summarizeTransactionsMock.mockReturnValue({
+    getBookSummaryMock.mockResolvedValue({
       incomeCents: 10000,
       expenseCents: 2500,
       netCents: 7500,
     });
-    listInvoicesMock.mockResolvedValue([]);
-    summarizeInvoicesMock.mockReturnValue({
+    getInvoiceDashboardSummaryMock.mockResolvedValue({
       outstandingCents: 5000,
       overdueCount: 2,
-      draftCount: 0,
       paidCents: 3000,
-      paidCount: 1,
-      sentCount: 0,
-      monthly: [],
     });
     listActivityMock.mockResolvedValue({
       items: [
@@ -416,7 +523,8 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
 
     const { buildAssistantTools } = await import("@/server/application/assistant/tools");
     // Only books + invoices installed; quotes + drive absent → their KPIs must be null.
-    const tools = buildAssistantTools(ctx("readonly"), ["invoices", "books"]);
+    const c = ctx("readonly");
+    const tools = buildAssistantTools(c, ["invoices", "books"]);
     const overview = (await run(tools.getWorkspaceOverview)) as {
       installedModules: string[];
       currency: string;
@@ -436,6 +544,42 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
     expect(overview.recentActivity).toHaveLength(1);
     expect(overview.recentActivity![0]!.type).toBe("invoice.sent");
     expect(overview.recentActivity![0]!.createdAt).toBe("2026-01-02T00:00:00.000Z");
+    // SQL-backed summaries are scoped to the ctx workspace; uninstalled modules are not queried.
+    expect(getBookSummaryMock).toHaveBeenCalledWith(c.workspaceId, {
+      dateFrom: expect.any(Date),
+      dateTo: expect.any(Date),
+    });
+    expect(getInvoiceDashboardSummaryMock).toHaveBeenCalledWith(
+      c.workspaceId,
+      expect.anything(),
+      null,
+    );
+    expect(getQuoteDashboardSummaryMock).not.toHaveBeenCalled();
+    expect(getDriveSummaryMock).not.toHaveBeenCalled();
+    // The overview no longer fetches rows and summarises them in JS.
+    expect(listInvoicesMock).not.toHaveBeenCalled();
+    expect(listQuotesMock).not.toHaveBeenCalled();
+    expect(listTransactionsMock).not.toHaveBeenCalled();
+    expect(listEarningsMock).not.toHaveBeenCalled();
+  });
+
+  it("getWorkspaceOverview reads quotes and drive summaries when those modules are installed", async () => {
+    getQuoteDashboardSummaryMock.mockResolvedValue({ acceptedValueCents: 4200 });
+    getDriveSummaryMock.mockResolvedValue({ totalEarningsCents: 900 });
+    listActivityMock.mockResolvedValue({ items: [], nextCursor: null });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ["quotes", "drive"]);
+    const overview = (await run(tools.getWorkspaceOverview)) as {
+      kpis: Record<string, number | null>;
+    };
+    expect(overview.kpis.pendingQuotesCents).toBe(4200);
+    expect(overview.kpis.incomeCents).toBe(900);
+    expect(overview.kpis.cashCents).toBeNull();
+    expect(overview.kpis.outstandingCents).toBeNull();
+    expect(getBookSummaryMock).not.toHaveBeenCalled();
+    expect(getInvoiceDashboardSummaryMock).not.toHaveBeenCalled();
+    expect(listQuotesMock).not.toHaveBeenCalled();
+    expect(listEarningsMock).not.toHaveBeenCalled();
   });
 
   it("getWorkspaceOverview reports the workspace currency", async () => {
@@ -599,8 +743,9 @@ describe("buildAssistantTools - write tools", () => {
     expect(tools.createExpense).toBeUndefined();
   });
 
-  it("createInvoice execute calls the service with the ctx workspaceId + actorId and returns a trimmed id", async () => {
+  it("createInvoice execute calls the service with the ctx workspaceId + actorId and returns a trimmed id plus number, href and label", async () => {
     createInvoiceMock.mockResolvedValue("inv-new-id");
+    getInvoiceMock.mockResolvedValue({ id: "inv-new-id", number: "INV-2026-0009" });
     const { buildAssistantTools } = await import("@/server/application/assistant/tools");
     const c = ctx("owner");
     const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
@@ -609,7 +754,12 @@ describe("buildAssistantTools - write tools", () => {
       taxRate: 10,
       lineItems: [{ description: "Consulting", quantity: 10, unitPriceCents: 5000 }],
     })) as { id: string };
-    expect(out).toEqual({ id: "inv-new-id" });
+    expect(out).toEqual({
+      id: "inv-new-id",
+      number: "INV-2026-0009",
+      href: "/invoices/inv-new-id",
+      recordLabel: "INV-2026-0009",
+    });
     expect(createInvoiceMock).toHaveBeenCalledTimes(1);
     const [wsId, input, actorId] = createInvoiceMock.mock.calls[0]!;
     expect(wsId).toBe(c.workspaceId);
@@ -637,7 +787,7 @@ describe("buildAssistantTools - write tools", () => {
       taxRate: 0,
       lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
     })) as { id: string };
-    expect(out).toEqual({ id: "inv-new-id" });
+    expect(out).toMatchObject({ id: "inv-new-id", number: null, href: "/invoices/inv-new-id" });
     expect(getCustomerByEmailMock).toHaveBeenCalledWith(c.workspaceId, "amos@miruku.com");
     expect(createInvoiceMock).toHaveBeenCalledTimes(1);
     const [, input] = createInvoiceMock.mock.calls[0]!;
@@ -689,7 +839,7 @@ describe("buildAssistantTools - write tools", () => {
       taxRate: 0,
       lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
     })) as { id: string };
-    expect(out).toEqual({ id: "quo-new-id" });
+    expect(out).toEqual({ id: "quo-new-id", number: null, href: "/quotes/quo-new-id" });
     expect(getCustomerByEmailMock).toHaveBeenCalledWith(c.workspaceId, "amos@miruku.com");
     const [, input] = createQuoteMock.mock.calls[0]!;
     expect(input).toMatchObject({ customerId: "cust-amos" });
@@ -706,10 +856,16 @@ describe("buildAssistantTools - write tools", () => {
       id: string;
       name: string;
     };
-    expect(out).toEqual({ id: "cust-new-id", name: "Acme Pty" });
+    expect(out).toEqual({
+      id: "cust-new-id",
+      name: "Acme Pty",
+      href: "/customers/cust-new-id",
+      recordLabel: "Acme Pty",
+    });
     expect(createCustomerMock).toHaveBeenCalledWith(c.workspaceId, { name: "Acme Pty" }, c.user.id);
-    // The tool audits the AI-created customer (the service is event-only).
-    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+    // The tool audits the AI-created customer (the service is event-only), then the wrapper
+    // adds one assistant.action row.
+    expect(writeAuditMock).toHaveBeenCalledTimes(2);
     const audit = writeAuditMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(audit).toMatchObject({
       workspaceId: c.workspaceId,
@@ -719,9 +875,19 @@ describe("buildAssistantTools - write tools", () => {
       targetId: "cust-new-id",
     });
     expect(audit.metadata).toMatchObject({ source: "ai_assistant", name: "Acme Pty" });
+    expect(assistantActionAudits()).toEqual([
+      {
+        workspaceId: c.workspaceId,
+        actorUserId: c.user.id,
+        action: "assistant.action",
+        targetType: "customer",
+        targetId: "cust-new-id",
+        metadata: { source: "ai_assistant", tool: "createCustomer", label: "Acme Pty" },
+      },
+    ]);
   });
 
-  it("createCustomer returns the existing customer on a duplicate-email collision (no create, no audit)", async () => {
+  it("createCustomer returns the existing customer on a duplicate-email collision (no create, no audit, no assistant.action)", async () => {
     // The service throws the partial-unique-index violation; the tool recovers by
     // returning the existing customer with `existed: true` so the model can say
     // "already exists - using them" and continue, instead of a raw Postgres error.
@@ -739,7 +905,13 @@ describe("buildAssistantTools - write tools", () => {
       name: string;
       existed: boolean;
     };
-    expect(out).toEqual({ id: "cust-existing-id", name: "Acme Pty", existed: true });
+    expect(out).toEqual({
+      id: "cust-existing-id",
+      name: "Acme Pty",
+      existed: true,
+      href: "/customers/cust-existing-id",
+      recordLabel: "Acme Pty",
+    });
     expect(getCustomerByEmailMock).toHaveBeenCalledWith(c.workspaceId, "acme@x.test");
     // Nothing was created → no audit, no second createCustomer call beyond the first.
     expect(createCustomerMock).toHaveBeenCalledTimes(1);
@@ -767,7 +939,11 @@ describe("buildAssistantTools - write tools", () => {
       customerId: "00000000-0000-4000-8000-0000000000d1",
       phone: "+642742709347",
     })) as { id: string; updated: boolean };
-    expect(out).toEqual({ id: "00000000-0000-4000-8000-0000000000d1", updated: true });
+    expect(out).toEqual({
+      id: "00000000-0000-4000-8000-0000000000d1",
+      updated: true,
+      href: "/customers/00000000-0000-4000-8000-0000000000d1",
+    });
     // The service receives the patch WITHOUT customerId, with the ctx workspaceId + actor.
     expect(updateCustomerMock).toHaveBeenCalledTimes(1);
     const [wsId, custId, patch, actorId] = updateCustomerMock.mock.calls[0]!;
@@ -777,7 +953,8 @@ describe("buildAssistantTools - write tools", () => {
     expect(patch).toEqual({ phone: "+642742709347" });
     expect(patch).not.toHaveProperty("customerId");
     // Audited as customer.update with the changed fields.
-    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+    // customer.update first, then the wrapper's assistant.action row.
+    expect(writeAuditMock).toHaveBeenCalledTimes(2);
     const audit = writeAuditMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(audit).toMatchObject({
       workspaceId: c.workspaceId,
@@ -787,6 +964,12 @@ describe("buildAssistantTools - write tools", () => {
       targetId: "00000000-0000-4000-8000-0000000000d1",
     });
     expect(audit.metadata).toMatchObject({ source: "ai_assistant", fields: ["phone"] });
+    expect(assistantActionAudits()).toHaveLength(1);
+    expect(assistantActionAudits()[0]).toMatchObject({
+      targetType: "customer",
+      targetId: "00000000-0000-4000-8000-0000000000d1",
+      metadata: { source: "ai_assistant", tool: "updateCustomer" },
+    });
   });
 
   it("updateCustomer returns a friendly error when the customer isn't found", async () => {
@@ -842,7 +1025,7 @@ describe("buildAssistantTools - write tools", () => {
       description: "Office supplies",
       category: "supplies",
     })) as { id: string };
-    expect(out).toEqual({ id: "txn-new-id" });
+    expect(out).toEqual({ id: "txn-new-id", href: "/books/txn-new-id" });
     const [, input, actorId] = createTransactionMock.mock.calls[0]!;
     expect(input).toMatchObject({
       type: "expense",
@@ -887,7 +1070,7 @@ describe("buildAssistantTools - write tools", () => {
       category: "services",
       customerEmail: "amos@miruku.com",
     })) as { id: string };
-    expect(out).toEqual({ id: "txn-new-id" });
+    expect(out).toEqual({ id: "txn-new-id", href: "/books/txn-new-id" });
     const [, input] = createTransactionMock.mock.calls[0]!;
     expect(input).toMatchObject({ customerId: "cust-amos" });
     expect(input).not.toHaveProperty("customerEmail");
@@ -930,7 +1113,7 @@ describe("buildAssistantTools - write tools", () => {
     expect(listInvoicesMock).toHaveBeenCalledWith(c.workspaceId, {
       status: undefined,
       search: "INV-2026-0007",
-      limit: 20,
+      limit: 21,
     });
   });
 
@@ -950,18 +1133,18 @@ describe("buildAssistantTools - write tools", () => {
     const { buildAssistantTools } = await import("@/server/application/assistant/tools");
     const c = ctx("readonly");
     const tools = buildAssistantTools(c, ALL_MODULES);
-    const out = (await run(tools.listTransactions, { search: "fuel" })) as Record<
-      string,
-      unknown
-    >[];
+    const result = (await run(tools.listTransactions, { search: "fuel" })) as {
+      items: Record<string, unknown>[];
+    };
+    const out = result.items;
     expect(listTransactionsMock).toHaveBeenCalledWith(c.workspaceId, {
       type: undefined,
       search: "fuel",
       dateFrom: undefined,
       dateTo: undefined,
-      limit: 20,
+      limit: 21,
     });
-    expect(out[0]).toMatchObject({ id: "txn-1", category: "travel" });
+    expect(out[0]).toMatchObject({ id: "txn-1", href: "/books/txn-1", category: "travel" });
   });
 
   // ── Drive write tools ────────────────────────────────────────────────────────
@@ -977,7 +1160,7 @@ describe("buildAssistantTools - write tools", () => {
       date: "2026-07-06T00:00:00.000Z",
       description: "Evening shift",
     })) as { id: string };
-    expect(out).toEqual({ id: "earn-new-id" });
+    expect(out).toEqual({ id: "earn-new-id", href: "/drive" });
     const [wsId, input, actorId] = createEarningMock.mock.calls[0]!;
     expect(wsId).toBe(c.workspaceId);
     expect(actorId).toBe(c.user.id);
@@ -1010,7 +1193,7 @@ describe("buildAssistantTools - write tools", () => {
       distanceKm: 45.3,
       date: "2026-07-06T00:00:00.000Z",
     })) as { id: string };
-    expect(out).toEqual({ id: "trip-new-id" });
+    expect(out).toEqual({ id: "trip-new-id", href: "/drive" });
     const [, input] = createTripMock.mock.calls[0]!;
     // 45.3 km → 45300 meters (rounded).
     expect(input).toMatchObject({ platform: "doordash", distanceMeters: 45300 });
@@ -1032,7 +1215,7 @@ describe("buildAssistantTools - write tools", () => {
       date: "2026-07-06T00:00:00.000Z",
       description: "Fill up",
     })) as { id: string };
-    expect(out).toEqual({ id: "exp-new-id" });
+    expect(out).toEqual({ id: "exp-new-id", href: "/drive/expenses" });
     const [, input] = createExpenseMock.mock.calls[0]!;
     expect(input).toMatchObject({ vehicleId: "veh-hilux", type: "fuel", amountCents: 6000 });
   });
@@ -1064,7 +1247,11 @@ describe("buildAssistantTools - write tools", () => {
       transactionId: "00000000-0000-4000-8000-0000000000e1",
       category: "travel",
     })) as { id: string; updated: boolean };
-    expect(out).toEqual({ id: "00000000-0000-4000-8000-0000000000e1", updated: true });
+    expect(out).toEqual({
+      id: "00000000-0000-4000-8000-0000000000e1",
+      updated: true,
+      href: "/books/00000000-0000-4000-8000-0000000000e1",
+    });
     const [wsId, txId, patch, actorId] = updateTransactionMock.mock.calls[0]!;
     expect(wsId).toBe(c.workspaceId);
     expect(actorId).toBe(c.user.id);
@@ -1116,7 +1303,11 @@ describe("buildAssistantTools - write tools", () => {
     const out = (await run(tools.deleteTransaction, {
       transactionId: "00000000-0000-4000-8000-0000000000e5",
     })) as { id: string; deleted: boolean };
-    expect(out).toEqual({ id: "00000000-0000-4000-8000-0000000000e5", deleted: true });
+    expect(out).toEqual({
+      id: "00000000-0000-4000-8000-0000000000e5",
+      deleted: true,
+      href: "/books",
+    });
     expect(deleteTransactionMock).toHaveBeenCalledWith(c.workspaceId, expect.anything(), c.user.id);
   });
 
@@ -1143,7 +1334,13 @@ describe("buildAssistantTools - write tools", () => {
       sent: boolean;
       number: string;
     };
-    expect(out).toEqual({ sent: true, number: "INV-2026-0007" });
+    expect(out).toEqual({
+      id: "inv-7",
+      sent: true,
+      number: "INV-2026-0007",
+      href: "/invoices/inv-7",
+      recordLabel: "INV-2026-0007",
+    });
     expect(sendInvoiceMock).toHaveBeenCalledWith(c.workspaceId, "inv-7", c.user.id);
   });
 
@@ -1178,7 +1375,13 @@ describe("buildAssistantTools - write tools", () => {
       voided: boolean;
       number: string;
     };
-    expect(out).toEqual({ voided: true, number: "INV-2026-0007" });
+    expect(out).toEqual({
+      id: "inv-7",
+      voided: true,
+      number: "INV-2026-0007",
+      href: "/invoices/inv-7",
+      recordLabel: "INV-2026-0007",
+    });
     expect(voidInvoiceMock).toHaveBeenCalledWith(c.workspaceId, "inv-7", c.user.id);
   });
 
@@ -1192,7 +1395,13 @@ describe("buildAssistantTools - write tools", () => {
       paid: boolean;
       number: string;
     };
-    expect(out).toEqual({ paid: true, number: "INV-2026-0007" });
+    expect(out).toEqual({
+      id: "inv-7",
+      paid: true,
+      number: "INV-2026-0007",
+      href: "/invoices/inv-7",
+      recordLabel: "INV-2026-0007",
+    });
     expect(markInvoicePaidMock).toHaveBeenCalledWith(c.workspaceId, "inv-7", c.user.id);
   });
 
@@ -1223,7 +1432,12 @@ describe("buildAssistantTools - write tools", () => {
       invoiceId: string;
       invoiceNumber: string;
     };
-    expect(out).toEqual({ invoiceId: "inv-new-id", invoiceNumber: "INV-2026-0008" });
+    expect(out).toEqual({
+      invoiceId: "inv-new-id",
+      invoiceNumber: "INV-2026-0008",
+      href: "/invoices/inv-new-id",
+      recordLabel: "INV-2026-0008",
+    });
     expect(convertQuoteAtomicMock).toHaveBeenCalledWith(c, "quo-3");
     expect(createInvoiceMock).not.toHaveBeenCalled();
   });
@@ -1242,14 +1456,14 @@ describe("buildAssistantTools - write tools", () => {
     const { buildAssistantTools } = await import("@/server/application/assistant/tools");
     const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
     const input = { quoteNumber: "QUO-2026-0003" };
-    expect(await run(tools.convertQuoteToInvoice, input)).toEqual({
+    const expected = {
       invoiceId: "inv-original",
       invoiceNumber: "INV-2026-0008",
-    });
-    expect(await run(tools.convertQuoteToInvoice, input)).toEqual({
-      invoiceId: "inv-original",
-      invoiceNumber: "INV-2026-0008",
-    });
+      href: "/invoices/inv-original",
+      recordLabel: "INV-2026-0008",
+    };
+    expect(await run(tools.convertQuoteToInvoice, input)).toEqual(expected);
+    expect(await run(tools.convertQuoteToInvoice, input)).toEqual(expected);
     expect(convertQuoteAtomicMock).toHaveBeenCalledTimes(2);
     expect(createInvoiceMock).not.toHaveBeenCalled();
   });
@@ -1287,5 +1501,250 @@ describe("buildAssistantTools - write tools", () => {
     expect(out.error).toMatch(/Quote QUO-9999 not found/);
     expect(getQuoteMock).not.toHaveBeenCalled();
     expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  // ── assistant.action audit wrapper ───────────────────────────────────────────
+
+  it("createInvoice writes exactly one assistant.action audit row with tool, targetType and targetId", async () => {
+    createInvoiceMock.mockResolvedValue("inv-new-id");
+    getInvoiceMock.mockResolvedValue({ id: "inv-new-id", number: "INV-2026-0009" });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("owner");
+    const tools = buildAssistantTools(c, ALL_MODULES, { writeEnabled: true });
+    await run(tools.createInvoice, {
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 10,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    });
+    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+    expect(writeAuditMock).toHaveBeenCalledWith({
+      workspaceId: c.workspaceId,
+      actorUserId: c.user.id,
+      action: "assistant.action",
+      targetType: "invoice",
+      targetId: "inv-new-id",
+      metadata: { source: "ai_assistant", tool: "createInvoice", label: "INV-2026-0009" },
+    });
+  });
+
+  it("createInvoice still succeeds with number: null when the number lookup throws", async () => {
+    createInvoiceMock.mockResolvedValue("inv-new-id");
+    getInvoiceMock.mockRejectedValue(new Error("db hiccup"));
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = await run(tools.createInvoice, {
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 10,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    });
+    expect(out).toEqual({ id: "inv-new-id", number: null, href: "/invoices/inv-new-id" });
+    // No label when the number is unknown.
+    const audits = assistantActionAudits();
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.metadata).toEqual({ source: "ai_assistant", tool: "createInvoice" });
+  });
+
+  it("createQuote returns the looked-up number and records it as the label", async () => {
+    createQuoteMock.mockResolvedValue("quo-new-id");
+    getQuoteMock.mockResolvedValue({ id: "quo-new-id", number: "QUO-2026-0004" });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const out = await run(tools.createQuote, {
+      issueDate: "2026-07-06T00:00:00.000Z",
+      taxRate: 10,
+      lineItems: [{ description: "Test", quantity: 1, unitPriceCents: 10000 }],
+    });
+    expect(out).toEqual({
+      id: "quo-new-id",
+      number: "QUO-2026-0004",
+      href: "/quotes/quo-new-id",
+      recordLabel: "QUO-2026-0004",
+    });
+    expect(assistantActionAudits()).toMatchObject([
+      { targetType: "quote", targetId: "quo-new-id", metadata: { tool: "createQuote" } },
+    ]);
+  });
+
+  it("sendInvoice writes exactly one assistant.action audit row targeting the invoice", async () => {
+    listInvoicesMock.mockResolvedValue([{ id: "inv-7", number: "INV-2026-0007", status: "draft" }]);
+    sendInvoiceMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    await run(tools.sendInvoice, { invoiceNumber: "INV-2026-0007" });
+    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+    expect(assistantActionAudits()).toMatchObject([
+      {
+        action: "assistant.action",
+        targetType: "invoice",
+        targetId: "inv-7",
+        metadata: { source: "ai_assistant", tool: "sendInvoice", label: "INV-2026-0007" },
+      },
+    ]);
+  });
+
+  it("deleteTransaction writes exactly one assistant.action audit row targeting the transaction", async () => {
+    deleteTransactionMock.mockResolvedValue(true);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    await run(tools.deleteTransaction, { transactionId: "00000000-0000-4000-8000-0000000000e5" });
+    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+    expect(assistantActionAudits()).toMatchObject([
+      {
+        targetType: "book_transaction",
+        targetId: "00000000-0000-4000-8000-0000000000e5",
+        metadata: { source: "ai_assistant", tool: "deleteTransaction" },
+      },
+    ]);
+  });
+
+  it("convertQuoteToInvoice writes one assistant.action row targeting the new invoice", async () => {
+    listQuotesMock.mockResolvedValue([
+      { id: "quo-3", number: "QUO-2026-0003", status: "accepted" },
+    ]);
+    getQuoteMock.mockResolvedValue({ id: "quo-3", status: "accepted" });
+    convertQuoteAtomicMock.mockResolvedValue("inv-new-id");
+    getInvoiceMock.mockResolvedValue({ id: "inv-new-id", number: "INV-2026-0008" });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    await run(tools.convertQuoteToInvoice, { quoteNumber: "QUO-2026-0003" });
+    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+    expect(assistantActionAudits()).toMatchObject([
+      {
+        targetType: "invoice",
+        targetId: "inv-new-id",
+        metadata: {
+          source: "ai_assistant",
+          tool: "convertQuoteToInvoice",
+          label: "INV-2026-0008",
+        },
+      },
+    ]);
+  });
+
+  it("a write tool that returns { error } writes no assistant.action row", async () => {
+    deleteTransactionMock.mockResolvedValue(false);
+    listInvoicesMock.mockResolvedValue([]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    const deleted = await run(tools.deleteTransaction, {
+      transactionId: "00000000-0000-4000-8000-0000000000e6",
+    });
+    const sent = await run(tools.sendInvoice, { invoiceNumber: "INV-9999" });
+    expect(deleted).toEqual({ error: "Transaction not found." });
+    expect(sent).toEqual({ error: "Invoice INV-9999 not found." });
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("a rejected writeAudit does not turn a successful write into an error", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      deleteTransactionMock.mockResolvedValue(true);
+      writeAuditMock.mockRejectedValueOnce(new Error("audit store down"));
+      const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+      const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+      const out = await run(tools.deleteTransaction, {
+        transactionId: "00000000-0000-4000-8000-0000000000e5",
+      });
+      expect(out).toEqual({
+        id: "00000000-0000-4000-8000-0000000000e5",
+        deleted: true,
+        href: "/books",
+      });
+      expect(writeAuditMock).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  // ── extractReceipt ───────────────────────────────────────────────────────────
+
+  it("extractReceipt returns the stored extraction summary and records one assistant.action row", async () => {
+    extractReceiptMock.mockResolvedValue("ext-1");
+    getExtractionMock.mockResolvedValue({
+      id: "ext-1",
+      status: "extracted",
+      errorMessage: null,
+      extractedData: {
+        merchant: "Bunnings",
+        date: "2026-07-01",
+        totalCents: 4200,
+        taxCents: 382,
+        currency: "AUD",
+        category: "supplies",
+        confidence: 0.93,
+        lineItems: [],
+      },
+    });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("accountant");
+    const tools = buildAssistantTools(c, ["books"], { writeEnabled: true });
+    const out = await run(tools.extractReceipt, {
+      fileId: "00000000-0000-4000-8000-0000000000f2",
+    });
+    expect(out).toEqual({
+      id: "ext-1",
+      status: "extracted",
+      merchant: "Bunnings",
+      date: "2026-07-01",
+      totalCents: 4200,
+      taxCents: 382,
+      currency: "AUD",
+      category: "supplies",
+      confidence: 0.93,
+      href: "/books/receipts",
+      recordLabel: "Bunnings",
+    });
+    expect(getExtractionMock).toHaveBeenCalledWith(c.workspaceId, "ext-1");
+    expect(assistantActionAudits()).toMatchObject([
+      {
+        targetType: "receipt_extraction",
+        targetId: "ext-1",
+        metadata: { source: "ai_assistant", tool: "extractReceipt", label: "Bunnings" },
+      },
+    ]);
+  });
+
+  it("extractReceipt returns an error for a rejected extraction and writes no assistant.action row", async () => {
+    extractReceiptMock.mockResolvedValue("ext-2");
+    getExtractionMock.mockResolvedValue({
+      id: "ext-2",
+      status: "rejected",
+      errorMessage: "Image was unreadable",
+      extractedData: null,
+    });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    const out = (await run(tools.extractReceipt, {
+      fileId: "00000000-0000-4000-8000-0000000000f3",
+    })) as { error: string };
+    expect(out.error).toMatch(/could not be read: Image was unreadable/);
+    expect(out).not.toHaveProperty("id");
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("extractReceipt still returns the id when reading the summary throws", async () => {
+    extractReceiptMock.mockResolvedValue("ext-3");
+    getExtractionMock.mockRejectedValue(new Error("read failed"));
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("accountant"), ["books"], { writeEnabled: true });
+    const out = await run(tools.extractReceipt, {
+      fileId: "00000000-0000-4000-8000-0000000000f4",
+    });
+    expect(out).toEqual({
+      id: "ext-3",
+      status: "pending",
+      merchant: null,
+      date: null,
+      totalCents: null,
+      taxCents: null,
+      currency: null,
+      category: null,
+      confidence: null,
+      href: "/books/receipts",
+    });
+    expect(assistantActionAudits()).toMatchObject([
+      { targetType: "receipt_extraction", targetId: "ext-3" },
+    ]);
   });
 });

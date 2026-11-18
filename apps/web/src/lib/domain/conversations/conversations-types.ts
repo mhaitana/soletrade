@@ -7,8 +7,15 @@ export interface ConversationSummary {
 }
 
 export interface ConversationMessage {
+  id: string;
   role: "user" | "assistant";
+  /** The message's plain text. */
   content: string;
+  /**
+   * Every part of the message as the chat shows it (text, tool calls and their approval
+   * state, action previews). Null for messages saved before parts were stored.
+   */
+  parts: unknown[] | null;
   createdAt: Date;
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  inviteLink,
   invoiceLink,
   invoiceOverdueEmail,
   invoicePaidEmail,
@@ -49,8 +50,8 @@ describe("invoiceSentEmail", () => {
     expect(text).toContain(`${APP_URL}/i/abc-123-token`);
     expect(html).toContain(`href="${APP_URL}/i/abc-123-token"`);
     expect(html).toContain("View & pay invoice");
-    expect(html).toContain("AUD 250.00");
-    expect(text).toContain("AUD 250.00");
+    expect(html).toContain("$250.00 AUD");
+    expect(text).toContain("$250.00 AUD");
   });
 
   it("greets by customer name when present, falls back to a generic greeting", () => {
@@ -89,7 +90,7 @@ describe("invoicePaidEmail", () => {
     expect(subject).toBe("Receipt: Invoice INV-2026-0007");
     expect(html).toContain("#059669"); // emerald accent
     expect(html).toContain("View invoice");
-    expect(text).toContain("AUD 250.00");
+    expect(text).toContain("$250.00 AUD");
     expect(text).toContain(`${APP_URL}/i/abc-123-token`);
   });
 
@@ -137,6 +138,85 @@ describe("quoteLink", () => {
   });
 });
 
+describe("customer emails name the sending business", () => {
+  it("puts the business in the subject and body of invoice emails when it is known", () => {
+    const m = { ...meta(), merchantName: "Acme Plumbing" };
+    expect(invoiceSentEmail(m, APP_URL).subject).toBe("Invoice INV-2026-0007 from Acme Plumbing");
+    expect(invoiceSentEmail(m, APP_URL).text).toContain(
+      "You have a new invoice (INV-2026-0007) from Acme Plumbing.",
+    );
+    expect(invoiceOverdueEmail(m, APP_URL).subject).toBe(
+      "Overdue: Invoice INV-2026-0007 from Acme Plumbing",
+    );
+    expect(invoicePaidEmail({ ...m, source: "manual" }, APP_URL).html).toContain(
+      "Acme Plumbing has received your payment",
+    );
+  });
+
+  it("puts the business in quote emails", () => {
+    const email = quoteSentEmail({ ...quoteMeta(), merchantName: "Acme Plumbing" }, APP_URL);
+    expect(email.subject).toBe("Quote QUO-2026-0003 from Acme Plumbing");
+    expect(email.html).toContain("from Acme Plumbing");
+  });
+
+  it("keeps the generic wording when the business name is unavailable", () => {
+    expect(invoiceSentEmail({ ...meta(), merchantName: null }, APP_URL).subject).toBe(
+      "Invoice INV-2026-0007",
+    );
+    expect(invoiceSentEmail({ ...meta(), merchantName: "   " }, APP_URL).subject).toBe(
+      "Invoice INV-2026-0007",
+    );
+  });
+
+  it("escapes names placed into the HTML body", () => {
+    const email = invoiceSentEmail(
+      { ...meta(), customerName: "Smith & <Sons>", merchantName: 'Bob\'s "Best" <Builders>' },
+      APP_URL,
+    );
+    expect(email.html).toContain("Hi Smith &amp; &lt;Sons&gt;,");
+    expect(email.html).toContain("from Bob&#39;s &quot;Best&quot; &lt;Builders&gt;");
+    expect(email.html).not.toContain("<Sons>");
+    expect(email.html).not.toContain("<Builders>");
+    // Plain-text part and subject are not HTML and stay as written.
+    expect(email.subject).toBe('Invoice INV-2026-0007 from Bob\'s "Best" <Builders>');
+  });
+
+  it("formats money with thousands separators and the currency code", () => {
+    const email = invoiceSentEmail({ ...meta(), totalCents: 1234567 }, APP_URL);
+    expect(email.text).toContain("$12,345.67 AUD");
+  });
+});
+
+describe("inviteLink", () => {
+  it("points at the path-based accept route that exists (app/invite/[token])", () => {
+    expect(inviteLink("abc-123", "https://app.example.com")).toBe(
+      "https://app.example.com/invite/abc-123",
+    );
+    expect(inviteLink("abc-123", "https://app.example.com/")).toBe(
+      "https://app.example.com/invite/abc-123",
+    );
+    expect(inviteLink("a b/c", "https://app.example.com")).toBe(
+      "https://app.example.com/invite/a%20b%2Fc",
+    );
+  });
+
+  it("is the link the invitation email sends", () => {
+    const email = memberInvitedEmail(
+      {
+        email: "m@example.com",
+        role: "employee",
+        token: "tok-1",
+        workspaceName: "Acme",
+        inviterName: null,
+      },
+      "https://app.example.com",
+    );
+    expect(email.html).toContain('href="https://app.example.com/invite/tok-1"');
+    expect(email.text).toContain("https://app.example.com/invite/tok-1");
+    expect(email.html).not.toContain("/invite?token=");
+  });
+});
+
 describe("quoteSentEmail", () => {
   it("includes the quote number in the subject + a working view link in both bodies", () => {
     const m = quoteMeta();
@@ -145,8 +225,8 @@ describe("quoteSentEmail", () => {
     expect(text).toContain(`${APP_URL}/q/quo-token-xyz`);
     expect(html).toContain(`href="${APP_URL}/q/quo-token-xyz"`);
     expect(html).toContain("View quote");
-    expect(html).toContain("AUD 180.00");
-    expect(text).toContain("AUD 180.00");
+    expect(html).toContain("$180.00 AUD");
+    expect(text).toContain("$180.00 AUD");
   });
 
   it("greets by customer name when present, falls back to a generic greeting", () => {
@@ -169,7 +249,7 @@ describe("quoteAcceptedEmail", () => {
     expect(html).toContain("#059669"); // emerald accent
     expect(html).toContain("A quote was accepted");
     expect(html).not.toContain("View quote"); // merchant notifications have no button
-    expect(text).toContain("AUD 180.00");
+    expect(text).toContain("$180.00 AUD");
     expect(text).toContain("from Globex Corp");
   });
 });
@@ -182,7 +262,7 @@ describe("quoteDeclinedEmail", () => {
     expect(html).toContain("#DC2626"); // red accent
     expect(html).toContain("A quote was declined");
     expect(html).not.toContain("View quote");
-    expect(text).toContain("AUD 180.00");
+    expect(text).toContain("$180.00 AUD");
     expect(text).toContain("from Globex Corp");
   });
 });

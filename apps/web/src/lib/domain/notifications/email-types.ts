@@ -9,6 +9,11 @@ export type InvoiceEmailMeta = {
   customerId: CustomerId | null;
   publicToken: string;
   dueDate: Date | null;
+  /**
+   * The business the invoice is from. Not part of the event payload: the notification
+   * handler looks it up from the workspace so the customer can tell who is emailing them.
+   */
+  merchantName?: string | null;
 };
 
 export interface RenderedEmail {
@@ -26,6 +31,8 @@ export type QuoteEmailMeta = {
   customerEmail: string | null;
   customerName: string | null;
   customerId: CustomerId | null;
+  /** The business the quote is from; resolved by the notification handler (see above). */
+  merchantName?: string | null;
 };
 
 export type QuoteMerchantMeta = {

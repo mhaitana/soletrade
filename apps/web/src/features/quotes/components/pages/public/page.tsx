@@ -1,11 +1,14 @@
 import { notFound } from "next/navigation";
+import { runAfterResponse } from "@/server/infrastructure/after-response";
 import { CheckCircle2, Clock, FileText, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getQuoteByPublicToken, markQuoteViewed } from "@/server/domains/quotes/index";
-import type { PublicQuoteView } from "@/lib/domain/quotes/types";
 import { brand } from "@/config/brand";
+import { formatCents } from "@/lib/domain/billing/pricing";
+import { formatDate } from "@/utils/format-date";
 import { Logo } from "@/components/logo";
 import { QuoteAcceptForm } from "@/features/quotes/components/public/quote-accept-form";
+import { QUOTE_PUBLIC_STATUS_DISPLAY } from "@/lib/domain/quotes/status-display";
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -14,39 +17,19 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   return { title: `Quote ${q.number}`, robots: { index: false, follow: false } };
 }
 
-const STATUS_BADGE: Record<
-  PublicQuoteView["status"],
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" }
-> = {
-  draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Awaiting your response", variant: "default" },
-  viewed: { label: "Awaiting your response", variant: "default" },
-  accepted: { label: "Accepted", variant: "success" },
-  declined: { label: "Declined", variant: "destructive" },
-  expired: { label: "Expired", variant: "destructive" },
-  converted: { label: "Converted", variant: "secondary" },
-};
-
-function formatDate(d: Date | null): string {
-  if (!d) return "-";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-function money(cents: number, currency: string): string {
-  return `${currency} ${(cents / 100).toFixed(2)}`;
-}
-
 export default async function PublicQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const q = await getQuoteByPublicToken(token);
   if (!q) notFound();
 
-  // First view of a sent quote flips to "viewed" (idempotent). Render uses the fetched `q`.
+  // First view of a sent quote flips to "viewed" (idempotent). The page renders "sent" and
+  // "viewed" identically, so this runs after the response is sent instead of delaying the
+  // customer's first paint with the status update, notifications and audit write.
   if (q.status === "sent") {
-    await markQuoteViewed(token);
+    await runAfterResponse("[quotes] recording the public view", () => markQuoteViewed(token));
   }
 
-  const badge = STATUS_BADGE[q.status];
+  const badge = QUOTE_PUBLIC_STATUS_DISPLAY[q.status];
   const awaiting = q.status === "sent" || q.status === "viewed";
 
   return (
@@ -89,7 +72,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               Quote total
             </p>
             <p className="mt-1 font-mono text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-foreground">
-              {money(q.totalCents, q.currency)}
+              {formatCents(q.totalCents, q.currency)}
             </p>
           </div>
 
@@ -102,11 +85,11 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                     {it.description}
                   </span>
                   <span className="font-mono tabular-nums text-foreground">
-                    {money(it.amountCents, q.currency)}
+                    {formatCents(it.amountCents, q.currency)}
                   </span>
                 </div>
                 <p className="text-xs font-mono text-muted-foreground tabular-nums">
-                  {it.quantity} × {money(it.unitPriceCents, q.currency)}
+                  {it.quantity} × {formatCents(it.unitPriceCents, q.currency)}
                 </p>
               </div>
             ))}
@@ -138,7 +121,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                 {q.pricesIncludeTax ? "Subtotal (ex-tax)" : "Subtotal"}
               </dt>
               <dd className="font-mono tabular-nums text-foreground">
-                {money(q.subtotalCents, q.currency)}
+                {formatCents(q.subtotalCents, q.currency)}
               </dd>
             </div>
             <div className="flex justify-between">
@@ -146,13 +129,13 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                 Tax ({q.taxRate}%{q.pricesIncludeTax ? ", included" : ""})
               </dt>
               <dd className="font-mono tabular-nums text-foreground">
-                {money(q.taxCents, q.currency)}
+                {formatCents(q.taxCents, q.currency)}
               </dd>
             </div>
             <div className="flex justify-between border-t border-border/60 pt-3 text-base font-semibold">
               <dt className="text-foreground">Total</dt>
               <dd className="font-mono tabular-nums text-foreground">
-                {money(q.totalCents, q.currency)}
+                {formatCents(q.totalCents, q.currency)}
               </dd>
             </div>
           </dl>

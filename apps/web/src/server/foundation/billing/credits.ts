@@ -10,7 +10,7 @@ export type {
 } from "@/lib/domain/billing/credits-types";
 import "server-only";
 import { getDataClient } from "@/server/infrastructure/db/client";
-import { parsePgTimestamp, rpc, unwrap, unwrapMaybe } from "@/server/infrastructure/db/helpers";
+import { parsePgTimestamp, rpc, unwrap } from "@/server/infrastructure/db/helpers";
 import type { Json } from "@/lib/domain/json";
 import type { CreditLedgerEntryId, UserId, WorkspaceId } from "@/types/ids";
 import { branded } from "@/types/ids";
@@ -86,25 +86,21 @@ function toLedgerRow(r: {
 
 /**
  * The derived credit balance for a workspace (in cents). Always computed - never
- * stored. Returns 0 when no ledger rows exist. PostgREST exposes no `SUM` aggregate
- * (only `count` via `head`), so the balance is reduced client-side over the
- * `amount_cents` column - the ledger is append-only with integer cents, so this is
- * an exact sum (and the authoritative atomic balance check lives in the
- * `consume_credit` RPC, not here).
+ * stored. Returns 0 when no ledger rows exist. Summed in Postgres by the
+ * `get_credit_balance` function: adding up fetched rows here would stop at the data
+ * API's 1,000-row cap and under-report a long ledger. The authoritative atomic balance
+ * check for spending still lives in the `consume_credit` RPC.
  */
 export async function getCreditBalance(
   workspaceId: WorkspaceId,
   currency = "AUD",
 ): Promise<number> {
-  const supabase = getDataClient();
-  const rows = await unwrap(
-    supabase
-      .from("credit_ledger")
-      .select("amount_cents")
-      .eq("workspace_id", workspaceId)
-      .eq("currency", currency),
-  );
-  return rows.reduce((sum, r) => sum + r.amount_cents, 0);
+  const { data, error } = await rpc(getDataClient(), "get_credit_balance", {
+    p_workspace_id: workspaceId,
+    p_currency: currency,
+  });
+  if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+  return Number(data ?? 0);
 }
 
 /** Internal: append a ledger row. The only mutator; never exposed publicly. */
@@ -294,6 +290,32 @@ export async function refundCredit(
 }
 
 /**
+ * Give back credit that was charged for work which then did not happen (for example a
+ * receipt scan whose model call failed). A `refund` ledger entry plus an audit row, and
+ * deliberately no `RefundIssued` event: that event emails every member about a module
+ * refund, which is the wrong message for an automatic reversal of a few cents.
+ */
+export async function reverseCreditConsumption(
+  workspaceId: WorkspaceId,
+  input: CreditEntryInput,
+  actorUserId?: UserId,
+): Promise<CreditLedgerEntryId> {
+  if (input.amountCents <= 0) {
+    throw new Error("reverseCreditConsumption requires a positive amount.");
+  }
+  const entryId = await appendCreditEntry(workspaceId, "refund", { ...input, actorUserId });
+  await writeAudit({
+    workspaceId,
+    actorUserId,
+    action: "credit.reversal",
+    targetType: "credit",
+    targetId: entryId,
+    metadata: { amountCents: input.amountCents, reason: input.reason, moduleKey: input.moduleKey },
+  });
+  return entryId;
+}
+
+/**
  * Manual admin adjustment (signed). Positive adjustments also emit
  * `CreditIssued`; negative adjustments audit only (no activity event - a
  * deduction is internal bookkeeping, not a user-facing credit grant).
@@ -353,72 +375,83 @@ export async function listCreditLedger(
   return rows.map(toLedgerRow);
 }
 
+/** Grants the expiry job reads per database call, and the most calls one run makes. */
+const EXPIRY_BATCH = 200;
+const EXPIRY_MAX_BATCHES = 25;
+
+type LedgerRaw = Parameters<typeof toLedgerRow>[0];
+
 /**
  * Reverse grant/promotion rows whose `expiresAt` has passed (brief §10.7 -
  * `CreditExpired`). For each due entry, append a negative `expired` row that
  * references the original via `metadata.originalEntryId`; the balance (derived
- * `SUM`) drops automatically. Idempotent: a pre-check plus the
- * `credit_ledger_expired_original_unique` partial unique index guarantee one
- * expired row per original even under concurrent cron runs. Returns the count
- * of newly-expired entries. Best-effort per entry - a failure on one row logs
- * and continues to the next.
+ * `SUM`) drops automatically. `list_due_credit_expiries` returns only grants with no
+ * reversal yet, so a run reads the remaining work instead of every grant that ever
+ * expired. The `credit_ledger_expired_original_unique` partial unique index still
+ * guarantees one expired row per original under concurrent runs. Returns the count of
+ * newly-expired entries. Best-effort per entry - a failure on one row logs and continues.
  */
 export async function markExpiredCredits(now: Date = new Date()): Promise<number> {
   const supabase = getDataClient();
-  const due = await unwrap(
-    supabase
-      .from("credit_ledger")
-      .select(LEDGER_COLUMNS)
-      .in("entry_type", ["grant", "promotion"])
-      .lte("expires_at", now.toISOString()),
-  );
-
   let expired = 0;
-  for (const entry of due) {
-    const row = toLedgerRow(entry);
-    const originalEntryId = String(row.id);
-    // Idempotency pre-check: skip if an `expired` row already references this grant.
-    // PostgREST jsonb access: `metadata->>originalEntryId` extracts the key as text,
-    // compared with `eq` against the original id string.
-    const existing = await unwrapMaybe(
-      supabase
-        .from("credit_ledger")
-        .select("id")
-        .eq("workspace_id", row.workspaceId)
-        .eq("entry_type", "expired")
-        .filter("metadata->>originalEntryId", "eq", originalEntryId)
-        .limit(1)
-        .maybeSingle(),
-    );
-    if (existing) continue;
 
-    try {
-      await appendCreditEntry(row.workspaceId, "expired", {
-        amountCents: -row.amountCents, // reverse the original grant/promotion
-        currency: row.currency,
-        reason: "credit.expired",
-        metadata: { originalEntryId },
-      });
-      await publishEvent({
-        type: "CreditExpired",
-        workspaceId: row.workspaceId,
-        entityType: "credit",
-        entityId: originalEntryId,
-        metadata: { originalEntryId, amountCents: row.amountCents, currency: row.currency },
-      });
-      await writeAudit({
-        workspaceId: row.workspaceId,
-        action: "credit.expire",
-        targetType: "credit",
-        targetId: originalEntryId,
-        metadata: { originalEntryId, amountCents: row.amountCents },
-      });
-      expired += 1;
-    } catch (err) {
-      // The partial unique index is the race-safe backstop - a concurrent expire
-      // hitting the same grant throws here; log and continue.
-      console.error("[credits] failed to expire entry", { originalEntryId, err });
+  for (let batch = 0; batch < EXPIRY_MAX_BATCHES; batch += 1) {
+    const { data, error } = await rpc(supabase, "list_due_credit_expiries", {
+      p_now: now.toISOString(),
+      p_limit: EXPIRY_BATCH,
+    });
+    if (error) throw new Error(`PostgREST error [${error.code}]: ${error.message}`);
+    const due = (Array.isArray(data) ? data : []) as unknown as LedgerRaw[];
+
+    let reversedThisBatch = 0;
+    for (const entry of due) {
+      if (await expireCreditEntry(toLedgerRow(entry))) reversedThisBatch += 1;
     }
+    expired += reversedThisBatch;
+    // A short batch was the last one. A batch where nothing could be reversed would come
+    // back unchanged, so stop rather than retry the same failing rows.
+    if (due.length < EXPIRY_BATCH || reversedThisBatch === 0) break;
   }
   return expired;
+}
+
+/** Append the reversal for one due grant, then its event and audit row. */
+async function expireCreditEntry(row: CreditLedgerRow): Promise<boolean> {
+  const originalEntryId = String(row.id);
+  try {
+    await appendCreditEntry(row.workspaceId, "expired", {
+      amountCents: -row.amountCents, // reverse the original grant/promotion
+      currency: row.currency,
+      reason: "credit.expired",
+      metadata: { originalEntryId },
+    });
+  } catch (err) {
+    // The partial unique index is the race-safe backstop - a concurrent expire hitting the
+    // same grant throws here; log and continue.
+    console.error("[credits] failed to expire entry", { originalEntryId, err });
+    return false;
+  }
+  try {
+    await publishEvent({
+      type: "CreditExpired",
+      workspaceId: row.workspaceId,
+      entityType: "credit",
+      entityId: originalEntryId,
+      metadata: { originalEntryId, amountCents: row.amountCents, currency: row.currency },
+    });
+    await writeAudit({
+      workspaceId: row.workspaceId,
+      action: "credit.expire",
+      targetType: "credit",
+      targetId: originalEntryId,
+      metadata: { originalEntryId, amountCents: row.amountCents },
+    });
+  } catch (err) {
+    // The reversal is recorded; only the notification or audit row is missing.
+    console.error("[credits] expired entry but could not record its event", {
+      originalEntryId,
+      err,
+    });
+  }
+  return true;
 }

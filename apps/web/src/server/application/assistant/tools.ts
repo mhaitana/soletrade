@@ -18,31 +18,37 @@ import { getWorkspace } from "@/server/foundation/workspaces/index";
 import {
   createInvoice,
   getInvoice,
+  getInvoiceDashboardSummary,
   listInvoices,
   markInvoicePaid,
   sendInvoice,
-  summarizeInvoices,
   voidInvoice,
 } from "@/server/domains/invoices/index";
-import { createQuote, getQuote, listQuotes, summarizeQuotes } from "@/server/domains/quotes/index";
+import {
+  createQuote,
+  getQuote,
+  getQuoteDashboardSummary,
+  listQuotes,
+} from "@/server/domains/quotes/index";
 import {
   createTransaction,
   deleteTransaction,
+  getBookSummary,
   listTransactions,
-  summarizeTransactions,
   updateTransaction,
 } from "@/server/domains/books/index";
-import { extractReceipt } from "@/server/domains/books/receipt-extraction";
+import { extractReceipt, getExtraction } from "@/server/domains/books/receipt-extraction";
 import {
   createEarning,
   createExpense,
   createTrip,
+  getDriveSummary,
   listEarnings,
   listExpenses,
   listTrips,
   listVehicles,
-  summarizeDrive,
 } from "@/server/domains/drive/index";
+import { assistantToolInfo } from "@/lib/assistant/tool-catalog";
 import { consolidateBusinessIncome } from "@soletrade/contracts/business-income";
 import { categoriesForType } from "@/config/books-categories";
 import { DRIVE_PLATFORMS, isDrivePlatform } from "@/config/drive-platforms";
@@ -124,7 +130,7 @@ export const haiOpenFormProviderInputSchema = jsonSchema<HaiOpenFormInput>(
  * precisely because it imports module services, which the platform layer is
  * forbidden from doing. The route handler resolves the workspace context,
  * fetches the installed-module list, builds these tools (closured over the
- * context), and hands them to `streamAssistant`.
+ * context), and hands them to `streamAssistantTurn`.
  *
  * Fail-closed: a tool the user can't use (no `view:R` grant, or its module
  * isn't installed) is **not offered** to the model. Each `execute` re-checks
@@ -138,6 +144,53 @@ const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
 /** Cap + clamp a `limit` argument the model may pass. */
 const clampLimit = (n: number | undefined, def: number, max: number): number =>
   Math.min(Math.max(typeof n === "number" ? Math.trunc(n) : def, 1), max);
+
+/**
+ * Row limits for list tools. The services cap a single read below the data API's
+ * 1,000-row ceiling, so a list tool can never be "everything": it returns a bounded page
+ * and says whether more rows matched.
+ */
+const LIST_DEFAULT = 20;
+const LIST_MAX = 100;
+const listLimit = (n: number | undefined): number => clampLimit(n, LIST_DEFAULT, LIST_MAX);
+
+/**
+ * Shape a list tool's result. Callers fetch `limit + 1` rows; the extra row is only used
+ * to detect that more matched and is never returned. `hasMore` tells the model (and the
+ * chat card) that the list is partial, so it is not presented as complete.
+ */
+function listResult<Row, Item>(
+  rows: readonly Row[],
+  limit: number,
+  toItem: (row: Row) => Item,
+  listHref?: string,
+): { items: Item[]; returned: number; hasMore: boolean; href?: string } {
+  const items = rows.slice(0, limit).map(toItem);
+  return {
+    items,
+    returned: items.length,
+    hasMore: rows.length > limit,
+    ...(listHref ? { href: listHref } : {}),
+  };
+}
+
+/**
+ * The number of a record that was just created, for the reply and the chat card. The
+ * record already exists by the time this runs, so a failed lookup returns null rather
+ * than turning a successful create into an error the model might retry.
+ */
+async function recordNumber(
+  load: () => Promise<{ number: string } | null>,
+): Promise<string | null> {
+  try {
+    return (await load())?.number ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const PARTIAL_LIST_NOTE =
+  " The result is { items, returned, hasMore }; hasMore: true means more rows matched than were returned, so narrow the search or say the list is partial.";
 
 /**
  * Resolve a customer reference (id or email) to an active customer id for the
@@ -183,7 +236,7 @@ async function resolveCustomerId(
  * search (which matches the number column) then exact-matches `number` to avoid
  * substring ambiguity. Returns the row or `null`.
  */
-async function resolveInvoiceByNumber(
+export async function resolveInvoiceByNumber(
   workspaceId: WorkspaceId,
   number: string,
 ): Promise<{ id: InvoiceId; number: string } | null> {
@@ -193,7 +246,7 @@ async function resolveInvoiceByNumber(
 }
 
 /** Resolve a quote number (e.g. "QUO-2026-0003") to the matching quote row. */
-async function resolveQuoteByNumber(
+export async function resolveQuoteByNumber(
   workspaceId: WorkspaceId,
   number: string,
 ): Promise<{ id: QuoteId; number: string } | null> {
@@ -238,37 +291,27 @@ export async function computeWorkspaceOverview(
   const hasModule = (key: ModuleKey) => installedModules.includes(key);
   const range = periodRange("month");
 
-  const [workspace, booksRows, invoiceRows, driveRows, quoteRows, activityPage] = await Promise.all(
-    [
+  // Totals come from the same Postgres summary functions as the dashboard. Adding up
+  // fetched rows here was capped (200 invoices, 1,000 transactions) and went wrong for
+  // larger workspaces.
+  const [workspace, booksSummary, invoiceSummary, driveSummary, quoteSummary, activityPage] =
+    await Promise.all([
       getWorkspace(workspaceId),
       hasModule("books") && can("view:books")
-        ? listTransactions(workspaceId, {
-            dateFrom: range.start ?? undefined,
-            dateTo: range.end,
-            limit: 2000,
-          })
+        ? getBookSummary(workspaceId, { dateFrom: range.start ?? undefined, dateTo: range.end })
         : Promise.resolve(null),
       hasModule("invoices") && can("view:invoice")
-        ? listInvoices(workspaceId, { limit: 200 })
+        ? getInvoiceDashboardSummary(workspaceId, range, null)
         : Promise.resolve(null),
       hasModule("drive") && can("view:drive")
-        ? listEarnings(workspaceId, {
-            dateFrom: range.start ?? undefined,
-            dateTo: range.end,
-            limit: 2000,
-          })
+        ? getDriveSummary(workspaceId, { dateFrom: range.start ?? undefined, dateTo: range.end })
         : Promise.resolve(null),
       hasModule("quotes") && can("view:quote")
-        ? listQuotes(workspaceId, { limit: 200 })
+        ? getQuoteDashboardSummary(workspaceId, range)
         : Promise.resolve(null),
       can("view:activity") ? listActivity(workspaceId, { limit: 5 }) : Promise.resolve(null),
-    ],
-  );
+    ]);
 
-  const booksSummary = booksRows ? summarizeTransactions(booksRows) : null;
-  const invoiceSummary = invoiceRows ? summarizeInvoices(invoiceRows, range) : null;
-  const driveSummary = driveRows ? summarizeDrive(driveRows, []) : null;
-  const quoteSummary = quoteRows ? summarizeQuotes(quoteRows, range) : null;
   const totalIncome = consolidateBusinessIncome({
     books: booksSummary ? { currentCents: booksSummary.incomeCents, previousCents: null } : null,
     invoices: invoiceSummary
@@ -354,7 +397,8 @@ export function buildAssistantTools(
   if (hasModule("invoices") && can("view:invoice")) {
     tools.listInvoices = tool({
       description:
-        "List invoices for the workspace, newest first. Optional filters: status (draft|sent|viewed|paid|void|overdue), a search term (matches invoice number or customer name/company), and a limit (default 20, max 200). Returns id, number, status, totalCents, currency, issueDate, paidAt, customerName. Use the id with invoice.edit only when the invoice is still editable.",
+        "List invoices for the workspace, newest first. Optional filters: status (draft|sent|viewed|paid|void|overdue), a search term (matches invoice number or customer name/company), and a limit (default 20, max 100). Returns id, number, status, totalCents, currency, issueDate, paidAt, customerName. Use the id with invoice.edit only when the invoice is still editable." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         status: z
           .enum(["draft", "sent", "viewed", "paid", "void", "overdue"])
@@ -368,7 +412,7 @@ export function buildAssistantTools(
           .number()
           .int()
           .min(1)
-          .max(200)
+          .max(LIST_MAX)
           .optional()
           .describe("Max rows to return (default 20)."),
       }),
@@ -376,18 +420,24 @@ export function buildAssistantTools(
         const rows = await listInvoices(workspaceId, {
           status: input.status,
           search: input.search,
-          limit: clampLimit(input.limit, 20, 200),
+          limit: listLimit(input.limit) + 1,
         });
-        return rows.map((r) => ({
-          id: r.id,
-          number: r.number,
-          status: r.status,
-          totalCents: r.totalCents,
-          currency: r.currency,
-          issueDate: iso(r.issueDate),
-          paidAt: iso(r.paidAt),
-          customerName: r.customerName,
-        }));
+        return listResult(
+          rows,
+          listLimit(input.limit),
+          (r) => ({
+            id: r.id,
+            href: `/invoices/${r.id}`,
+            number: r.number,
+            status: r.status,
+            totalCents: r.totalCents,
+            currency: r.currency,
+            issueDate: iso(r.issueDate),
+            paidAt: iso(r.paidAt),
+            customerName: r.customerName,
+          }),
+          "/invoices",
+        );
       },
     });
   }
@@ -396,7 +446,8 @@ export function buildAssistantTools(
   if (hasModule("quotes") && can("view:quote")) {
     tools.listQuotes = tool({
       description:
-        "List quotes for the workspace, newest first. Optional filters: status (draft|sent|viewed|accepted|declined|expired|converted), a search term (matches quote number or customer name/company), and a limit (default 20, max 200). Returns id, number, status, totalCents, currency, issueDate, customerName. Use the id with quote.edit only when the quote is still editable.",
+        "List quotes for the workspace, newest first. Optional filters: status (draft|sent|viewed|accepted|declined|expired|converted), a search term (matches quote number or customer name/company), and a limit (default 20, max 100). Returns id, number, status, totalCents, currency, issueDate, customerName. Use the id with quote.edit only when the quote is still editable." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         status: z
           .enum(["draft", "sent", "viewed", "accepted", "declined", "expired", "converted"])
@@ -410,7 +461,7 @@ export function buildAssistantTools(
           .number()
           .int()
           .min(1)
-          .max(200)
+          .max(LIST_MAX)
           .optional()
           .describe("Max rows to return (default 20)."),
       }),
@@ -418,17 +469,23 @@ export function buildAssistantTools(
         const rows = await listQuotes(workspaceId, {
           status: input.status,
           search: input.search,
-          limit: clampLimit(input.limit, 20, 200),
+          limit: listLimit(input.limit) + 1,
         });
-        return rows.map((r) => ({
-          id: r.id,
-          number: r.number,
-          status: r.status,
-          totalCents: r.totalCents,
-          currency: r.currency,
-          issueDate: iso(r.issueDate),
-          customerName: r.customerName,
-        }));
+        return listResult(
+          rows,
+          listLimit(input.limit),
+          (r) => ({
+            id: r.id,
+            href: `/quotes/${r.id}`,
+            number: r.number,
+            status: r.status,
+            totalCents: r.totalCents,
+            currency: r.currency,
+            issueDate: iso(r.issueDate),
+            customerName: r.customerName,
+          }),
+          "/quotes",
+        );
       },
     });
   }
@@ -437,7 +494,8 @@ export function buildAssistantTools(
   if (hasModule("books") && can("view:books")) {
     tools.listTransactions = tool({
       description:
-        "List Books transactions (income/expense) for the workspace, newest first. Optional filters: type (income|expense), a search term (matches description or customer name/company), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns id, type, amountCents, currency, date, description, category, customerName. Use the id to update or delete a transaction.",
+        "List Books transactions (income/expense) for the workspace, newest first. Optional filters: type (income|expense), a search term (matches description or customer name/company), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 100). Returns id, type, amountCents, currency, date, description, category, customerName. Use the id to update or delete a transaction." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         type: z.enum(["income", "expense"]).optional().describe("Filter by transaction type."),
         search: z
@@ -450,7 +508,7 @@ export function buildAssistantTools(
           .number()
           .int()
           .min(1)
-          .max(2000)
+          .max(LIST_MAX)
           .optional()
           .describe("Max rows to return (default 20)."),
       }),
@@ -460,18 +518,24 @@ export function buildAssistantTools(
           search: input.search,
           dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
-          limit: clampLimit(input.limit, 20, 2000),
+          limit: listLimit(input.limit) + 1,
         });
-        return rows.map((r) => ({
-          id: r.id,
-          type: r.type,
-          amountCents: r.amountCents,
-          currency: r.currency,
-          date: iso(r.date),
-          description: r.description,
-          category: r.category,
-          customerName: r.customerName,
-        }));
+        return listResult(
+          rows,
+          listLimit(input.limit),
+          (r) => ({
+            id: r.id,
+            href: `/books/${r.id}`,
+            type: r.type,
+            amountCents: r.amountCents,
+            currency: r.currency,
+            date: iso(r.date),
+            description: r.description,
+            category: r.category,
+            customerName: r.customerName,
+          }),
+          "/books",
+        );
       },
     });
   }
@@ -480,7 +544,8 @@ export function buildAssistantTools(
   if (hasModule("drive") && can("view:drive")) {
     tools.listDriveEarnings = tool({
       description:
-        "List Drive gig earnings for the workspace, newest first. Optional filters: a search term (matches platform or description), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns id, platform, amountCents, currency, date, description. Use the id with drive.earning.edit.",
+        "List Drive gig earnings for the workspace, newest first. Optional filters: a search term (matches platform or description), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 100). Returns id, platform, amountCents, currency, date, description. Use the id with drive.earning.edit." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         search: z.string().optional().describe("Substring match on platform or description."),
         dateFrom: z.string().datetime().optional().describe("Inclusive lower bound (ISO 8601)."),
@@ -489,7 +554,7 @@ export function buildAssistantTools(
           .number()
           .int()
           .min(1)
-          .max(2000)
+          .max(LIST_MAX)
           .optional()
           .describe("Max rows to return (default 20)."),
       }),
@@ -498,22 +563,28 @@ export function buildAssistantTools(
           search: input.search,
           dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
-          limit: clampLimit(input.limit, 20, 2000),
+          limit: listLimit(input.limit) + 1,
         });
-        return rows.map((r) => ({
-          id: r.id,
-          platform: r.platform,
-          amountCents: r.amountCents,
-          currency: r.currency,
-          date: iso(r.date),
-          description: r.description,
-        }));
+        return listResult(
+          rows,
+          listLimit(input.limit),
+          (r) => ({
+            id: r.id,
+            platform: r.platform,
+            amountCents: r.amountCents,
+            currency: r.currency,
+            date: iso(r.date),
+            description: r.description,
+          }),
+          "/drive",
+        );
       },
     });
 
     tools.listDriveTrips = tool({
       description:
-        "List Drive mileage trips for the workspace, newest first. Optional filters: platform, a search term (matches purpose or notes), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns id, platform, distanceKm, date, purpose. Use the id with drive.trip.edit.",
+        "List Drive mileage trips for the workspace, newest first. Optional filters: platform, a search term (matches purpose or notes), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 100). Returns id, platform, distanceKm, date, purpose. Use the id with drive.trip.edit." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         platform: z.string().optional().describe("Filter by platform slug."),
         search: z.string().optional().describe("Substring match on purpose or notes."),
@@ -523,7 +594,7 @@ export function buildAssistantTools(
           .number()
           .int()
           .min(1)
-          .max(2000)
+          .max(LIST_MAX)
           .optional()
           .describe("Max rows to return (default 20)."),
       }),
@@ -533,15 +604,20 @@ export function buildAssistantTools(
           search: input.search,
           dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
-          limit: clampLimit(input.limit, 20, 2000),
+          limit: listLimit(input.limit) + 1,
         });
-        return rows.map((r) => ({
-          id: r.id,
-          platform: r.platform,
-          distanceKm: r.distanceMeters / 1000,
-          date: iso(r.date),
-          purpose: r.purpose,
-        }));
+        return listResult(
+          rows,
+          listLimit(input.limit),
+          (r) => ({
+            id: r.id,
+            platform: r.platform,
+            distanceKm: r.distanceMeters / 1000,
+            date: iso(r.date),
+            purpose: r.purpose,
+          }),
+          "/drive",
+        );
       },
     });
 
@@ -565,7 +641,8 @@ export function buildAssistantTools(
 
     tools.listDriveExpenses = tool({
       description:
-        "List vehicle expenses for the workspace, newest first. Optional filters: type, search, dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 2000). Returns id, vehicleId, type, amountCents, currency, date, description, and odometerKm. Use the id with drive.expense.edit; call listDriveVehicles when you need a vehicle name.",
+        "List vehicle expenses for the workspace, newest first. Optional filters: type, search, dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 100). Returns id, vehicleId, type, amountCents, currency, date, description, and odometerKm. Use the id with drive.expense.edit; call listDriveVehicles when you need a vehicle name." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         type: z.enum(["fuel", "maintenance", "insurance", "registration", "other"]).optional(),
         search: z.string().optional().describe("Substring match on description or notes."),
@@ -575,7 +652,7 @@ export function buildAssistantTools(
           .number()
           .int()
           .min(1)
-          .max(2000)
+          .max(LIST_MAX)
           .optional()
           .describe("Max rows to return (default 20)."),
       }),
@@ -585,18 +662,23 @@ export function buildAssistantTools(
           search: input.search,
           dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
-          limit: clampLimit(input.limit, 20, 2000),
+          limit: listLimit(input.limit) + 1,
         });
-        return rows.map((r) => ({
-          id: r.id,
-          vehicleId: r.vehicleId,
-          type: r.type,
-          amountCents: r.amountCents,
-          currency: r.currency,
-          date: iso(r.date),
-          description: r.description,
-          odometerKm: r.odometerKm,
-        }));
+        return listResult(
+          rows,
+          listLimit(input.limit),
+          (r) => ({
+            id: r.id,
+            vehicleId: r.vehicleId,
+            type: r.type,
+            amountCents: r.amountCents,
+            currency: r.currency,
+            date: iso(r.date),
+            description: r.description,
+            odometerKm: r.odometerKm,
+          }),
+          "/drive/expenses",
+        );
       },
     });
   }
@@ -605,29 +687,36 @@ export function buildAssistantTools(
   if (can("view:customer")) {
     tools.listCustomers = tool({
       description:
-        "List customers for the workspace, newest first. Optional search (matches name/email/company) and a limit (default 20, max 200). Returns id, name, email, company, phone. Use the id to update a customer or attach one to an invoice/quote.",
+        "List customers for the workspace, newest first. Optional search (matches name/email/company) and a limit (default 20, max 100). Returns id, name, email, company, phone. Use the id to update a customer or attach one to an invoice/quote." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         search: z.string().optional().describe("Substring match on name, email, or company."),
         limit: z
           .number()
           .int()
           .min(1)
-          .max(200)
+          .max(LIST_MAX)
           .optional()
           .describe("Max rows to return (default 20)."),
       }),
       execute: async (input) => {
         const rows = await listCustomers(workspaceId, {
           search: input.search,
-          limit: clampLimit(input.limit, 20, 200),
+          limit: listLimit(input.limit) + 1,
         });
-        return rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          email: r.email,
-          company: r.company,
-          phone: r.phone,
-        }));
+        return listResult(
+          rows,
+          listLimit(input.limit),
+          (r) => ({
+            id: r.id,
+            href: `/customers/${r.id}`,
+            name: r.name,
+            email: r.email,
+            company: r.company,
+            phone: r.phone,
+          }),
+          "/customers",
+        );
       },
     });
   }
@@ -833,7 +922,7 @@ export function buildAssistantTools(
               },
               user.id,
             );
-            return { id };
+            return { id, number: await recordNumber(() => getInvoice(workspaceId, id)) };
           } catch (err) {
             // The service retries the invoice-number unique race 3× then re-throws the
             // raw Postgres error. Surface a friendly, recoverable message instead of
@@ -918,7 +1007,7 @@ export function buildAssistantTools(
               },
               user.id,
             );
-            return { id };
+            return { id, number: await recordNumber(() => getQuote(workspaceId, id)) };
           } catch (err) {
             const message = err instanceof Error ? err.message : "";
             if (/unique|duplicate/i.test(message))
@@ -1022,7 +1111,31 @@ export function buildAssistantTools(
           }
           try {
             const id = await extractReceipt(workspaceId, branded<"FileId">(input.fileId), user.id);
-            return { id };
+            // Return what was read, as the description promises, so the model can report it
+            // without a second lookup. A failed read is reported as such, not as success.
+            let extraction: Awaited<ReturnType<typeof getExtraction>> = null;
+            try {
+              extraction = await getExtraction(workspaceId, id);
+            } catch {
+              // The extraction was stored; only the summary read failed. Report the id.
+            }
+            if (extraction?.status === "rejected") {
+              return {
+                error: `The receipt could not be read${extraction.errorMessage ? `: ${extraction.errorMessage}` : "."} Any credit charged for it was returned.`,
+              };
+            }
+            const data = extraction?.extractedData ?? null;
+            return {
+              id,
+              status: extraction?.status ?? "pending",
+              merchant: data?.merchant ?? null,
+              date: data?.date ?? null,
+              totalCents: data?.totalCents ?? null,
+              taxCents: data?.taxCents ?? null,
+              currency: data?.currency ?? null,
+              category: data?.category ?? null,
+              confidence: data?.confidence ?? null,
+            };
           } catch (err) {
             return {
               error: err instanceof Error ? err.message : "Failed to extract receipt.",
@@ -1356,7 +1469,7 @@ export function buildAssistantTools(
             return {
               error: `Invoice ${input.invoiceNumber} isn't a draft - it may already be sent, paid, or void.`,
             };
-          return { sent: true, number: resolved.number };
+          return { id: resolved.id, sent: true, number: resolved.number };
         },
       });
 
@@ -1382,7 +1495,7 @@ export function buildAssistantTools(
             return {
               error: `Invoice ${input.invoiceNumber} can't be voided - it may be paid or already void.`,
             };
-          return { voided: true, number: resolved.number };
+          return { id: resolved.id, voided: true, number: resolved.number };
         },
       });
 
@@ -1409,7 +1522,7 @@ export function buildAssistantTools(
             return {
               error: `Invoice ${input.invoiceNumber} isn't sent yet - send it before marking it paid.`,
             };
-          return { paid: true, number: resolved.number };
+          return { id: resolved.id, paid: true, number: resolved.number };
         },
       });
     }
@@ -1462,13 +1575,131 @@ export function buildAssistantTools(
     }
   }
 
-  return tools as ToolSet;
+  return recordAssistantActions(tools, ctx);
+}
+
+/** Where a successful write's record lives, and what to call it in the chat card. */
+function describeWriteResult(
+  name: string,
+  result: Record<string, unknown>,
+  input: Record<string, unknown>,
+): { targetId: string | null; href?: string; recordLabel?: string } {
+  const text = (value: unknown): string | undefined =>
+    typeof value === "string" && value ? value : undefined;
+  const id = text(result.id);
+  const number = text(result.number);
+  switch (name) {
+    case "createCustomer":
+    case "updateCustomer":
+      return {
+        targetId: id ?? null,
+        href: id ? `/customers/${id}` : "/customers",
+        recordLabel: text(result.name) ?? text(input.name),
+      };
+    case "createInvoice":
+    case "sendInvoice":
+    case "voidInvoice":
+    case "markInvoicePaid":
+      return {
+        targetId: id ?? null,
+        href: id ? `/invoices/${id}` : "/invoices",
+        recordLabel: number,
+      };
+    case "convertQuoteToInvoice": {
+      const invoiceId = text(result.invoiceId);
+      return {
+        targetId: invoiceId ?? null,
+        href: invoiceId ? `/invoices/${invoiceId}` : "/invoices",
+        recordLabel: text(result.invoiceNumber),
+      };
+    }
+    case "createQuote":
+      return { targetId: id ?? null, href: id ? `/quotes/${id}` : "/quotes", recordLabel: number };
+    case "createTransaction":
+    case "updateTransaction":
+      return { targetId: id ?? null, href: id ? `/books/${id}` : "/books" };
+    case "deleteTransaction":
+      return { targetId: id ?? null, href: "/books" };
+    case "extractReceipt":
+      return {
+        targetId: id ?? null,
+        href: "/books/receipts",
+        recordLabel: text(result.merchant),
+      };
+    case "createExpense":
+      return { targetId: id ?? null, href: "/drive/expenses" };
+    case "createEarning":
+    case "createTrip":
+      return { targetId: id ?? null, href: "/drive" };
+    default:
+      return { targetId: id ?? null };
+  }
+}
+
+/**
+ * Wrap every write tool so a successful change is (a) written to the audit log as an
+ * assistant action, whatever the underlying service records, and (b) returned with a link
+ * and label the chat shows on its action card. Applied once, here, so a write tool added
+ * later is covered without remembering to do either; a tool missing from the catalogue is
+ * treated as a write.
+ *
+ * A failed audit write is logged and does not turn a completed change into an error: the
+ * model would otherwise retry an action that has already happened.
+ */
+function recordAssistantActions(tools: ToolSet, ctx: WorkspaceContext): ToolSet {
+  const recorded: ToolSet = {};
+  for (const [name, definition] of Object.entries(tools)) {
+    const info = assistantToolInfo(name);
+    const execute = definition.execute as
+      ((input: Record<string, unknown>, options: unknown) => Promise<unknown>) | undefined;
+    if (info.kind !== "write" || !execute) {
+      recorded[name] = definition;
+      continue;
+    }
+    recorded[name] = {
+      ...definition,
+      execute: async (input: Record<string, unknown>, options: unknown) => {
+        const result = await execute(input, options);
+        if (!result || typeof result !== "object" || Array.isArray(result)) return result;
+        const record = result as Record<string, unknown>;
+        if (typeof record.error === "string") return result;
+
+        const described = describeWriteResult(name, record, input);
+        const enriched = {
+          ...record,
+          ...(described.href ? { href: described.href } : {}),
+          ...(described.recordLabel ? { recordLabel: described.recordLabel } : {}),
+        };
+        // `existed` marks a create that found the record already there: nothing changed, so
+        // there is no action to record.
+        if (record.existed === true) return enriched;
+        try {
+          await writeAudit({
+            workspaceId: ctx.workspaceId,
+            actorUserId: ctx.user.id,
+            action: "assistant.action",
+            targetType: info.target ?? "assistant_action",
+            targetId: described.targetId ?? name,
+            metadata: {
+              source: "ai_assistant",
+              tool: name,
+              ...(described.recordLabel ? { label: described.recordLabel } : {}),
+            },
+          });
+        } catch (err) {
+          console.error(`[assistant] could not record the ${name} action in the audit log:`, err);
+        }
+        return enriched;
+      },
+    } as ToolSet[string];
+  }
+  return recorded;
 }
 
 /**
  * Build the canned mock reply from real workspace data (no model, no API key).
  * The route calls this for `AI_PROVIDER=mock` and streams the returned text via
- * `streamMockAssistant`. Mirrors what a real model would say after calling
+ * `streamMockAssistantTurn`. Mirrors what a real model would say after calling
  * `getWorkspaceOverview`. The overview's gates are honoured inside
  * `computeWorkspaceOverview` (null KPIs for uninstalled/unauthorized modules).
  */

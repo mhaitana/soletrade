@@ -1,10 +1,11 @@
 import { radius, spacing, typography, useTheme } from "@/theme/index";
 import { Button, Host, Picker, Switch } from "@expo/ui";
 import { router } from "expo-router";
-import React from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -29,24 +30,75 @@ export function Copy({
   );
 }
 
-export function Screen({ children }: { children: React.ReactNode }) {
+type PullRefreshHandler = () => unknown;
+const PullRefreshContext = createContext<((handler: PullRefreshHandler) => () => void) | null>(
+  null,
+);
+/** Lets a child of a pull-to-refresh `Screen` refresh its own data when the user pulls. */
+export function usePullRefresh(handler: PullRefreshHandler) {
+  const register = useContext(PullRefreshContext);
+  const latest = useRef(handler);
+  useEffect(() => {
+    latest.current = handler;
+  });
+  useEffect(() => register?.(() => latest.current()), [register]);
+}
+
+export function Screen({
+  children,
+  onRefresh,
+}: {
+  children: React.ReactNode;
+  /** Enables pull-to-refresh. Children can add handlers with `usePullRefresh`. */
+  onRefresh?: () => unknown;
+}) {
   const theme = useTheme();
+  const [refreshing, setRefreshing] = useState(false);
+  const handlers = useRef(new Set<PullRefreshHandler>());
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const register = useCallback((handler: PullRefreshHandler) => {
+    handlers.current.add(handler);
+    return () => {
+      handlers.current.delete(handler);
+    };
+  }, []);
+  const pull = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.allSettled(
+        [onRefresh, ...handlers.current].map(async (handler) => handler?.()),
+      );
+    } finally {
+      if (mounted.current) setRefreshing(false);
+    }
+  }, [onRefresh]);
   return (
-    <ScrollView
-      keyboardShouldPersistTaps="handled"
-      contentInsetAdjustmentBehavior="automatic"
-      style={{ flex: 1, backgroundColor: theme.background }}
-      contentContainerStyle={{
-        padding: spacing.md,
-        paddingBottom: spacing.xxl,
-        gap: spacing.lg,
-        maxWidth: 820,
-        width: "100%",
-        alignSelf: "center",
-      }}
-    >
-      {children}
-    </ScrollView>
+    <PullRefreshContext value={register}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="automatic"
+        style={{ flex: 1, backgroundColor: theme.background }}
+        refreshControl={
+          onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={pull} /> : undefined
+        }
+        contentContainerStyle={{
+          padding: spacing.md,
+          paddingBottom: spacing.xxl,
+          gap: spacing.lg,
+          maxWidth: 820,
+          width: "100%",
+          alignSelf: "center",
+        }}
+      >
+        {children}
+      </ScrollView>
+    </PullRefreshContext>
   );
 }
 
@@ -173,24 +225,29 @@ export function Choice({
                 accessibilityLabel={option.label}
                 accessibilityState={{ selected }}
                 onPress={() => onChange(option.value)}
-                style={{
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.xs + 2,
-                  borderRadius: radius.pill,
-                  backgroundColor: selected ? theme.primary : theme.surfaceSubtle,
-                  borderWidth: 1,
-                  borderColor: selected ? theme.primary : theme.line,
-                }}
+                // The pill itself stays compact; this wrapper gives it a 44pt touch target.
+                style={{ minHeight: 44, justifyContent: "center" }}
               >
-                <Text
+                <View
                   style={{
-                    fontSize: 13,
-                    fontWeight: selected ? "600" : "500",
-                    color: selected ? theme.primaryForeground : theme.text,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.xs + 2,
+                    borderRadius: radius.pill,
+                    backgroundColor: selected ? theme.primary : theme.surfaceSubtle,
+                    borderWidth: 1,
+                    borderColor: selected ? theme.primary : theme.line,
                   }}
                 >
-                  {option.label}
-                </Text>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: selected ? "600" : "500",
+                      color: selected ? theme.primaryForeground : theme.text,
+                    }}
+                  >
+                    {option.label}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
@@ -388,18 +445,31 @@ export function StatusPill({
   );
 }
 
+/** Matches the web KPI card: up and new are positive, down is negative, whatever the metric. */
+const trendStyle = {
+  up: { variant: "success", mark: "↑" },
+  new: { variant: "success", mark: "✦" },
+  down: { variant: "danger", mark: "↓" },
+  flat: { variant: "neutral", mark: "→" },
+} as const;
+
 export function KpiTile({
   label,
   value,
   delta,
+  trend,
   onPress,
 }: {
   label: string;
   value: string;
+  /** Text such as "+12% vs last month". */
   delta?: string;
+  /** Direction of the change. The tile shows an arrow as well as colour. */
+  trend?: keyof typeof trendStyle;
   onPress?: () => void;
 }) {
   const theme = useTheme();
+  const style = trend ? trendStyle[trend] : undefined;
   const content = (
     <View
       style={{
@@ -423,7 +493,10 @@ export function KpiTile({
       </Text>
       {delta ? (
         <View style={{ alignSelf: "flex-start", marginTop: 2 }}>
-          <StatusPill label={delta} variant="success" />
+          <StatusPill
+            label={style ? `${style.mark} ${delta}` : delta}
+            variant={style?.variant ?? "neutral"}
+          />
         </View>
       ) : null}
     </View>
@@ -433,7 +506,7 @@ export function KpiTile({
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${label}: ${value}`}
+        accessibilityLabel={`${label}: ${value}${delta ? `, ${delta}` : ""}`}
         onPress={onPress}
         style={({ pressed }) => [{ flex: 1, opacity: pressed ? 0.7 : 1 }]}
       >

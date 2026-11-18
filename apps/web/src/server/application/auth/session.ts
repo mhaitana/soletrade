@@ -12,7 +12,7 @@ import { getDataClient } from "@/server/infrastructure/db/client";
  * isn't one. Use this on public pages that adapt to signed-in state. Mutations
  * must use `requireUser` instead.
  */
-async function resolveCurrentUser(): Promise<SessionUser | null> {
+async function resolveSessionIdentity(): Promise<SessionUser | null> {
   const supabase = createSupabaseServerClient();
   // getClaims verifies identity but, unlike getUser, normally avoids a remote
   // Auth request when the project uses asymmetric signing keys. The result is
@@ -21,17 +21,30 @@ async function resolveCurrentUser(): Promise<SessionUser | null> {
   const { data, error } = await supabase.auth.getClaims();
   const subject = data?.claims.sub;
   if (error || !subject) return null;
-  const { data: profile, error: profileError } = await getDataClient()
-    .from("users")
-    .select("deleted_at")
-    .eq("id", subject)
-    .maybeSingle();
-  if (profileError || profile?.deleted_at) return null;
   const email = data.claims.email;
   return {
     id: branded<"UserId">(subject),
     email: typeof email === "string" ? email : "",
   };
+}
+
+/**
+ * The verified token's identity, before the account-deleted check. Only for starting
+ * reads that `getCurrentUser` must still gate: a caller may fetch data for this id in
+ * parallel with that check, but must discard it when `getCurrentUser` returns null.
+ */
+export const getSessionIdentity = cache(resolveSessionIdentity);
+
+async function resolveCurrentUser(): Promise<SessionUser | null> {
+  const identity = await getSessionIdentity();
+  if (!identity) return null;
+  const { data: profile, error: profileError } = await getDataClient()
+    .from("users")
+    .select("deleted_at")
+    .eq("id", identity.id)
+    .maybeSingle();
+  if (profileError || profile?.deleted_at) return null;
+  return identity;
 }
 
 export const getCurrentUser = cache(resolveCurrentUser);

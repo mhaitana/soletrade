@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
+import { createWithRequestId } from "@/server/application/request-id-create";
 import { authorize } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import { isModuleEnabled } from "@/server/foundation/module-installations/index";
@@ -35,6 +36,8 @@ const VEHICLE_EXPENSE_TYPES: readonly VehicleExpenseType[] = [
 // --- Create ------------------------------------------------------------------
 
 const createExpenseSchema = z.object({
+  /** One id per form draft; resending it never creates a second record. */
+  requestId: z.string().uuid().optional(),
   vehicleId: z.string().uuid("Pick a vehicle."),
   type: z.enum(VEHICLE_EXPENSE_TYPES as [VehicleExpenseType, ...VehicleExpenseType[]]),
   amountCents: z.number().int().min(1, "Amount must be greater than 0."),
@@ -77,7 +80,11 @@ export async function createExpenseAction(input: unknown): Promise<CreateExpense
   };
 
   try {
-    const id = await createExpense(ctx.workspaceId, expenseInput, ctx.user.id);
+    const { id } = await createWithRequestId(
+      parsed.data.requestId ? branded<"DriveExpenseId">(parsed.data.requestId) : undefined,
+      (requestId) => createExpense(ctx.workspaceId, expenseInput, ctx.user.id, requestId),
+      async (requestId) => (await getExpense(ctx.workspaceId, requestId)) !== null,
+    );
     revalidatePath("/drive/expenses");
     // The database transaction has already synchronized the Books mirror; invalidate the
     // cross-module views so soft navigation shows it immediately.

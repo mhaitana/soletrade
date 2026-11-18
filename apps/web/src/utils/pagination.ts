@@ -1,4 +1,6 @@
 export const DOCUMENT_PAGE_SIZE = 25;
+/** Page size for ledger-style lists (Books transactions, Drive entries, customers). */
+export const RECORD_PAGE_SIZE = 50;
 
 // Leave room for the receipt service's maximum batch of 500 when computing
 // the inclusive PostgREST range end.
@@ -9,23 +11,26 @@ export function normalizeListOffset(offset = 0): number {
 }
 
 /** Invalid, repeated, fractional, or unsafe page values start at the first page. */
-export function parsePage(value: string | string[] | number | undefined): number {
+export function parsePage(
+  value: string | string[] | number | undefined,
+  pageSize: number = DOCUMENT_PAGE_SIZE,
+): number {
   if (typeof value !== "number" && (typeof value !== "string" || !/^[1-9]\d*$/.test(value))) {
     return 1;
   }
   const page = Number(value);
-  const offset = (page - 1) * DOCUMENT_PAGE_SIZE;
+  const offset = (page - 1) * pageSize;
   return Number.isSafeInteger(page) && page >= 1 && offset <= MAX_OFFSET ? page : 1;
 }
 
-export function pageHref(
-  pathname: string,
-  page: number,
-  filters: { status?: string | null; search?: string } = {},
-): string {
+/** Query values a list page keeps across its page links; empty values are left out. */
+export type PageFilters = Readonly<Record<string, string | null | undefined>>;
+
+export function pageHref(pathname: string, page: number, filters: PageFilters = {}): string {
   const query = new URLSearchParams();
-  if (filters.status) query.set("status", filters.status);
-  if (filters.search) query.set("search", filters.search);
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) query.set(key, value);
+  }
   if (page > 1) query.set("page", String(page));
   const search = query.toString();
   return search ? `${pathname}?${search}` : pathname;

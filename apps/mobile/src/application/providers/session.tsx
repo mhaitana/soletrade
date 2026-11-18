@@ -33,22 +33,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       selected.current = data.activeWorkspace?.id ?? "";
       setBootstrap(data);
       setError(null);
-      const current = await supabase.auth.getUser();
+      // The locally stored session is enough to confirm the account; avoid a network round trip.
+      const current = await supabase.auth.getSession();
+      const currentUserId = current.data.session?.user.id;
       if (
         sequence !== generation.current ||
         account.current !== data.user.id ||
-        current.data.user?.id !== data.user.id
+        currentUserId !== data.user.id
       )
         return null;
-      if (current.data.user) {
-        await SecureStore.setItemAsync(`workspace.${current.data.user.id}`, selected.current);
-        if (selected.current)
-          await cacheReference(
-            { userId: current.data.user.id, workspaceId: selected.current },
-            "bootstrap",
-            data,
-          );
-      }
+      await SecureStore.setItemAsync(`workspace.${currentUserId}`, selected.current);
+      if (selected.current)
+        await cacheReference(
+          { userId: currentUserId, workspaceId: selected.current },
+          "bootstrap",
+          data,
+        );
       return sequence === generation.current && account.current === data.user.id ? data : null;
     } catch (cause) {
       if (sequence === generation.current) {

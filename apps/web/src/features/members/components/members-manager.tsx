@@ -2,6 +2,7 @@
 
 import { useEffect, useActionState, useRef, useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,12 +48,56 @@ function roleLabel(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
+type ConfirmTarget =
+  | { kind: "remove"; userId: string; label: string }
+  | { kind: "role"; userId: string; label: string; role: string }
+  | { kind: "revoke"; invitationId: string; label: string };
+
+function confirmCopy(target: ConfirmTarget | null) {
+  if (!target) {
+    return {
+      title: "",
+      description: "",
+      action: "Confirm",
+      pending: "Working…",
+      destructive: false,
+    };
+  }
+  switch (target.kind) {
+    case "remove":
+      return {
+        title: "Remove member?",
+        description: `This removes ${target.label} from the workspace. They will lose access immediately. The audit log keeps a record.`,
+        action: "Remove",
+        pending: "Removing…",
+        destructive: true,
+      };
+    case "role":
+      return {
+        title: "Change role?",
+        description: `Change ${target.label} to ${roleLabel(target.role)}? Their access updates immediately.`,
+        action: "Change role",
+        pending: "Changing…",
+        destructive: false,
+      };
+    case "revoke":
+      return {
+        title: "Revoke invitation?",
+        description: `The invite link sent to ${target.label} will stop working. You can invite them again later.`,
+        action: "Revoke invitation",
+        pending: "Revoking…",
+        destructive: true,
+      };
+  }
+}
+
 export function MembersManager({ initial }: { initial: MembersPageData }) {
   const router = useRouter();
   const inviteFormRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<{ userId: string; label: string } | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const [inviteState, inviteAction, invitePending] = useActionState(
     async (_prev: InviteMemberResult, formData: FormData): Promise<InviteMemberResult> => {
@@ -65,41 +110,48 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
   );
 
   useEffect(() => {
-    if (inviteState.ok) router.refresh();
+    if (inviteState.ok) {
+      toast.success("Invite sent");
+      router.refresh();
+    }
   }, [inviteState, router]);
 
-  function remove(userId: string) {
-    setRemoveError(null);
-    startTransition(async () => {
-      const res = await removeMemberAction({ userId });
-      if (!res.ok) {
-        setRemoveError(res.error);
-        return;
-      }
-      router.refresh();
-    });
+  function closeConfirm() {
+    if (isPending) return;
+    setConfirmTarget(null);
+    setConfirmError(null);
   }
 
-  function changeRole(userId: string, role: string) {
-    setRemoveError(null);
+  function runConfirmed() {
+    const target = confirmTarget;
+    if (!target) return;
+    setConfirmError(null);
     startTransition(async () => {
-      const res = await updateMemberRoleAction({ userId, role });
-      if (!res.ok) {
-        setRemoveError(res.error);
+      let res: { ok: true } | { ok: false; error: string };
+      try {
+        if (target.kind === "remove") {
+          res = await removeMemberAction({ userId: target.userId });
+        } else if (target.kind === "role") {
+          res = await updateMemberRoleAction({ userId: target.userId, role: target.role });
+        } else {
+          res = await revokeInvitationAction({ invitationId: target.invitationId });
+        }
+      } catch {
+        setConfirmError("We couldn’t confirm whether that went through. Refresh and check.");
         return;
       }
-      router.refresh();
-    });
-  }
-
-  function revoke(invitationId: string) {
-    setRemoveError(null);
-    startTransition(async () => {
-      const res = await revokeInvitationAction({ invitationId });
       if (!res.ok) {
-        setRemoveError(res.error);
+        setConfirmError(res.error);
         return;
       }
+      toast.success(
+        target.kind === "remove"
+          ? "Member removed"
+          : target.kind === "role"
+            ? "Role changed"
+            : "Invitation revoked",
+      );
+      setConfirmTarget(null);
       router.refresh();
     });
   }
@@ -112,10 +164,12 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
         setRemoveError(res.error);
         return;
       }
+      toast.success("Invitation resent");
       router.refresh();
     });
   }
 
+  const copy = confirmCopy(confirmTarget);
   const inviteError = !inviteState.ok ? inviteState.error : "";
   const inviteFieldErrors = !inviteState.ok ? inviteState.fieldErrors : undefined;
   const haiNotice = useHaiFormPrefill("settings.member-invite", (fields) => {
@@ -231,7 +285,16 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                       {canChangeRole ? (
                         <select
                           value={m.role}
-                          onChange={(e) => void changeRole(m.userId, e.target.value)}
+                          onChange={(e) => {
+                            if (e.target.value === m.role) return;
+                            setConfirmError(null);
+                            setConfirmTarget({
+                              kind: "role",
+                              userId: m.userId,
+                              label: m.email || m.userId,
+                              role: e.target.value,
+                            });
+                          }}
                           disabled={isPending}
                           aria-label={`Change role for ${m.email || m.userId}`}
                           className="h-11 rounded-md border border-input bg-background px-2 text-sm capitalize ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
@@ -252,9 +315,14 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                           variant="outline"
                           size="sm"
                           disabled={isPending}
-                          onClick={() =>
-                            setRemoveTarget({ userId: m.userId, label: m.email || m.userId })
-                          }
+                          onClick={() => {
+                            setConfirmError(null);
+                            setConfirmTarget({
+                              kind: "remove",
+                              userId: m.userId,
+                              label: m.email || m.userId,
+                            });
+                          }}
                           aria-label={`Remove ${m.email || m.userId}`}
                         >
                           Remove
@@ -301,7 +369,14 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
                           variant="outline"
                           size="sm"
                           disabled={isPending}
-                          onClick={() => void revoke(inv.id)}
+                          onClick={() => {
+                            setConfirmError(null);
+                            setConfirmTarget({
+                              kind: "revoke",
+                              invitationId: inv.id,
+                              label: inv.email,
+                            });
+                          }}
                           aria-label={`Revoke invitation to ${inv.email}`}
                           className="text-destructive focus:text-destructive"
                         >
@@ -318,31 +393,31 @@ export function MembersManager({ initial }: { initial: MembersPageData }) {
       ) : null}
 
       <ResponsiveDialog
-        open={removeTarget !== null}
-        onOpenChange={(o) => !o && setRemoveTarget(null)}
+        open={confirmTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) closeConfirm();
+        }}
       >
-        <ResponsiveDialogContent>
+        <ResponsiveDialogContent aria-busy={isPending}>
           <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>Remove member?</ResponsiveDialogTitle>
-            <ResponsiveDialogDescription>
-              {removeTarget
-                ? `This removes ${removeTarget.label} from the workspace. They will lose access immediately. The audit log keeps a record.`
-                : ""}
-            </ResponsiveDialogDescription>
+            <ResponsiveDialogTitle>{copy.title}</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>{copy.description}</ResponsiveDialogDescription>
           </ResponsiveDialogHeader>
+          {confirmError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {confirmError}
+            </p>
+          ) : null}
           <ResponsiveDialogFooter>
-            <Button variant="outline" onClick={() => setRemoveTarget(null)} disabled={isPending}>
+            <Button variant="outline" onClick={closeConfirm} disabled={isPending}>
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant={copy.destructive ? "destructive" : "default"}
               disabled={isPending}
-              onClick={() => {
-                if (removeTarget) void remove(removeTarget.userId);
-                setRemoveTarget(null);
-              }}
+              onClick={runConfirmed}
             >
-              {isPending ? "Removing…" : "Remove"}
+              {isPending ? copy.pending : copy.action}
             </Button>
           </ResponsiveDialogFooter>
         </ResponsiveDialogContent>

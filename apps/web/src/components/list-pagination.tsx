@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { pageHref } from "@/utils/pagination";
+import { pageHref, type PageFilters } from "@/utils/pagination";
 
 export function ListPagination({
   pathname,
@@ -12,7 +12,7 @@ export function ListPagination({
   pathname: string;
   page: number;
   hasNext: boolean;
-  filters?: { status?: string | null; search?: string };
+  filters?: PageFilters;
 }) {
   if (page === 1 && !hasNext) return null;
 

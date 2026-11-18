@@ -32,9 +32,10 @@ import {
   unwrapMaybe,
 } from "@/server/infrastructure/db/helpers";
 import { branded } from "@/types/ids";
-import { getCustomer } from "@/server/foundation/customers";
+import { findCustomerIdsMatching, getCustomer } from "@/server/foundation/customers";
 import { getWorkspace } from "@/server/foundation/workspaces";
 import { publishEvent } from "@/server/infrastructure/events";
+import { forEachSettled } from "@/server/infrastructure/for-each-settled";
 import { writeAudit } from "@/server/foundation/audit";
 import { computeInvoiceTotals, lineItemAmountCents } from "@/lib/domain/invoices/totals";
 import type { InvoiceStatus } from "@/lib/domain/database-enums";
@@ -176,6 +177,18 @@ async function nextInvoiceNumber(
       .like("number", `${yearPrefix}%`),
   );
   return formatInvoiceNumber(prefix, year, n + 1);
+}
+
+/** Number of invoices in the workspace that have left draft (sent, viewed, paid, overdue, void). */
+export async function countNonDraftInvoices(workspaceId: WorkspaceId): Promise<number> {
+  const supabase = getDataClient();
+  return unwrapCount(
+    supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .neq("status", "draft"),
+  );
 }
 
 /** Verify a customer belongs to the workspace (IDOR guard). Throws if customerId is set but not found. */
@@ -414,6 +427,8 @@ export async function listInvoices(
   opts?: {
     status?: InvoiceStatus;
     search?: string;
+    /** Customer ids already matched against `search`; skips the customer lookup. */
+    matchingCustomerIds?: readonly string[];
     dateFrom?: Date;
     dateTo?: Date;
     customerId?: CustomerId;
@@ -437,14 +452,8 @@ export async function listInvoices(
     // deleted_at filter - the original leftJoin didn't exclude soft-deleted customers);
     // (2) `or(number.ilike.X, customer_id.in.(ids))` on invoices. UUIDs are comma-safe in `in.(...)`.
     const term = pgQuote(`%${search}%`);
-    const matching = await unwrap(
-      supabase
-        .from("customers")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .or(`name.ilike.${term},company.ilike.${term}`),
-    );
-    const customerIds = matching.map((m) => m.id);
+    const customerIds =
+      opts?.matchingCustomerIds ?? (await findCustomerIdsMatching(workspaceId, search));
     if (customerIds.length > 0) {
       query = query.or(`number.ilike.${term},customer_id.in.(${customerIds.join(",")})`);
     } else {
@@ -471,25 +480,28 @@ export async function getInvoice(
   invoiceId: InvoiceId,
 ): Promise<InvoiceWithItems | null> {
   const supabase = getDataClient();
-  const inv = await unwrapMaybe(
-    supabase
-      .from("invoices")
-      .select(INVOICE_COLUMNS)
-      .eq("id", invoiceId)
-      .eq("workspace_id", workspaceId)
-      .limit(1)
-      .maybeSingle(),
-  );
+  // One round trip instead of two. The line items are keyed by invoice id only, so they
+  // are discarded unless the workspace-scoped invoice lookup also succeeds.
+  const [inv, itemRows] = await Promise.all([
+    unwrapMaybe(
+      supabase
+        .from("invoices")
+        .select(INVOICE_COLUMNS)
+        .eq("id", invoiceId)
+        .eq("workspace_id", workspaceId)
+        .limit(1)
+        .maybeSingle(),
+    ),
+    unwrap(
+      supabase
+        .from("invoice_line_items")
+        .select(LINE_ITEM_COLUMNS)
+        .eq("invoice_id", invoiceId)
+        .order("position", { ascending: true }),
+    ),
+  ]);
   if (!inv) return null;
   const invoice = toInvoiceRow(inv as InvoiceRaw);
-
-  const itemRows = await unwrap(
-    supabase
-      .from("invoice_line_items")
-      .select(LINE_ITEM_COLUMNS)
-      .eq("invoice_id", invoiceId)
-      .order("position", { ascending: true }),
-  );
   return { ...invoice, lineItems: itemRows.map((r) => toLineItemRow(r as LineItemRaw)) };
 }
 
@@ -914,8 +926,9 @@ export async function markOverdueInvoices(now: Date = new Date()): Promise<numbe
   );
   const ctxById = new Map(ctxRows.map((r) => [r.id, r]));
 
-  // Publish events + audit per flipped invoice (best-effort, sequential - cron isn't hot).
-  for (const row of rows) {
+  // Publish the event and audit row for each flipped invoice. The status change above is
+  // already committed, so one failure must not cost the rest their follow-up.
+  await forEachSettled(rows, 5, "invoices.overdue", async (row) => {
     const ctx = ctxById.get(row.id);
     const workspaceId = branded<"WorkspaceId">(row.workspace_id);
     const invoiceId = branded<"InvoiceId">(row.id);
@@ -944,7 +957,7 @@ export async function markOverdueInvoices(now: Date = new Date()): Promise<numbe
       targetId: invoiceId,
       metadata: { number: row.number, source: "cron" },
     });
-  }
+  });
   return rows.length;
 }
 

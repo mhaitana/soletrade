@@ -1,5 +1,6 @@
 import "server-only";
 import { getDataClient } from "@/server/infrastructure/db/client";
+import { rpc } from "@/server/infrastructure/db/helpers";
 import { getStorageAdminClient } from "@/server/infrastructure/storage";
 import { env } from "@/server/infrastructure/config/env";
 
@@ -62,4 +63,25 @@ export async function purgeClosedAccounts() {
     }
   }
   return { completed };
+}
+
+/**
+ * How long a completed mobile write keeps its idempotency record. A device that retries a
+ * request inside this window gets the first result back instead of the write happening
+ * twice; a retry after it would run again. Ninety days is far beyond any realistic offline
+ * period for a queued change.
+ */
+export const MOBILE_OPERATION_RETENTION_DAYS = 90;
+/** Records deleted per cron run; the per-minute schedule clears any backlog quickly. */
+const PRUNE_BATCH = 1000;
+
+/** Delete one batch of completed idempotency records past the retention window. */
+export async function pruneMobileOperations(now: Date = new Date()): Promise<number> {
+  const before = new Date(now.getTime() - MOBILE_OPERATION_RETENTION_DAYS * 86_400_000);
+  const { data, error } = await rpc(getDataClient(), "prune_mobile_operations", {
+    p_before: before.toISOString(),
+    p_limit: PRUNE_BATCH,
+  });
+  if (error) throw new Error("Unable to prune mobile operation records");
+  return Number(data ?? 0);
 }

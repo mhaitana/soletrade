@@ -37,6 +37,8 @@ export type {
 
 import { branded } from "@/types/ids";
 import { brand } from "@/config/brand";
+import { formatCents } from "@/lib/domain/billing/pricing";
+import { formatDate as formatDisplayDate } from "@/utils/format-date";
 import { pwaBrand } from "@/config/pwa";
 import { urls } from "@/config/urls";
 
@@ -65,13 +67,35 @@ export function coerceInvoiceEmailMeta(
   };
 }
 
+/**
+ * Money as the app shows it (symbol and thousands separators) followed by the ISO code. An
+ * email is read out of context, possibly in another country, so the code stays explicit:
+ * "$12,345.00 AUD" rather than the old "AUD 12345.00".
+ */
 function money(cents: number, currency: string): string {
-  return `${currency} ${(cents / 100).toFixed(2)}`;
+  const formatted = formatCents(cents, currency || undefined);
+  return currency && !formatted.startsWith(currency) ? `${formatted} ${currency}` : formatted;
 }
 
+/** Same fixed display locale as the app, so a date does not depend on the server's locale. */
 function formatDate(d: Date | null): string {
-  if (!d) return "-";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return formatDisplayDate(d);
+}
+
+/** Escape text that is placed into email HTML (names can contain `&`, `<` and quotes). */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** " from Acme Plumbing" when the business is known, otherwise nothing. */
+function fromMerchant(merchantName: string | null | undefined): string {
+  const name = merchantName?.trim();
+  return name ? ` from ${name}` : "";
 }
 
 /** Absolute public link to the invoice's payable page. */
@@ -129,16 +153,17 @@ export function invoiceSentEmail(m: InvoiceEmailMeta, appUrl: string): RenderedE
   const link = invoiceLink(m.publicToken, appUrl);
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
   const due = m.dueDate ? ` due ${formatDate(m.dueDate)}` : "";
-  const subject = `Invoice ${m.number}`;
+  const from = fromMerchant(m.merchantName);
+  const subject = `Invoice ${m.number}${from}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${escapeHtml(greeting)}</p>
     <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Amount due${due}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">You have a new invoice (${m.number}). Click below to view the details and pay securely online.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">You have a new invoice (${escapeHtml(m.number)})${escapeHtml(from)}. Click below to view the details and pay securely online.</p>`;
   const html = emailHtml({
     appUrl,
     accent: pwaBrand.ink,
-    preheading: `Invoice ${m.number}`,
+    preheading: escapeHtml(`Invoice ${m.number}${from}`),
     heading: "You have a new invoice",
     bodyHtml,
     buttonHref: link,
@@ -148,7 +173,7 @@ export function invoiceSentEmail(m: InvoiceEmailMeta, appUrl: string): RenderedE
   const text = [
     `${greeting}`,
     ``,
-    `You have a new invoice (${m.number}).`,
+    `You have a new invoice (${m.number})${from}.`,
     `Amount due${due}: ${money(m.totalCents, m.currency)}`,
     ``,
     `View and pay online:`,
@@ -161,16 +186,17 @@ export function invoiceSentEmail(m: InvoiceEmailMeta, appUrl: string): RenderedE
 export function invoiceOverdueEmail(m: InvoiceEmailMeta, appUrl: string): RenderedEmail {
   const link = invoiceLink(m.publicToken, appUrl);
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
-  const subject = `Overdue: Invoice ${m.number}`;
+  const from = fromMerchant(m.merchantName);
+  const subject = `Overdue: Invoice ${m.number}${from}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${escapeHtml(greeting)}</p>
     <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Overdue amount${m.dueDate ? ` · was due ${formatDate(m.dueDate)}` : ""}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Invoice ${m.number} is past its due date. Please pay online to avoid further reminders.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Invoice ${escapeHtml(m.number)}${escapeHtml(from)} is past its due date. Please pay online to avoid further reminders.</p>`;
   const html = emailHtml({
     appUrl,
     accent: "#DC2626",
-    preheading: `Overdue · Invoice ${m.number}`,
+    preheading: escapeHtml(`Overdue · Invoice ${m.number}${from}`),
     heading: "Your invoice is overdue",
     bodyHtml,
     buttonHref: link,
@@ -180,7 +206,7 @@ export function invoiceOverdueEmail(m: InvoiceEmailMeta, appUrl: string): Render
   const text = [
     `${greeting}`,
     ``,
-    `Invoice ${m.number} is past its due date${m.dueDate ? ` (was due ${formatDate(m.dueDate)})` : ""}.`,
+    `Invoice ${m.number}${from} is past its due date${m.dueDate ? ` (was due ${formatDate(m.dueDate)})` : ""}.`,
     `Amount due: ${money(m.totalCents, m.currency)}`,
     ``,
     `Pay online:`,
@@ -196,16 +222,17 @@ export function invoicePaidEmail(
 ): RenderedEmail {
   const link = invoiceLink(m.publicToken, appUrl);
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
-  const subject = `Receipt: Invoice ${m.number}`;
+  const from = fromMerchant(m.merchantName);
+  const subject = `Receipt: Invoice ${m.number}${from}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${escapeHtml(greeting)}</p>
     <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Payment received</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Thanks - we've received your payment for invoice ${m.number}. You can view the receipt online anytime.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">Thanks - ${m.merchantName?.trim() ? `${escapeHtml(m.merchantName.trim())} has` : "we've"} received your payment for invoice ${escapeHtml(m.number)}. You can view the receipt online anytime.</p>`;
   const html = emailHtml({
     appUrl,
     accent: "#059669",
-    preheading: `Receipt · Invoice ${m.number}`,
+    preheading: escapeHtml(`Receipt · Invoice ${m.number}${from}`),
     heading: "Payment received",
     bodyHtml,
     buttonHref: link,
@@ -215,7 +242,7 @@ export function invoicePaidEmail(
   const text = [
     `${greeting}`,
     ``,
-    `Payment received for invoice ${m.number}.`,
+    `Payment received for invoice ${m.number}${from}.`,
     `Amount: ${money(m.totalCents, m.currency)}`,
     ``,
     `View online:`,
@@ -283,16 +310,17 @@ export function quoteSentEmail(m: QuoteEmailMeta, appUrl: string): RenderedEmail
   const link = quoteLink(m.publicToken, appUrl);
   const greeting = m.customerName ? `Hi ${m.customerName},` : "Hello,";
   const valid = m.validUntil ? ` - valid until ${formatDate(m.validUntil)}` : "";
-  const subject = `Quote ${m.number}`;
+  const from = fromMerchant(m.merchantName);
+  const subject = `Quote ${m.number}${from}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${greeting}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#44403c;">${escapeHtml(greeting)}</p>
     <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Quote amount${valid}</p>
     <p style="margin:0 0 16px;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;">${money(m.totalCents, m.currency)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">You have a new quote (${m.number}). Review the details and accept or decline it online.</p>`;
+    <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">You have a new quote (${escapeHtml(m.number)})${escapeHtml(from)}. Review the details and accept or decline it online.</p>`;
   const html = emailHtml({
     appUrl,
     accent: pwaBrand.ink,
-    preheading: `Quote ${m.number}`,
+    preheading: escapeHtml(`Quote ${m.number}${from}`),
     heading: "You have a new quote",
     bodyHtml,
     buttonHref: link,
@@ -302,7 +330,7 @@ export function quoteSentEmail(m: QuoteEmailMeta, appUrl: string): RenderedEmail
   const text = [
     `${greeting}`,
     ``,
-    `You have a new quote (${m.number}).${valid}`,
+    `You have a new quote (${m.number})${from}.${valid}`,
     `Amount: ${money(m.totalCents, m.currency)}`,
     ``,
     `Review and accept or decline online:`,
@@ -371,7 +399,7 @@ export function quoteDeclinedEmail(m: QuoteMerchantMeta, appUrl = urls.app): Ren
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Member invitation email (Wave 4). Sent to the invitee on `MemberInvited` (and on
-// resend). The token carries the single-use accept link `${appUrl}/invite?token=...`.
+// resend). The token carries the single-use accept link `${appUrl}/invite/{token}`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Coerce raw event-bus metadata into `MemberInvitedEmailMeta`. The handler resolves
@@ -394,9 +422,13 @@ function roleLabel(role: string): string {
   return r === "Readonly" ? "Read-only" : r;
 }
 
-/** Absolute accept link for a workspace invitation. */
+/**
+ * Absolute accept link for a workspace invitation. The accept page is the path-based route
+ * `app/invite/[token]`; emails sent before this was corrected used `/invite?token=...`,
+ * which `app/invite/page.tsx` still redirects here.
+ */
 export function inviteLink(token: string, appUrl: string): string {
-  return `${appUrl.replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
+  return `${appUrl.replace(/\/$/, "")}/invite/${encodeURIComponent(token)}`;
 }
 
 /** "You're invited to join {workspace}" - sent to the invitee on `MemberInvited`. */

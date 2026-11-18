@@ -4,6 +4,7 @@ import {
   onEvent,
   publishEvent,
   setEventPersister,
+  setEventScheduler,
   type BusEvent,
 } from "@/server/infrastructure/events";
 import { branded } from "@/types/ids";
@@ -103,5 +104,104 @@ describe("event bus", () => {
 
   it("publishing with no subscribers and no persister resolves cleanly", async () => {
     await expect(publishEvent({ type: "NoListeners", workspaceId: ws() })).resolves.toBeUndefined();
+  });
+
+  it("awaits a deferred handler when no request is in flight (tests, scripts, startup)", async () => {
+    const handler = vi.fn();
+    onEvent("InvoiceSent", handler, { deferred: true });
+    await publishEvent({ type: "InvoiceSent", workspaceId: ws() });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands deferred handlers to the scheduler and returns without waiting for them", async () => {
+    const queued: (() => Promise<void>)[] = [];
+    setEventScheduler((task) => {
+      queued.push(task);
+      return true;
+    });
+    const order: string[] = [];
+    setEventPersister(() => {
+      order.push("persist");
+    });
+    onEvent(
+      "InvoiceSent",
+      () => {
+        order.push("email");
+      },
+      { deferred: true },
+    );
+    onEvent("InvoiceSent", () => {
+      order.push("inline");
+    });
+
+    await publishEvent({ type: "InvoiceSent", workspaceId: ws() });
+    // The activity row and the ordinary subscriber are done; the email has not run yet.
+    expect(order).toEqual(["persist", "inline"]);
+    expect(queued).toHaveLength(1);
+
+    await queued[0]!();
+    expect(order).toEqual(["persist", "inline", "email"]);
+  });
+
+  it("runs deferred handlers itself when the scheduler declines", async () => {
+    setEventScheduler(() => false);
+    const handler = vi.fn();
+    onEvent("QuoteSent", handler, { deferred: true });
+    await publishEvent({ type: "QuoteSent", workspaceId: ws() });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not involve the scheduler when no subscriber is deferred", async () => {
+    const schedule = vi.fn(() => true);
+    setEventScheduler(schedule);
+    const handler = vi.fn();
+    onEvent("ModuleEnabled", handler);
+    await publishEvent({ type: "ModuleEnabled", workspaceId: ws() });
+    expect(schedule).not.toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failing deferred handler is logged and does not reject the queued task", async () => {
+    const queued: (() => Promise<void>)[] = [];
+    setEventScheduler((task) => {
+      queued.push(task);
+      return true;
+    });
+    onEvent(
+      "InvoicePaid",
+      async () => {
+        throw new Error("mail provider down");
+      },
+      { deferred: true },
+    );
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await publishEvent({ type: "InvoicePaid", workspaceId: ws() });
+    await expect(queued[0]!()).resolves.toBeUndefined();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it("delivers to subscribers registered through a different copy of the module", async () => {
+    // The server bundles instrumentation.ts (which registers subscribers at start-up)
+    // separately from the routes that publish, so each side loads its own copy of this
+    // module. With module-level state the publishing copy had no subscribers and every
+    // event was dropped. Re-importing after resetModules gives a second copy to prove the
+    // registry is shared.
+    const persisted: string[] = [];
+    const handler = vi.fn();
+    setEventPersister((event) => {
+      persisted.push(event.type);
+    });
+    onEvent("InvoiceSent", handler);
+
+    vi.resetModules();
+    const secondCopy = await import("@/server/infrastructure/events");
+    expect(secondCopy.publishEvent).not.toBe(publishEvent);
+
+    const event: BusEvent = { type: "InvoiceSent", workspaceId: ws() };
+    await secondCopy.publishEvent(event);
+
+    expect(persisted).toEqual(["InvoiceSent"]);
+    expect(handler).toHaveBeenCalledWith(event);
   });
 });

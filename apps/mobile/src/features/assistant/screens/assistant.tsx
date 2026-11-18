@@ -9,7 +9,17 @@ import {
   Screen,
   Toggle,
 } from "@/components/ui";
-import { prepareAssistantTurn, type AssistantTurn } from "@/features/assistant/lib/assistant-turn";
+import {
+  approvalBatch,
+  approvalTitle,
+  CAUTION_TEXT,
+  type PendingApproval,
+} from "@/features/assistant/lib/approvals";
+import {
+  prepareAssistantTurn,
+  stoppedNotice,
+  type AssistantTurn,
+} from "@/features/assistant/lib/assistant-turn";
 import { authenticatedFetch } from "@/lib/api";
 import { navigateBusiness } from "@/lib/navigation/business";
 import { useResource, useWorkspacePath } from "@/lib/resources";
@@ -19,15 +29,18 @@ import type { CollectionPage } from "@soletrade/contracts";
 import * as Crypto from "expo-crypto";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 
 type Conversation = {
   id: string;
   title: string;
   updatedAt: string;
   writeEnabled: boolean;
-  messages: { role: string; content: string }[];
+  messages: { id?: string; role: string; content: string }[];
+  /** Changes hAI's last reply is waiting on (newer servers only). */
+  pendingApprovals?: PendingApproval[];
 };
+type StreamResponse = Awaited<ReturnType<typeof authenticatedFetch>>;
 type ToolResult = {
   type?: string;
   href?: string;
@@ -58,19 +71,34 @@ export function AssistantScreen() {
   const [tools, setTools] = useState<ToolResult[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [toggleKey, setToggleKey] = useState(0);
   const [rename, setRename] = useState("");
+  const [decisions, setDecisions] = useState<Record<string, boolean>>({});
   const generation = useRef(0);
+  const abort = useRef<AbortController | null>(null);
   const createOperation = useRef(Crypto.randomUUID());
   const pendingTurn = useRef<AssistantTurn | null>(null);
   // Workspace changes intentionally clear private conversation state before the next paint.
   useEffect(() => {
     generation.current++;
+    abort.current?.abort();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear private state when workspace binding changes.
     setSelected("");
     setAnswer("");
     setTools([]);
     setText("");
+    setDecisions({});
   }, [workspaceId]);
+  // Leaving the screen ends any in-flight stream.
+  useEffect(
+    () => () => {
+      generation.current++;
+      abort.current?.abort();
+    },
+    [],
+  );
   const create = async () => {
     if (!base) return "";
     const conversation = await request<Conversation>(base, {
@@ -83,16 +111,126 @@ export function AssistantScreen() {
     await conversations.refresh();
     return conversation.id;
   };
+  /** Show one streamed reply as it arrives: text live, tool results as actions. */
+  const readStream = async (response: StreamResponse, current: number) => {
+    if (!response.body)
+      throw new Error("Streaming is unavailable. Try again on a supported native build.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      if (current !== generation.current) {
+        await reader.cancel();
+        break;
+      }
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const event = parseStreamLine(line);
+        if (!event) continue;
+        if (event.type === "text-delta")
+          setAnswer((previous) => previous + String(event.delta ?? event.textDelta ?? ""));
+        if (
+          event.type === "tool-output-available" &&
+          event.output &&
+          typeof event.output === "object"
+        )
+          setTools((previous) => [...previous, event.output as ToolResult]);
+        if (event.type === "error")
+          throw new Error(String(event.errorText ?? "hAI could not finish this response."));
+      }
+    }
+  };
+  /**
+   * Send the decisions on every change hAI is waiting on. Only yes or no goes up; what
+   * the change is comes from the server's own record of hAI's request. The reply then
+   * continues (the approved changes run, once) and streams like a normal answer.
+   */
+  const submitApprovals = async (batch: {
+    approvals: { approvalId: string; approved: boolean }[];
+  }) => {
+    if (busy || !base || !selected) return;
+    const id = selected;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setAnswer("");
+    setTools([]);
+    const current = ++generation.current;
+    const controller = new AbortController();
+    abort.current = controller;
+    setStreaming(true);
+    let accepted = false;
+    try {
+      const response = await authenticatedFetch(`${base}/${id}/approvals`, await token(), {
+        method: "POST",
+        body: batch,
+        version: detail.data?.updatedAt,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        if (data?.error?.code !== "ASSISTANT_TURN_ACCEPTED")
+          throw new Error(data?.error?.message ?? "Could not send your decision.");
+      } else {
+        accepted = true;
+        await readStream(response, current);
+      }
+      if (current === generation.current) {
+        setDecisions({});
+        await detail.refresh(`${base}/${id}`);
+        await conversations.refresh();
+        setAnswer("");
+      }
+    } catch (cause) {
+      setDecisions({});
+      if (controller.signal.aborted) {
+        if (current === generation.current) {
+          setAnswer("");
+          setNotice(stoppedNotice(accepted));
+          await detail.refresh(`${base}/${id}`).catch(() => undefined);
+        }
+        return;
+      }
+      await detail.refresh(`${base}/${id}`).catch(() => undefined);
+      setError(
+        accepted
+          ? "Your decision was received, but the reply was interrupted. The conversation was reloaded."
+          : cause instanceof Error
+            ? cause.message
+            : "Could not send your decision. Please try again.",
+      );
+    } finally {
+      if (abort.current === controller) abort.current = null;
+      setStreaming(false);
+      setBusy(false);
+    }
+  };
+  const decide = (approval: PendingApproval, approved: boolean) => {
+    const next = { ...decisions, [approval.approvalId]: approved };
+    setDecisions(next);
+    const batch = approvalBatch(detail.data?.pendingApprovals ?? [], next);
+    if (batch) void submitApprovals(batch);
+  };
   const send = async () => {
     if (!text.trim() || busy || !base) return;
     setBusy(true);
     setError("");
+    setNotice("");
     setAnswer("");
     setTools([]);
     const current = ++generation.current;
+    const controller = new AbortController();
+    abort.current = controller;
+    setStreaming(true);
     let accepted = false;
+    let activeId = selected;
     try {
       const id = selected || (await create());
+      activeId = id;
       const turn = prepareAssistantTurn(pendingTurn.current, id, text, Crypto.randomUUID);
       pendingTurn.current = turn;
       const response = await authenticatedFetch(`${base}/${id}/messages`, await token(), {
@@ -100,6 +238,7 @@ export function AssistantScreen() {
         body: { message: turn.message },
         idempotencyKey: turn.operationId,
         version: detail.data?.updatedAt,
+        signal: controller.signal,
       });
       if (!response.ok) {
         const data = await response.json();
@@ -118,42 +257,26 @@ export function AssistantScreen() {
       accepted = true;
       pendingTurn.current = null;
       setText("");
-      if (!response.body)
-        throw new Error("Streaming is unavailable. Try again on a supported native build.");
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        if (current !== generation.current) {
-          await reader.cancel();
-          break;
-        }
-        buffer += decoder.decode(chunk.value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          const event = parseStreamLine(line);
-          if (!event) continue;
-          if (event.type === "text-delta")
-            setAnswer((previous) => previous + String(event.delta ?? event.textDelta ?? ""));
-          if (
-            event.type === "tool-output-available" &&
-            event.output &&
-            typeof event.output === "object"
-          )
-            setTools((previous) => [...previous, event.output as ToolResult]);
-          if (event.type === "error")
-            throw new Error(String(event.errorText ?? "hAI could not finish this response."));
-        }
-      }
+      await readStream(response, current);
       if (current === generation.current) {
         await detail.refresh(`${base}/${id}`);
         await conversations.refresh();
         setAnswer("");
       }
     } catch (cause) {
+      if (controller.signal.aborted) {
+        // The user pressed Stop (or left). An accepted turn is reloaded; otherwise the same
+        // operation id is reused on the next send, so nothing can run twice.
+        if (current === generation.current) {
+          setAnswer("");
+          setNotice(stoppedNotice(accepted));
+          if (accepted && base && activeId) {
+            await detail.refresh(`${base}/${activeId}`).catch(() => undefined);
+            await conversations.refresh().catch(() => undefined);
+          }
+        }
+        return;
+      }
       setError(
         accepted
           ? "Your message was accepted, but the stream was interrupted. Reload the conversation before continuing."
@@ -162,9 +285,49 @@ export function AssistantScreen() {
             : "Could not send. Your message is retained.",
       );
     } finally {
+      if (abort.current === controller) abort.current = null;
+      setStreaming(false);
       setBusy(false);
     }
   };
+  const confirmWrites = (value: boolean) => {
+    if (!value) {
+      void patch({ writeEnabled: false });
+      return;
+    }
+    Alert.alert(
+      "Allow business actions?",
+      "hAI will be able to propose changes to your records, such as creating or updating invoices, quotes and transactions. Each change is shown to you first, and nothing is saved or sent until you approve it here.",
+      [
+        { text: "Cancel", style: "cancel", onPress: () => setToggleKey((key) => key + 1) },
+        { text: "Allow", onPress: () => void patch({ writeEnabled: true }) },
+      ],
+      { cancelable: true, onDismiss: () => setToggleKey((key) => key + 1) },
+    );
+  };
+  const confirmDelete = () =>
+    Alert.alert(
+      "Delete this conversation?",
+      "The conversation and its messages will be permanently deleted.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void request(`${base}/${selected}`, {
+              method: "DELETE",
+              version: detail.data?.updatedAt,
+            })
+              .then(() => {
+                setSelected("");
+                void conversations.refresh();
+              })
+              .catch((cause) => setError(String(cause)));
+          },
+        },
+      ],
+    );
   const patch = async (body: unknown) => {
     try {
       await request(`${base}/${selected}`, {
@@ -218,9 +381,11 @@ export function AssistantScreen() {
             secondary
             onPress={() => {
               generation.current++;
+              abort.current?.abort();
               setSelected("");
               setAnswer("");
               setTools([]);
+              setDecisions({});
             }}
           />
           {detail.loading && !detail.data ? (
@@ -369,15 +534,27 @@ export function AssistantScreen() {
                       <Copy>{answer}</Copy>
                     </View>
                   ) : null}
+                  {!streaming &&
+                    (detail.data.pendingApprovals ?? []).map((approval) => (
+                      <ApprovalCard
+                        key={approval.approvalId}
+                        approval={approval}
+                        decision={decisions[approval.approvalId]}
+                        disabled={busy}
+                        onDecide={(approved) => decide(approval, approved)}
+                      />
+                    ))}
                 </Group>
                 <Group title="Conversation settings">
                   <Toggle
+                    key={toggleKey}
                     label="Allow confirmed business actions"
                     value={detail.data.writeEnabled}
-                    onChange={(value) => void patch({ writeEnabled: value })}
+                    onChange={confirmWrites}
                   />
                   <Copy variant="caption" muted>
-                    hAI asks for your confirmation before changing records or sending anything.
+                    Each change hAI proposes waits for your approval before anything is saved or
+                    sent.
                   </Copy>
                   <Field
                     label="Conversation title"
@@ -391,21 +568,7 @@ export function AssistantScreen() {
                     secondary
                     onPress={() => void patch({ title: rename.trim() })}
                   />
-                  <Action
-                    title="Delete conversation"
-                    secondary
-                    onPress={() => {
-                      void request(`${base}/${selected}`, {
-                        method: "DELETE",
-                        version: detail.data?.updatedAt,
-                      })
-                        .then(() => {
-                          setSelected("");
-                          void conversations.refresh();
-                        })
-                        .catch((cause) => setError(String(cause)));
-                    }}
-                  />
+                  <Action title="Delete conversation" secondary onPress={confirmDelete} />
                 </Group>
               </>
             )
@@ -427,17 +590,79 @@ export function AssistantScreen() {
           }}
           placeholder="What would you like to do?"
         />
-        <Action
-          title="Send message"
-          busy={busy}
-          disabled={!text.trim()}
-          onPress={() => void send()}
-        />
+        {streaming ? (
+          <Action title="Stop" secondary onPress={() => abort.current?.abort()} />
+        ) : (
+          <Action
+            title="Send message"
+            busy={busy}
+            disabled={!text.trim()}
+            onPress={() => void send()}
+          />
+        )}
+        {notice ? (
+          <Copy variant="caption" muted>
+            {notice}
+          </Copy>
+        ) : null}
       </Group>
       {(error || detail.error || conversations.error) && (
         <ErrorNotice message={error || detail.error || conversations.error!} />
       )}
     </Screen>
+  );
+}
+function ApprovalCard({
+  approval,
+  decision,
+  disabled,
+  onDecide,
+}: {
+  approval: PendingApproval;
+  decision: boolean | undefined;
+  disabled: boolean;
+  onDecide: (approved: boolean) => void;
+}) {
+  const theme = useTheme();
+  const preview = approval.preview;
+  const title = approvalTitle(approval);
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: theme.warning,
+        backgroundColor: theme.warningTint,
+        borderRadius: radius.md,
+        padding: spacing.md,
+        gap: spacing.xs,
+      }}
+    >
+      <Copy variant="caption" muted>
+        Needs your approval
+      </Copy>
+      <Copy variant="headline">{title}</Copy>
+      {preview?.details.map((line, index) => (
+        <Copy key={index} variant="caption">
+          {line}
+        </Copy>
+      ))}
+      {preview?.consequence ? <Copy>{preview.consequence}</Copy> : null}
+      {preview?.caution ? (
+        <Text style={{ fontSize: 14, fontWeight: "600", color: theme.text }}>
+          {CAUTION_TEXT[preview.caution]}
+        </Text>
+      ) : null}
+      {decision === undefined ? (
+        <View style={{ gap: spacing.xs, paddingTop: spacing.xs }}>
+          <Action title="Approve" disabled={disabled} onPress={() => onDecide(true)} />
+          <Action title="Decline" secondary disabled={disabled} onPress={() => onDecide(false)} />
+        </View>
+      ) : (
+        <Copy variant="caption" muted>
+          {decision ? "Approved." : "Declined."} Decide the other changes to continue.
+        </Copy>
+      )}
+    </View>
   );
 }
 function ToolAction({ result }: { result: ToolResult }) {

@@ -28,13 +28,15 @@ export async function GET(
   }
 
   const { id } = await params;
-  const invoice = await getInvoice(ctx.workspaceId, branded<"InvoiceId">(id));
+  const [invoice, workspace] = await Promise.all([
+    getInvoice(ctx.workspaceId, branded<"InvoiceId">(id)),
+    getWorkspace(ctx.workspaceId).catch(() => null),
+  ]);
   if (!invoice) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   // Build the element before the try/catch - React renders lazily, so a JSX error inside the
   // try wouldn't be caught by it (react-hooks/error-boundaries). `renderPdf` (renderToBuffer)
   // is the call that actually renders + can throw, so only that is wrapped.
-  const workspace = await getWorkspace(ctx.workspaceId).catch(() => null);
   const element = (
     <InvoiceDocument
       invoice={{

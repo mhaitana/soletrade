@@ -258,3 +258,67 @@ export function summarizeGst(
     byQuarter,
   };
 }
+
+/**
+ * One calendar month of GST totals, as returned by the `get_gst_monthly` database function
+ * (already absolute values, already split into collected / paid).
+ */
+export interface GstMonthlyPoint {
+  /** Calendar month, `YYYY-MM`. */
+  month: string;
+  gstCollectedCents: number;
+  gstPaidCents: number;
+}
+
+/**
+ * Same result as `summarizeGst`, built from per-month totals instead of raw transactions.
+ * The totals are computed in Postgres so they stay exact however many transactions a
+ * workspace has (a raw-row fetch is capped at 1,000 rows by the data API). Quarters are
+ * month-aligned for every `fyStartMonth`, so bucketing whole months loses nothing. Pure.
+ */
+export function summarizeGstMonthly(
+  months: readonly GstMonthlyPoint[],
+  fyStartMonth: number = 7,
+): GstSummary {
+  let gstCollectedCents = 0;
+  let gstPaidCents = 0;
+  const quarterMap = new Map<string, GstQuarterPoint>();
+
+  for (const point of months) {
+    const match = /^(\d{4})-(\d{2})$/.exec(point.month);
+    if (!match) continue;
+    const monthStart = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
+    const collected = Math.abs(point.gstCollectedCents);
+    const paid = Math.abs(point.gstPaidCents);
+    gstCollectedCents += collected;
+    gstPaidCents += paid;
+
+    const { fiscalYear, quarter, label } = fiscalQuarter(monthStart, fyStartMonth);
+    const existing = quarterMap.get(label);
+    if (existing) {
+      existing.gstCollectedCents += collected;
+      existing.gstPaidCents += paid;
+      existing.netGstCents = existing.gstCollectedCents - existing.gstPaidCents;
+    } else {
+      quarterMap.set(label, {
+        label,
+        fiscalYear,
+        quarter,
+        gstCollectedCents: collected,
+        gstPaidCents: paid,
+        netGstCents: collected - paid,
+      });
+    }
+  }
+
+  const byQuarter = [...quarterMap.values()].sort(
+    (a, b) => a.fiscalYear - b.fiscalYear || a.quarter - b.quarter,
+  );
+
+  return {
+    gstCollectedCents,
+    gstPaidCents,
+    netGstCents: gstCollectedCents - gstPaidCents,
+    byQuarter,
+  };
+}

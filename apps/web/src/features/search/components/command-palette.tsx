@@ -11,7 +11,13 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { buildNav, type NavItem } from "@/config/navigation";
+import {
+  buildCreateActions,
+  buildNav,
+  buildSecondaryNav,
+  type CreateAction,
+  type NavItem,
+} from "@/config/navigation";
 import { SEARCH_MODULE_LABEL, type SearchResultGroup } from "@/types/search";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,9 +26,11 @@ import type { WorkspaceRole } from "@/lib/domain/database-enums";
 
 /**
  * ⌘K command palette (Wave 3). A `CommandDialog` (cmdk wrapped in the vendored `Dialog`) with
- * two sections: a static **Navigate** group built from the same `buildNav` the sidebar uses
- * (so the palette and nav never drift), and **live search** groups fetched from `/api/search`
- * with a 150ms debounce as the user types. Selecting any item navigates + closes the palette.
+ * three kinds of entries: a **Navigate** group built from the same `buildNav` the sidebar uses
+ * (so the palette and nav never drift) plus, once the user types, the sub-pages that have no
+ * sidebar entry (Receipts, GST / BAS, Vehicles, settings sections); a **Create** group built
+ * from the same list as the header "New" menu; and **live search** groups fetched from
+ * `/api/search` with a 150ms debounce. Selecting any item navigates + closes the palette.
  *
  * Navigation is filtered locally; server results are already matched against fields such as
  * customer company and notes that may not appear in the displayed label. Each response belongs
@@ -54,6 +62,14 @@ export function CommandPalette({
     () => buildNav(installedModules, role),
     [installedModules, role],
   );
+  const secondaryNavItems = useMemo<NavItem[]>(
+    () => buildSecondaryNav(installedModules, role),
+    [installedModules, role],
+  );
+  const createActions = useMemo<CreateAction[]>(
+    () => buildCreateActions(installedModules, role),
+    [installedModules, role],
+  );
 
   const term = query.trim();
   const showResults = open && term.length >= 2;
@@ -62,7 +78,16 @@ export function CommandPalette({
   const failed = showResults && currentResponse?.status === "error";
   const visibleGroups =
     showResults && currentResponse?.status === "success" ? currentResponse.groups : [];
-  const visibleNavItems = navItems.filter((item) => !term || defaultFilter(item.label, term) > 0);
+  // With no query the palette shows the main navigation only, to stay short; sub-pages
+  // appear as soon as the query matches them.
+  const visibleNavItems = term
+    ? [...navItems, ...secondaryNavItems].filter((item) => defaultFilter(item.label, term) > 0)
+    : navItems;
+  // Match on the label only: the filter is a fuzzy subsequence match, and including the
+  // description made unrelated record searches surface create actions above the results.
+  const visibleCreateActions = createActions.filter(
+    (action) => !term || defaultFilter(action.label, term) > 0,
+  );
 
   // Include the debounce in the loading state, and guard completion as well as fetch itself:
   // an obsolete request may already be decoding its response when it is aborted.
@@ -116,7 +141,7 @@ export function CommandPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search workspace"
-      description="Find records or navigate to a page."
+      description="Find records, go to a page, or start something new."
       shouldFilter={false}
       className="sm:max-w-xl"
     >
@@ -126,7 +151,7 @@ export function CommandPalette({
           setQuery(value);
           setRequestVersion((version) => version + 1);
         }}
-        placeholder="Search customers, invoices, quotes, files…"
+        placeholder="Search records, go to a page, or create something…"
       />
       {loading ? (
         <p role="status" className="px-4 py-3 text-sm text-muted-foreground">
@@ -159,9 +184,30 @@ export function CommandPalette({
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
               return (
-                <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
+                <CommandItem key={item.href} value={item.href} onSelect={() => go(item.href)}>
                   <Icon className="size-4 shrink-0 opacity-60" aria-hidden />
                   <span>{item.label}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        ) : null}
+
+        {visibleCreateActions.length > 0 ? (
+          <CommandGroup heading="Create">
+            {visibleCreateActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <CommandItem
+                  key={action.key}
+                  value={`create-${action.key}`}
+                  onSelect={() => go(action.href)}
+                >
+                  <Icon className="size-4 shrink-0 opacity-60" aria-hidden />
+                  <span>{action.label}</span>
+                  <span className="ml-auto truncate text-xs text-muted-foreground">
+                    {action.description}
+                  </span>
                 </CommandItem>
               );
             })}

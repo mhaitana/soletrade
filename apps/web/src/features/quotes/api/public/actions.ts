@@ -19,7 +19,9 @@ import type { AcceptanceMeta, DeclineMeta } from "@/lib/domain/quotes/types";
 const acceptSchema = z.object({
   token: z.string().min(1),
   accepterName: z.string().trim().min(1, "Please enter your name.").max(200),
-  accepterEmail: z.string().trim().max(200).optional(),
+  // Optional, but if given it must be an address: it is stored on the acceptance record as
+  // the person who agreed, and an arbitrary string there is worse than none.
+  accepterEmail: z.string().trim().max(200).email().optional(),
   signature: z.string().max(100_000).optional(),
 });
 
@@ -41,7 +43,13 @@ async function readRequestMeta(): Promise<{ ip: string; userAgent: string }> {
 export async function acceptQuoteAction(input: unknown): Promise<QuoteAcceptResult> {
   const parsed = acceptSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "Please fix the highlighted fields." };
+    const emailInvalid = parsed.error.issues.some((issue) => issue.path[0] === "accepterEmail");
+    return {
+      ok: false,
+      error: emailInvalid
+        ? "Enter a valid email address, or leave the email blank."
+        : "Please fix the highlighted fields.",
+    };
   }
 
   const { ip, userAgent } = await readRequestMeta();

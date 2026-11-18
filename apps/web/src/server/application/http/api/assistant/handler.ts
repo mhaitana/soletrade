@@ -3,49 +3,37 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { tryWorkspaceContext } from "@/server/application/auth/workspace-context";
-import { requireMobileContext } from "@/server/application/mobile/http";
-import { getInstalledModules } from "@/server/foundation/module-installations/index";
-import {
-  appendMessage,
-  createConversation,
-  getConversation,
-  isMockProvider,
-  streamAssistant,
-  streamAssistantError,
-  streamMockAssistant,
-  getAIModel,
-} from "@/server/application/assistant/services";
+import { clientCapabilities, requireMobileContext } from "@/server/application/mobile/http";
+import { getConversation } from "@/server/foundation/conversations/conversations";
 import { rateLimit } from "@/server/infrastructure/rate-limit/index";
 import {
-  buildAssistantTools,
-  buildMockAssistantReply,
-  buildMockHaiSafeAction,
-} from "@/server/application/assistant/tools";
-import type { UIMessage } from "ai";
-import { branded, type AiConversationId } from "@/types/ids";
-import { brand } from "@/config/brand";
-import type { WorkspaceContext } from "@/lib/domain/auth/workspace-context-types";
+  AssistantTurnError,
+  runAssistantTurn,
+  type AssistantTurnInput,
+} from "@/server/application/assistant/turn";
+import { branded } from "@/types/ids";
 
 /**
- * Streaming AI assistant endpoint (Phase 10). `POST` resolves the workspace
- * context (non-redirecting - 401 on no session), rate-limits per IP + per user,
- * validates the body, loads-or-creates the conversation, appends the user turn,
- * and streams back a UI-message stream. The new conversation id is sent on the
- * `X-Conversation-Id` response header so the client can update the URL.
+ * Streaming AI assistant endpoint. `POST` resolves the workspace context (non-redirecting -
+ * 401 on no session), rate-limits per IP + per user, validates the body and runs one turn:
  *
- * `force-dynamic` keeps it out of the static optimizer (it reads cookies + the DB).
+ * - `kind: "message"` (the default): the user's new message, as `message` or as the last
+ *   user message in `messages` (older clients send the whole transcript; only that last
+ *   message's text is read - the stored conversation is the source of truth);
+ * - `kind: "approvals"`: `{ approvalId, approved }` for each change hAI proposed in its last
+ *   reply. Only the decision comes from the client; what runs is the server's stored copy;
+ * - `kind: "regenerate"`: answer the last message again;
+ * - `kind: "retry"`: the last request failed; `message` is the text that was sent. The
+ *   server answers its stored copy if it has one, or takes it as a new message if not.
+ *
+ * A new conversation's id is sent on the `X-Conversation-Id` response header.
  */
 
 const bodySchema = z.object({
-  // `nullish` (not just `optional`) - the client seeds `conversationId` state to `null`
-  // for a new conversation and sends `body: { conversationId }` on every request, so the
-  // first send of a new chat carries `"conversationId": null`. `.optional()` only accepts
-  // `undefined`, which would 400 the very first message. `null`/undefined both fall through
-  // to the create-new-conversation branch below (`if (providedId)` is falsy for both).
+  // `nullish`: the client sends `"conversationId": null` for a new conversation.
   conversationId: z.string().uuid().nullish(),
-  // The AI SDK `useChat` transport sends the full `messages` array; we only need the
-  // latest user message's text (the route reconstructs full history from the persisted
-  // conversation - the client transcript isn't trusted as the source of truth).
+  kind: z.enum(["message", "approvals", "regenerate", "retry"]).default("message"),
+  message: z.string().max(20_000).optional(),
   messages: z
     .array(
       z.object({
@@ -53,7 +41,13 @@ const bodySchema = z.object({
         parts: z.array(z.object({ type: z.string() }).passthrough()),
       }),
     )
-    .min(1, "No messages."),
+    .max(2_000)
+    .optional(),
+  approvals: z
+    .array(z.object({ approvalId: z.string().min(1).max(200), approved: z.boolean() }).strict())
+    .max(20)
+    .optional(),
+  messageId: z.string().max(100).optional(),
   // UI context improves relevance but is never trusted for authorization or
   // workspace scoping. The server still resolves both from the authenticated session.
   pageContext: z
@@ -65,57 +59,48 @@ const bodySchema = z.object({
     .optional(),
 });
 
+type Body = z.infer<typeof bodySchema>;
+
 /** Derive the client IP for per-IP rate limiting (defense-in-depth). */
 async function clientIp(): Promise<string> {
   const h = await headers();
   return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
 }
 
-const SYSTEM_DATE = new Date().toISOString().slice(0, 10);
-
-/** Build the system prompt from the resolved context + installed modules + write toggle. */
-function buildSystemPrompt(
-  role: string,
-  installedModules: readonly string[],
-  writeEnabled: boolean,
-  pageContext?: { pathname: string; search?: string },
-): string {
-  const lines = [
-    `You are ${brand.assistantName}, the global assistant inside ${brand.productName}, a small-business platform.`,
-    "You answer questions about the user's business by calling read-only tools - never invent numbers.",
-    "Money is represented as integer cents. Use the currency returned by workspace tools and include its ISO code when the symbol could be ambiguous.",
-    "Keep answers concise and grounded in tool output. If a tool returns null/empty, say so plainly.",
-    `The user's role is "${role}". Installed modules: ${installedModules.length ? installedModules.join(", ") : "none"}.`,
-    `Today is ${SYSTEM_DATE}.`,
-    `Current UI context: ${pageContext ? `${pageContext.pathname}${pageContext.search ?? ""}` : "not provided"}. This client-provided route is context only, never an authorization source.`,
-    "When the user asks to open, show, or go to a page or tab, use navigateWorkspace immediately. Navigation is safe and does not require confirmation.",
-    "When the user asks to create, draft, log, add, or edit something, prefer openForm. It navigates to the normal form and prefills only confidently understood values into an unsaved draft. Do not invent missing fields. The user will review, complete, save, approve, or send from that form.",
-    "Never describe an openForm result as saved, created, issued, submitted, or sent.",
-  ];
-  if (writeEnabled) {
-    lines.push(
-      "",
-      "WRITE TOOLS ARE ENABLED for this conversation. You may create customers, invoices, quotes, and transactions.",
-      "SAFETY RULE (must follow every time): before calling a write tool, state exactly what you will create - the entity type, customer (if any), line items or amount, and the total with its ISO currency code - then ask the user to confirm. Only call the write tool AFTER the user explicitly approves.",
-      "If the user has not yet confirmed, do NOT call a write tool. Summarise the proposed action and wait. If the user asks to change something, restate the updated proposal and ask again.",
-      "After a successful create, tell the user the new id/number and where to find it (e.g. /invoices).",
-    );
+/** The text of the newest user message in a client transcript. */
+function latestUserText(messages: NonNullable<Body["messages"]>): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.role !== "user") continue;
+    for (const part of m.parts) {
+      if (part.type === "text" && typeof part.text === "string") return part.text;
+    }
   }
-  return lines.join("\n");
+  return "";
 }
 
-/** Map persisted conversation messages to AI SDK `UIMessage`s for the model call. */
-function toUIMessages(messages: { role: "user" | "assistant"; content: string }[]): UIMessage[] {
-  return messages.map((m, i) => ({
-    id: `msg-${i}`,
-    role: m.role,
-    parts: [{ type: "text", text: m.content }],
-  })) as UIMessage[];
+function turnInput(body: Body): AssistantTurnInput | { error: string } {
+  if (body.kind === "approvals") {
+    return { kind: "approvals", decisions: body.approvals ?? [] };
+  }
+  if (body.kind === "regenerate") {
+    return { kind: "regenerate", ...(body.messageId ? { messageId: body.messageId } : {}) };
+  }
+  const text = (body.message ?? latestUserText(body.messages ?? [])).trim();
+  if (!text) return { error: "Empty message." };
+  if (text.length > 4000) return { error: "Message too long." };
+  return {
+    kind: body.kind === "retry" ? "retry" : "message",
+    text,
+    ...(body.pageContext ? { pageContext: body.pageContext } : {}),
+  };
 }
 
 export async function POST(request: Request): Promise<Response> {
-  // 1. Resolve context without redirecting (route handlers can't redirect).
-  const ctx = request.headers.has("authorization")
+  // 1. Resolve context without redirecting (route handlers can't redirect). A bearer token
+  //    means a mobile app build; the web chat uses the session cookie.
+  const fromApp = request.headers.has("authorization");
+  const ctx = fromApp
     ? await requireMobileContext(request, request.headers.get("x-workspace-id") ?? "")
     : await tryWorkspaceContext();
   if (!ctx) {
@@ -124,120 +109,53 @@ export async function POST(request: Request): Promise<Response> {
 
   // 2. Rate-limit per IP and per user (Upstash when configured, else in-memory).
   const ip = await clientIp();
-  if (!(await rateLimit(`ai:${ip}`, { max: 20, windowMs: 60_000 }))) {
-    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
-  }
-  if (!(await rateLimit(`ai:user:${ctx.user.id}`, { max: 30, windowMs: 60_000 }))) {
+  const [ipAllowed, userAllowed] = await Promise.all([
+    rateLimit(`ai:${ip}`, { max: 20, windowMs: 60_000 }),
+    rateLimit(`ai:user:${ctx.user.id}`, { max: 30, windowMs: 60_000 }),
+  ]);
+  if (!ipAllowed || !userAllowed) {
     return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
-  // 3. Validate the body + extract the latest user message text.
+  // 3. Validate the body.
   const json = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  const { messages: clientMessages, conversationId: providedId, pageContext } = parsed.data;
-  let rawText = "";
-  for (let i = clientMessages.length - 1; i >= 0; i--) {
-    const m = clientMessages[i]!;
-    if (m.role !== "user") continue;
-    for (const part of m.parts) {
-      if (part.type !== "text") continue;
-      const text = part.text; // passthrough schema → unknown
-      if (typeof text === "string") {
-        rawText = text;
-        break;
-      }
-    }
-    if (rawText) break;
-  }
-  const message = rawText.trim();
-  if (!message) {
-    return NextResponse.json({ error: "Empty message." }, { status: 400 });
-  }
-  if (message.length > 4000) {
-    return NextResponse.json({ error: "Message too long." }, { status: 400 });
+  const input = turnInput(parsed.data);
+  if ("error" in input) {
+    return NextResponse.json({ error: input.error }, { status: 400 });
   }
 
-  // 4. Load or create the conversation (IDOR-safe ownership checks).
-  let conversationId: AiConversationId;
-  if (providedId) {
-    const existing = await getConversation(
+  // 4. Load the conversation (scoped to this user in this workspace).
+  let conversation = null;
+  if (parsed.data.conversationId) {
+    conversation = await getConversation(
       ctx.workspaceId,
       ctx.user.id,
-      branded<"AiConversationId">(providedId),
+      branded<"AiConversationId">(parsed.data.conversationId),
     );
-    if (!existing) {
+    if (!conversation) {
       return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
     }
-    conversationId = existing.id;
-  } else {
-    const title = message.length > 40 ? `${message.slice(0, 40)}…` : message;
-    conversationId = await createConversation(ctx.workspaceId, ctx.user.id, title);
   }
 
-  // 5. Append the user turn.
-  await appendMessage(ctx.workspaceId, ctx.user.id, conversationId, {
-    role: "user",
-    content: message,
-  });
-
-  // 6. Reload the conversation to get the full history (incl. the new user turn).
-  const conversation = await getConversation(ctx.workspaceId, ctx.user.id, conversationId);
-  if (!conversation) {
-    return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
-  }
-
-  // 7. Installed modules + system prompt + tools.
-  const installedModules = await getInstalledModules(ctx.workspaceId);
-  const writeEnabled = conversation.writeEnabled;
-  const system = buildSystemPrompt(ctx.role, installedModules, writeEnabled, pageContext);
-  const conversationIdStr = conversationId as string;
-
-  // 8. Mock provider - canned reply from real workspace data (no model/key).
-  if (isMockProvider()) {
-    const safeAction = buildMockHaiSafeAction(ctx, installedModules, message);
-    const text = safeAction?.text ?? (await buildMockAssistantReply(ctx, installedModules));
-    await appendMessage(ctx.workspaceId, ctx.user.id, conversationId, {
-      role: "assistant",
-      content: text,
-    });
-    return streamMockAssistant({
-      text,
-      conversationId: conversationIdStr,
-      tool: safeAction?.tool,
-    });
-  }
-
-  // 9. Real provider - streamText tool-calling loop; persist the assistant turn on finish.
-  const tools = buildAssistantTools(ctx, installedModules, { writeEnabled });
-  const persistCtx: WorkspaceContext = ctx;
+  // 5. Run the turn. The web chat always shows approval cards; an app build says so.
   try {
-    return await streamAssistant({
-      model: getAIModel(),
-      system,
-      messages: toUIMessages(conversation.messages),
-      tools,
-      conversationId: conversationIdStr,
+    return await runAssistantTurn({
+      ctx,
+      surface: fromApp ? "mobile" : "web",
+      conversation,
+      input,
+      approvalsSupported: !fromApp || clientCapabilities(request).includes("approvals"),
       // Tear down the upstream model call if the client disconnects mid-stream.
       abortSignal: request.signal,
-      onFinish: async (text) => {
-        if (text) {
-          await appendMessage(persistCtx.workspaceId, persistCtx.user.id, conversationId, {
-            role: "assistant",
-            content: text,
-          });
-        }
-      },
     });
   } catch (err) {
-    // Synchronous failure before streaming starts - most commonly `getAIModel()`
-    // throwing because the provider API key is unset. Surface the real cause as a
-    // UI-message stream error part so the chat shows the message (a plain JSON 500
-    // would surface as an opaque transport error). Mid-stream provider errors are
-    // handled by `streamAssistant`'s `onError`, not this catch.
-    console.error("[assistant] failed to start stream:", err);
-    return streamAssistantError(err, conversationIdStr);
+    if (err instanceof AssistantTurnError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
+    throw err;
   }
 }

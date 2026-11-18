@@ -1,5 +1,5 @@
 import { SummaryView } from "@/components/trends";
-import { Choice, ErrorNotice, Loading } from "@/components/ui";
+import { Choice, ErrorNotice, Loading, usePullRefresh } from "@/components/ui";
 import { periodDates, periodOptions } from "@/lib/periods";
 import { useResource, useWorkspacePath } from "@/lib/resources";
 import { useSession } from "@/lib/session";
@@ -24,6 +24,7 @@ export function ModuleSummary({ module }: { module: "books" | "drive" }) {
     if (period === "all" || nextAsOf.getTime() === asOf.getTime()) void state.refresh();
     else setAsOf(nextAsOf);
   };
+  usePullRefresh(reload);
   return (
     <>
       <Choice

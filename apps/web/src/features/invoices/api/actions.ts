@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireWorkspaceContext } from "@/server/application/auth/workspace-context";
+import { createWithRequestId } from "@/server/application/request-id-create";
 import { authorize } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import { isModuleEnabled } from "@/server/foundation/module-installations/index";
-import { getCustomer, listCustomers } from "@/server/foundation/customers/index";
-import type { CustomerRow } from "@/lib/domain/customers/types";
+import { getCustomer, listCustomerOptions } from "@/server/foundation/customers/index";
+import type { PickerCustomer } from "@/types/customer-picker";
 import {
   createInvoice,
   deleteInvoice,
@@ -41,6 +42,8 @@ const lineItemSchema = z.object({
 });
 
 const createSchema = z.object({
+  /** One id per form draft; resending it never creates a second record. */
+  requestId: z.string().uuid().optional(),
   customerId: z.string().uuid("Pick a customer."),
   issueDate: z.coerce.date(),
   dueDate: z.coerce.date().nullable().optional(),
@@ -92,20 +95,26 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
   }));
 
   try {
-    const id = await createInvoice(
-      ctx.workspaceId,
-      {
-        customerId: branded<"CustomerId">(parsed.data.customerId),
-        issueDate: parsed.data.issueDate,
-        dueDate: parsed.data.dueDate ?? null,
-        currency: parsed.data.currency,
-        taxRate: parsed.data.taxRate,
-        pricesIncludeTax: parsed.data.pricesIncludeTax,
-        notes: parsed.data.notes ?? null,
-        paymentMethods: parsed.data.paymentMethods ?? null,
-        lineItems,
-      },
-      ctx.user.id,
+    const { id } = await createWithRequestId(
+      parsed.data.requestId ? branded<"InvoiceId">(parsed.data.requestId) : undefined,
+      (requestId) =>
+        createInvoice(
+          ctx.workspaceId,
+          {
+            customerId: branded<"CustomerId">(parsed.data.customerId),
+            issueDate: parsed.data.issueDate,
+            dueDate: parsed.data.dueDate ?? null,
+            currency: parsed.data.currency,
+            taxRate: parsed.data.taxRate,
+            pricesIncludeTax: parsed.data.pricesIncludeTax,
+            notes: parsed.data.notes ?? null,
+            paymentMethods: parsed.data.paymentMethods ?? null,
+            lineItems,
+          },
+          ctx.user.id,
+          requestId,
+        ),
+      async (requestId) => (await getInvoice(ctx.workspaceId, requestId)) !== null,
     );
     revalidatePath("/invoices");
     return { ok: true, invoiceId: id };
@@ -342,7 +351,7 @@ export type InvoiceEditData =
   | {
       installed: true;
       invoice: InvoiceWithItems | null;
-      customers: CustomerRow[];
+      customers: PickerCustomer[];
       workspacePaymentMethods: PaymentMethods;
       defaultCurrency: string;
       canManage: boolean;
@@ -355,7 +364,7 @@ export async function loadInvoiceForEdit(invoiceId: string): Promise<InvoiceEdit
 
   const [invoice, customers, workspace, canManage] = await Promise.all([
     getInvoice(ctx.workspaceId, branded<"InvoiceId">(invoiceId)),
-    listCustomers(ctx.workspaceId),
+    listCustomerOptions(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "manage:invoice").ok),
   ]);
@@ -374,7 +383,7 @@ export async function loadInvoiceForEdit(invoiceId: string): Promise<InvoiceEdit
 export async function loadCustomersForInvoice(): Promise<
   | {
       installed: true;
-      customers: CustomerRow[];
+      customers: PickerCustomer[];
       workspacePaymentMethods: PaymentMethods;
       defaultCurrency: string;
       canManage: boolean;
@@ -384,7 +393,7 @@ export async function loadCustomersForInvoice(): Promise<
   const ctx = await requireWorkspaceContext();
   if (!(await isModuleEnabled(ctx.workspaceId, "invoices"))) return { installed: false };
   const [customers, workspace, canManage] = await Promise.all([
-    listCustomers(ctx.workspaceId),
+    listCustomerOptions(ctx.workspaceId),
     getWorkspace(ctx.workspaceId),
     Promise.resolve(authorize(ctx.role, "create:invoice").ok),
   ]);

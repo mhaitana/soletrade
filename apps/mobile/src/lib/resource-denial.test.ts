@@ -39,6 +39,7 @@ it.each(["MODULE_UNAVAILABLE", "module_unavailable"])(
     mockRequest.mockRejectedValue(
       new ApiError({ code, message: "This module is unavailable." }, 404),
     );
+    (readReference as jest.Mock).mockClear();
     await act(async () => {
       await first.result.current.refresh();
     });
@@ -51,6 +52,30 @@ it.each(["MODULE_UNAVAILABLE", "module_unavailable"])(
     const next = await renderHook(() => useResource("/workspaces/w/invoices"));
     await waitFor(() => expect(next.result.current.error).toBe("This module is unavailable."));
     expect(next.result.current.data).toBeUndefined();
-    expect(readReference).not.toHaveBeenCalled();
+    expect(next.result.current.cached).not.toBe(true);
   },
 );
+it("never shows the saved copy once the first background refresh is authoritatively denied", async () => {
+  mockCache = { items: [{ id: "private" }] };
+  let reject!: (reason: unknown) => void;
+  mockRequest.mockReturnValue(new Promise((_resolve, fail) => (reject = fail)));
+  const hook = await renderHook(() => useResource<{ items: unknown[] }>("/workspaces/w/invoices"));
+  await waitFor(() => expect(hook.result.current.cached).toBe(true));
+  expect(hook.result.current.data).toEqual({ items: [{ id: "private" }] });
+  expect(hook.result.current.refreshing).toBe(true);
+  await act(async () => {
+    reject(new ApiError({ code: "MODULE_UNAVAILABLE", message: "Unavailable." }, 404));
+  });
+  expect(hook.result.current.data).toBeUndefined();
+  expect(hook.result.current.denied).toBe(true);
+  expect(clearWorkspaceReferences).toHaveBeenCalledWith({ userId: "u", workspaceId: "w" });
+  expect(mockCache).toBeUndefined();
+});
+it("surfaces a non-authoritative 4xx instead of keeping the saved copy", async () => {
+  mockCache = { items: [{ id: "old" }] };
+  mockRequest.mockRejectedValue(new ApiError({ code: "NOT_FOUND", message: "Gone." }, 400));
+  const hook = await renderHook(() => useResource("/workspaces/w/invoices/x"));
+  await waitFor(() => expect(hook.result.current.error).toBe("Gone."));
+  expect(hook.result.current.data).toBeUndefined();
+  expect(hook.result.current.refreshing).toBe(false);
+});

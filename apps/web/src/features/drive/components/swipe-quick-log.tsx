@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRequestId } from "@/hooks/use-request-id";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +28,7 @@ const DEFAULT_DISTANCE_KM = 5;
 export function SwipeQuickLog({ defaultPlatform }: { defaultPlatform?: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { requestId, renew: renewRequestId } = useRequestId();
   const [error, setError] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
 
@@ -50,8 +53,11 @@ export function SwipeQuickLog({ defaultPlatform }: { defaultPlatform?: string })
       notes: null,
     };
     startTransition(async () => {
-      const res = await createTripAction(input);
+      const res = await createTripAction({ requestId, ...input });
       if (res.ok) {
+        // The widget stays on screen for the next trip, which is a new record.
+        renewRequestId();
+        toast.success("Trip logged");
         router.refresh();
         return;
       }

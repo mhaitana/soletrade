@@ -5,27 +5,27 @@ import { useSession } from "@/lib/session";
 import { router } from "expo-router";
 
 export function MoneyScreen() {
-  const { bootstrap } = useSession();
+  const { bootstrap, refreshBootstrap } = useSession();
   if (
     bootstrap?.activeWorkspace?.modules.includes("books") &&
     !bootstrap.activeWorkspace.capabilities.includes("view:books")
   )
     return (
-      <Screen>
+      <Screen onRefresh={() => refreshBootstrap()}>
         <Copy variant="title">Money</Copy>
         <Copy>Your workspace role does not include access to Books.</Copy>
       </Screen>
     );
   if (!bootstrap?.activeWorkspace?.modules.includes("books"))
     return (
-      <Screen>
+      <Screen onRefresh={() => refreshBootstrap()}>
         <Copy variant="title">Money</Copy>
         <Copy>Enable Books to keep income, expenses and receipts together.</Copy>
         <NavRow title="Subscription" href="/feature/store" />
       </Screen>
     );
   return (
-    <Screen>
+    <Screen onRefresh={() => refreshBootstrap()}>
       <Copy variant="title">Money</Copy>
       <Copy muted>A clear view of what comes in and goes out.</Copy>
       {bootstrap.activeWorkspace.capabilities.includes("manage:books") && (

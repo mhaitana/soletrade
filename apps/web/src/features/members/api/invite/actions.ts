@@ -7,15 +7,31 @@ import { z } from "zod";
 import { getCurrentUser } from "@/server/application/auth/session";
 import { acceptInvitation } from "@/server/foundation/members/index";
 import { setActiveWorkspaceId } from "@/server/application/auth/workspace-cookie";
+import { createSupabaseServerClient } from "@/server/infrastructure/supabase/server";
 import { rateLimit } from "@/server/infrastructure/rate-limit/index";
 import { branded } from "@/types/ids";
 
-const tokenSchema = z.object({ token: z.string().min(1) });
+const tokenSchema = z.object({ token: z.string().min(1).max(200) });
 
 export type AcceptInvitationResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Accept a workspace invitation (Wave 4 - public `/invite?token=...`). The signed-in user
+ * The signed-in account is not the invited email. Sign that account out and send the
+ * browser to /login with the invitation as the return path, so the invitee can sign in (or
+ * create an account) with the right address. Linking straight to /login does not work while
+ * a session exists: the proxy redirects signed-in users from /login to the dashboard.
+ */
+export async function switchInviteAccountAction(token: string): Promise<void> {
+  const parsed = tokenSchema.safeParse({ token });
+  const supabase = createSupabaseServerClient();
+  await supabase.auth.signOut();
+  revalidatePath("/", "layout");
+  const next = parsed.success ? `/invite/${encodeURIComponent(parsed.data.token)}` : "/";
+  redirect(`/login?next=${encodeURIComponent(next)}`);
+}
+
+/**
+ * Accept a workspace invitation (Wave 4 - public `/invite/{token}`). The signed-in user
  * (resolved from the session, never from client input) accepts the invitation, joins the
  * workspace, and is redirected to its dashboard with the active-workspace cookie set to the
  * joined workspace.

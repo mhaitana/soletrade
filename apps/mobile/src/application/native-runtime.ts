@@ -33,7 +33,9 @@ export function useNativeRuntime({ userId, workspaceId, request }: MobileFeature
       await reconcileRouteDeletions(binding, request).catch(() => undefined);
       const registered = await readState<string>(`push-device:${userId}`);
       if (live && registered && (await Notifications.getPermissionsAsync()).granted)
-        await registerPush(request, userId).catch(() => undefined);
+        await registerPush(request, userId, { onlyIfChanged: { workspaceId } }).catch(
+          () => undefined,
+        );
     };
     void activate();
     const timer = setInterval(() => void retry(), 30000);

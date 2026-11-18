@@ -30,7 +30,7 @@ export default async function AdminUsersPage({
       <AdminPageHeader
         icon={Users}
         title="User Management"
-        subtitle="Search and inspect platform accounts (operational metadata only; Principle #3)."
+        subtitle="Search and inspect platform accounts (operational metadata only)."
         action={<AdminSearchForm placeholder="Search by email…" />}
       />
 
