@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, Pencil, Plus, Search, Send, Sparkles, Square, Trash2 } from "lucide-react";
+import { Bot, History, Pencil, Plus, Search, Send, Sparkles, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,6 +55,11 @@ import { WriteToolsSwitch } from "@/features/assistant/components/write-tools-sw
  * The page is laid out like the other workspace pages: a title with its main action, the
  * conversation list in the shared table chrome, and the chat in a card that starts an
  * empty conversation the same way the side panel does.
+ *
+ * On a phone or tablet the title row and the chat together are exactly as tall as the
+ * visible screen, so the input is always on screen above the bottom bar and only the
+ * messages scroll; the conversation list follows below. On a wide screen the list sits
+ * beside the chat.
  */
 const SUGGESTED_PROMPTS = [
   "How's my business doing this month?",
@@ -146,11 +151,11 @@ export function AssistantChat({
   // Where focus goes after "Show more": the first of the rows it adds.
   const focusRowAfterMore = useRef<number | null>(null);
 
-  // Bring the whole chat (and so its input) onto the screen when a stored conversation
-  // opens and when a turn starts (not when it ends: the person may have scrolled away to
-  // the list by then). On a phone the card is as tall as the screen once it has messages,
-  // so without this its input sits below the fold, behind the bottom bar. On a wide
-  // screen the card already fits and nothing moves.
+  // Bring the whole chat (and so its input) back onto the screen when a stored
+  // conversation opens and when a turn starts (not when it ends: the person may have
+  // scrolled away to the list by then). The layout already fits the chat on the screen
+  // at the top of the page, so this only moves anything when the page has been scrolled
+  // or the screen is too short to hold the chat (a phone on its side).
   const opensWithMessages = initialMessages.length > 0;
   useEffect(() => {
     if (opensWithMessages) cardRef.current?.scrollIntoView?.({ block: "nearest" });
@@ -281,44 +286,243 @@ export function AssistantChat({
   }, [list.loadingMore, rows.length]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{brand.assistantName} assistant</h1>
-          <p className="text-sm text-muted-foreground">
-            Ask about your workspace and pick up past conversations.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild>
-            <Link href="/assistant">
-              <Plus className="size-4" aria-hidden />
-              New conversation
-            </Link>
-          </Button>
-          {/* Below the chat on a phone or tablet, so offer a way straight to it. */}
-          {initialConversations.length > 0 ? (
-            <Button asChild variant="outline" className="lg:hidden">
-              <a href="#conversations">
-                Conversations
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                  {initialConversations.length}
-                  {hasMoreConversations ? "+" : ""}
-                </span>
-              </a>
-            </Button>
-          ) : null}
-        </div>
-      </div>
+    <div>
+      {/* A wide screen is a grid: the title across the top, the list beside the chat. Below
+          that the title and the chat are one column exactly as tall as the visible screen
+          (under the top bar, above a phone's bottom bar), and the list follows it. The chat
+          comes first in the page so the keyboard reaches the input before the list. */}
+      <div className="lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="flex flex-col gap-4 max-lg:min-h-104 max-md:h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] md:max-lg:h-[calc(100dvh-7.5rem)] lg:contents">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:col-span-2">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {brand.assistantName} assistant
+              </h1>
+              {/* A phone keeps the title row to one line: the chat needs the height. */}
+              <p className="text-sm text-muted-foreground max-sm:sr-only">
+                Ask about your workspace and pick up past conversations.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Below the chat on a phone or tablet, so offer a way straight to it. */}
+              {initialConversations.length > 0 ? (
+                <Button asChild variant="outline" className="lg:hidden">
+                  <a href="#conversations">
+                    <History className="size-4 sm:hidden" aria-hidden />
+                    <span className="max-sm:sr-only">Conversations</span>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {initialConversations.length}
+                      {hasMoreConversations ? "+" : ""}
+                    </span>
+                  </a>
+                </Button>
+              ) : null}
+              <Button asChild>
+                <Link href="/assistant">
+                  <Plus className="size-4" aria-hidden />
+                  {/* A phone shows the short label; the link is still named in full. */}
+                  <span className="sm:hidden" aria-hidden>
+                    New
+                  </span>
+                  <span className="max-sm:sr-only">New conversation</span>
+                </Link>
+              </Button>
+            </div>
+          </div>
 
-      {/* One column that cannot grow past the screen: a long conversation title is cut
-          short instead of pushing the page wider than a phone. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start xl:grid-cols-[20rem_minmax(0,1fr)]">
+          {/* Chat */}
+          {/* The card takes the height the screen has left and the messages scroll inside it,
+            so the input never scrolls away. */}
+          <Card
+            ref={cardRef}
+            className="@container min-h-0 flex-1 scroll-mt-20 gap-0 overflow-hidden py-0 max-md:scroll-mb-16 md:scroll-mb-6 lg:col-start-2 lg:row-start-2 lg:h-[calc(100dvh-12rem)] lg:flex-none"
+          >
+            <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+              <span className="grid size-9 place-items-center rounded-lg border border-brand-blue/25 bg-brand-blue/5 text-brand-blue">
+                <Sparkles className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1">
+                  <h2 className="truncate text-sm font-semibold">
+                    {activeId && displayTitle ? displayTitle : "New conversation"}
+                  </h2>
+                  {activeId && displayTitle ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRenameError("");
+                        setRenameDraft(displayTitle);
+                      }}
+                      disabled={busy}
+                      aria-label="Rename conversation"
+                      title="Rename conversation"
+                      className="-my-2 grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-default disabled:opacity-50 max-md:size-11"
+                    >
+                      <Pencil className="size-3.5" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+                <p className="truncate text-xs text-muted-foreground">
+                  {activeConversation ? (
+                    <>
+                      Last active{" "}
+                      <time
+                        dateTime={activeConversation.updatedAt.toISOString()}
+                        suppressHydrationWarning
+                      >
+                        {formatDate(activeConversation.updatedAt)}
+                      </time>
+                    </>
+                  ) : (
+                    "Saved once you send a message."
+                  )}
+                </p>
+              </div>
+            </header>
+
+            {/* Messages. Only the status line below is announced, not every streamed token.
+                The suggestions of an empty conversation are read from their top, so the list
+                only starts following its newest content once there are messages. */}
+            <div
+              ref={hasMessages ? attachThread : undefined}
+              onScroll={onThreadScroll}
+              className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4"
+            >
+              {!hasMessages ? (
+                <div className="mx-auto flex min-h-full max-w-2xl flex-col justify-center lg:py-6">
+                  {/* Side by side on a phone, where the height is needed for the suggestions. */}
+                  <div className="flex items-center gap-2.5 sm:block">
+                    <Bot className="size-7 shrink-0 text-brand-blue" aria-hidden />
+                    <h3 className="text-base font-semibold sm:mt-3">Ask about your business</h3>
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    The assistant reads real workspace data - invoices, books, customers.
+                  </p>
+                  <HaiStarters
+                    prompts={SUGGESTED_PROMPTS}
+                    onPick={send}
+                    disabled={busy}
+                    className="mt-5 grid gap-2 @lg:grid-cols-2"
+                  />
+                </div>
+              ) : (
+                messages.map((m, index) => (
+                  <HaiMessage
+                    key={m.id}
+                    message={m}
+                    busy={busy}
+                    isLatest={index === messages.length - 1}
+                    onDecide={chat.decide}
+                    onRegenerate={chat.regenerate}
+                    rating={feedback.ratings[m.id]}
+                    onRate={feedback.rate}
+                    className="max-w-[85%]"
+                  />
+                ))
+              )}
+              {error ? (
+                <HaiChatError
+                  error={error}
+                  fallback="Something went wrong. Please try again."
+                  onRetry={hasMessages ? chat.retry : undefined}
+                />
+              ) : null}
+            </div>
+            {/* Outside the scrolling area, where it would add a sliver of empty scroll. */}
+            <p className="sr-only" aria-live="polite">
+              {busy ? `${brand.assistantName} is answering…` : ""}
+            </p>
+
+            {/* Input */}
+            <div className="border-t border-border p-3">
+              <AttachmentStatus
+                state={attachment.state}
+                onRemove={() => {
+                  attachment.clear();
+                  // The chip, and with it the focused remove button, is gone. The paperclip is
+                  // disabled while a file uploads, so focus it once this removal has rendered.
+                  window.setTimeout(() => attachButtonRef.current?.focus(), 0);
+                }}
+                className="mb-2"
+              />
+              <form onSubmit={onSubmit} className="flex items-end gap-2">
+                {canAttachReceipts ? (
+                  <AttachReceiptButton
+                    buttonRef={attachButtonRef}
+                    onPick={(file) => void attachment.attach(file)}
+                    disabled={busy || attachment.uploading}
+                  />
+                ) : null}
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      onSubmit(e as unknown as FormEvent);
+                    }
+                  }}
+                  placeholder="Ask about your business…"
+                  rows={1}
+                  maxLength={4000}
+                  disabled={busy}
+                  aria-label="Message"
+                  className="max-h-32 min-h-11 flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-50"
+                />
+                {busy ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => void chat.stop()}
+                    aria-label="Stop"
+                  >
+                    <Square className="size-4" aria-hidden />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={(!input.trim() && !attachment.ready) || attachment.uploading}
+                    aria-label="Send"
+                  >
+                    <Send className="size-4" aria-hidden />
+                  </Button>
+                )}
+              </form>
+              {/* The write-tools switch sits with the input, so the header stays one row at
+                any width. A narrow card (a phone) gets the short form of the note. */}
+              <div className="mt-2 flex items-center gap-3 @lg:items-start">
+                <WriteToolsSwitch
+                  conversationId={activeId}
+                  enabled={writeEnabled}
+                  onEnabledChange={changeWriteEnabled}
+                  disabled={busy}
+                  className="shrink-0"
+                />
+                <p className="min-w-0 text-xs leading-4 text-muted-foreground @lg:pt-0.5 @lg:leading-5">
+                  <span className="@lg:hidden">
+                    {writeEnabled
+                      ? "Each change waits for your approval."
+                      : "Verify figures in the source module."}
+                  </span>
+                  <span className="hidden @lg:inline">
+                    {writeEnabled
+                      ? "Write tools are on: the assistant can propose creating, changing, sending and deleting records in this conversation. Nothing changes until you approve it, and everything it does is recorded in the audit log. "
+                      : "The assistant can look things up and prepare unsaved drafts, but cannot change your records in this conversation. "}
+                    Verify important figures in the relevant module.
+                  </span>
+                </p>
+              </div>
+            </div>
+          </Card>
+        </div>
+
         {/* Conversation list. On a wide screen it stays beside a long conversation. */}
         <section
           id="conversations"
           aria-labelledby="assistant-conversations"
-          className="order-2 scroll-mt-20 lg:sticky lg:top-22 lg:order-1"
+          className="scroll-mt-20 max-lg:mt-6 lg:sticky lg:top-22 lg:col-start-1 lg:row-start-2"
         >
           {initialConversations.length === 0 ? (
             <>
@@ -472,182 +676,6 @@ export function AssistantChat({
             </div>
           )}
         </section>
-
-        {/* Chat */}
-        {/* Once there are messages the card is as tall as the screen allows and the messages
-            scroll inside it, so the input never scrolls away. */}
-        <Card
-          ref={cardRef}
-          className={cn(
-            "@container order-1 scroll-mt-20 gap-0 overflow-hidden py-0 max-md:scroll-mb-20 md:scroll-mb-6 lg:order-2 lg:h-[calc(100dvh-12rem)]",
-            hasMessages && "max-lg:h-[calc(100dvh-10rem)]",
-          )}
-        >
-          {/* In a narrow card (a phone, or beside the list on a small laptop) the write-tools
-              switch sits under the title, so the title keeps the row. */}
-          <header className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3 @lg:grid-cols-[auto_minmax(0,1fr)_auto]">
-            <span className="grid size-9 place-items-center rounded-lg border border-brand-blue/25 bg-brand-blue/5 text-brand-blue">
-              <Sparkles className="size-4" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1">
-                <h2 className="truncate text-sm font-semibold">
-                  {activeId && displayTitle ? displayTitle : "New conversation"}
-                </h2>
-                {activeId && displayTitle ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRenameError("");
-                      setRenameDraft(displayTitle);
-                    }}
-                    disabled={busy}
-                    aria-label="Rename conversation"
-                    title="Rename conversation"
-                    className="-my-2 grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-default disabled:opacity-50 max-md:size-11"
-                  >
-                    <Pencil className="size-3.5" aria-hidden />
-                  </button>
-                ) : null}
-              </div>
-              <p className="truncate text-xs text-muted-foreground">
-                {activeConversation ? (
-                  <>
-                    Last active{" "}
-                    <time
-                      dateTime={activeConversation.updatedAt.toISOString()}
-                      suppressHydrationWarning
-                    >
-                      {formatDate(activeConversation.updatedAt)}
-                    </time>
-                  </>
-                ) : (
-                  "Saved once you send a message."
-                )}
-              </p>
-            </div>
-            <WriteToolsSwitch
-              conversationId={activeId}
-              enabled={writeEnabled}
-              onEnabledChange={changeWriteEnabled}
-              disabled={busy}
-              className="col-start-2 justify-self-start @lg:col-start-3 @lg:justify-self-end"
-            />
-          </header>
-
-          {/* Messages. Only the status line below is announced, not every streamed token. */}
-          <div
-            ref={attachThread}
-            onScroll={onThreadScroll}
-            className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4"
-          >
-            {!hasMessages ? (
-              <div className="mx-auto flex h-full max-w-2xl flex-col justify-center py-4 lg:py-6">
-                <Bot className="size-7 text-brand-blue" aria-hidden />
-                <h3 className="mt-3 text-base font-semibold">Ask about your business</h3>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  The assistant reads real workspace data - invoices, books, customers.
-                </p>
-                <HaiStarters
-                  prompts={SUGGESTED_PROMPTS}
-                  onPick={send}
-                  disabled={busy}
-                  className="mt-5 grid gap-2 @lg:grid-cols-2"
-                />
-              </div>
-            ) : (
-              messages.map((m, index) => (
-                <HaiMessage
-                  key={m.id}
-                  message={m}
-                  busy={busy}
-                  isLatest={index === messages.length - 1}
-                  onDecide={chat.decide}
-                  onRegenerate={chat.regenerate}
-                  rating={feedback.ratings[m.id]}
-                  onRate={feedback.rate}
-                  className="max-w-[85%]"
-                />
-              ))
-            )}
-            {error ? (
-              <HaiChatError
-                error={error}
-                fallback="Something went wrong. Please try again."
-                onRetry={hasMessages ? chat.retry : undefined}
-              />
-            ) : null}
-          </div>
-          {/* Outside the scrolling area, where it would add a sliver of empty scroll. */}
-          <p className="sr-only" aria-live="polite">
-            {busy ? `${brand.assistantName} is answering…` : ""}
-          </p>
-
-          {/* Input */}
-          <div className="border-t border-border p-3">
-            <AttachmentStatus
-              state={attachment.state}
-              onRemove={() => {
-                attachment.clear();
-                // The chip, and with it the focused remove button, is gone. The paperclip is
-                // disabled while a file uploads, so focus it once this removal has rendered.
-                window.setTimeout(() => attachButtonRef.current?.focus(), 0);
-              }}
-              className="mb-2"
-            />
-            <form onSubmit={onSubmit} className="flex items-end gap-2">
-              {canAttachReceipts ? (
-                <AttachReceiptButton
-                  buttonRef={attachButtonRef}
-                  onPick={(file) => void attachment.attach(file)}
-                  disabled={busy || attachment.uploading}
-                />
-              ) : null}
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    onSubmit(e as unknown as FormEvent);
-                  }
-                }}
-                placeholder="Ask about your business…"
-                rows={1}
-                maxLength={4000}
-                disabled={busy}
-                aria-label="Message"
-                className="max-h-32 min-h-11 flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-50"
-              />
-              {busy ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => void chat.stop()}
-                  aria-label="Stop"
-                >
-                  <Square className="size-4" aria-hidden />
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  size="icon"
-                  disabled={(!input.trim() && !attachment.ready) || attachment.uploading}
-                  aria-label="Send"
-                >
-                  <Send className="size-4" aria-hidden />
-                </Button>
-              )}
-            </form>
-            <p className="mt-2 px-1 text-xs leading-5 text-muted-foreground">
-              {writeEnabled
-                ? "Write tools are on: the assistant can propose creating, changing, sending and deleting records in this conversation. Nothing changes until you approve it, and everything it does is recorded in the audit log. "
-                : "The assistant can look things up and prepare unsaved drafts, but cannot change your records in this conversation. "}
-              Verify important figures in the relevant module.
-            </p>
-          </div>
-        </Card>
       </div>
 
       <DeleteConversationDialog

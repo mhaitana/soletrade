@@ -455,6 +455,51 @@ describe("Assistant page", () => {
     expect(links[0]).toHaveAttribute("aria-current", "page");
   });
 
+  it("puts the chat ahead of the conversation list, with the write-tools switch by the input", () => {
+    render(<AssistantChat initialConversations={conversations} activeConversation={openSales} />);
+
+    const input = screen.getByRole("textbox", { name: "Message" });
+    const search = screen.getByRole("searchbox", { name: "Search conversations" });
+    const toggle = screen.getByRole("switch", { name: "Write tools off" });
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    // On a phone the list is below the chat, and the keyboard reaches the input first.
+    expect(follows(input, search)).toBe(true);
+    // The switch is in the input's block, not in the card header, so the header is one row.
+    expect(follows(input, toggle)).toBe(true);
+    expect(follows(toggle, search)).toBe(true);
+    expect(screen.getByRole("banner")).not.toContainElement(toggle);
+    // The short note for a narrow card and the full one for a wide card.
+    expect(screen.getByText("Verify figures in the source module.")).toBeInTheDocument();
+    expect(screen.getByText(/cannot change your records in this conversation/)).toBeInTheDocument();
+  });
+
+  it("reads an empty conversation from its top and a stored one from its newest message", () => {
+    // jsdom lays nothing out, so every list is given a height to scroll through.
+    const height = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+    try {
+      const empty = render(
+        <AssistantChat initialConversations={conversations} activeConversation={null} />,
+      );
+      const suggestions = screen
+        .getByRole("heading", { level: 3, name: "Ask about your business" })
+        .closest(".overflow-y-auto");
+      expect(suggestions).not.toBeNull();
+      expect(suggestions!.scrollTop).toBe(0);
+      empty.unmount();
+
+      render(<AssistantChat initialConversations={conversations} activeConversation={openSales} />);
+      const thread = screen
+        .getAllByText("How is my business doing this month?")
+        .map((element) => element.closest(".overflow-y-auto"))
+        .find((element) => element !== null);
+      expect(thread).toBeDefined();
+      expect(thread!.scrollTop).toBe(900);
+    } finally {
+      height.mockRestore();
+    }
+  });
+
   it("says so when there are no conversations yet", () => {
     render(<AssistantChat initialConversations={[]} activeConversation={null} />);
 

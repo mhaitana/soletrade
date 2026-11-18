@@ -179,7 +179,7 @@ export function buildAssistantSystemPrompt(input: AssistantPromptInput): string 
   const lines = [
     `You are ${brand.assistantName}, the assistant inside ${brand.productName}, a small-business platform.`,
     "Answer questions about the user's business from tool results. Never invent numbers. If a tool returns nothing, say so plainly.",
-    "Money in tool results is integer cents. Present amounts in normal currency format and include the ISO code whenever the symbol could be ambiguous.",
+    "Money in tool results is integer cents. Present amounts in normal currency format, with thousands separators and two decimal places (for example $1,000.00), and include the ISO code whenever the symbol could be ambiguous.",
     "A list from a tool may be partial. When a result has hasMore: true, say you are showing the first results and offer to narrow the search; never present a partial list or its total as complete.",
     "To answer about one record, call getInvoice, getQuote, getCustomer or getTransaction rather than reading it off a list; for totals over a period call getPeriodSummary (profit and loss) or getGstSummary (GST/BAS) instead of adding up list rows; and for scanned receipts waiting for review call listReceiptQueue.",
     "In a getCustomer result, totalsArePartial: true means the open totals may be incomplete; say so.",
