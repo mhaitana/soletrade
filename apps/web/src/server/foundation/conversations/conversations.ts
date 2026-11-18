@@ -30,29 +30,67 @@ import { branded, type AiConversationId, type UserId, type WorkspaceId } from "@
  * for older app builds. Messages saved before parts were stored have content only.
  */
 
-/** List a user's conversations in a workspace, most-recently-active first. */
+/**
+ * Text as a LIKE pattern that matches it literally: `\`, `%` and `_` are escaped. PostgREST
+ * reads `*` in a pattern as `%` and has no escape for it, so `*` becomes `_` (any one
+ * character), the closest thing that still finds a title containing the asterisk.
+ */
+function likeLiteral(text: string): string {
+  return text.replace(/[\\%_]/g, "\\$&").replace(/\*/g, "_");
+}
+
+/** Most conversations one page of a list returns. */
+export const CONVERSATION_PAGE_SIZE = 50;
+
+/**
+ * List a user's conversations in a workspace, most-recently-active first. `search` keeps
+ * the ones whose title contains the text (any case); `%` and `_` in it are literal.
+ */
 export async function listConversations(
   workspaceId: WorkspaceId,
   userId: UserId,
-  opts: { limit?: number; offset?: number } = {},
+  opts: { limit?: number; offset?: number; search?: string } = {},
 ): Promise<ConversationSummary[]> {
   const supabase = getDataClient();
-  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const limit = Math.min(Math.max(opts.limit ?? CONVERSATION_PAGE_SIZE, 1), 200);
+  const offset = Math.max(0, opts.offset ?? 0);
+  let query = supabase
+    .from("ai_conversations")
+    .select("id, title, updated_at")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId);
+  const search = opts.search?.trim();
+  if (search) query = query.ilike("title", `%${likeLiteral(search)}%`);
   const rows = await unwrap(
-    supabase
-      .from("ai_conversations")
-      .select("id, title, updated_at")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", userId)
+    query
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
-      .range(Math.max(0, opts.offset ?? 0), Math.max(0, opts.offset ?? 0) + limit - 1),
+      .range(offset, offset + limit - 1),
   );
   return rows.map((r) => ({
     id: branded<"AiConversationId">(r.id),
     title: r.title,
     updatedAt: parsePgTimestamp(r.updated_at),
   }));
+}
+
+/**
+ * One page of the list plus whether more follow. It asks for one row beyond the page, so
+ * "more" never needs a second count query.
+ */
+export async function listConversationPage(
+  workspaceId: WorkspaceId,
+  userId: UserId,
+  opts: { offset?: number; search?: string } = {},
+): Promise<{ conversations: ConversationSummary[]; hasMore: boolean }> {
+  const rows = await listConversations(workspaceId, userId, {
+    ...opts,
+    limit: CONVERSATION_PAGE_SIZE + 1,
+  });
+  return {
+    conversations: rows.slice(0, CONVERSATION_PAGE_SIZE),
+    hasMore: rows.length > CONVERSATION_PAGE_SIZE,
+  };
 }
 
 /** The most messages of one conversation returned by `getConversation`. */
@@ -87,7 +125,7 @@ export async function getConversation(
   const msgs = await unwrap(
     supabase
       .from("ai_messages")
-      .select("id, role, content, parts, created_at")
+      .select("id, role, content, parts, metadata, created_at")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
@@ -105,6 +143,10 @@ export async function getConversation(
       role: m.role,
       content: m.content,
       parts: Array.isArray(m.parts) ? (m.parts as unknown[]) : null,
+      metadata:
+        m.metadata && typeof m.metadata === "object" && !Array.isArray(m.metadata)
+          ? (m.metadata as Record<string, unknown>)
+          : null,
       createdAt: parsePgTimestamp(m.created_at),
     })),
   };
@@ -143,6 +185,8 @@ export interface MessageInput {
   role: "user" | "assistant";
   content: string;
   parts?: unknown[];
+  /** Kept with the message but not shown in the chat (see `ConversationMessage.metadata`). */
+  metadata?: Record<string, unknown>;
 }
 
 /** Throw unless the conversation is this user's in this workspace (IDOR-safe). */
@@ -197,6 +241,7 @@ export async function appendMessage(
         role: input.role,
         content: input.content,
         ...(input.parts ? { parts: input.parts as Json } : {}),
+        ...(input.metadata ? { metadata: input.metadata as Json } : {}),
       })
       .select("id"),
   );
@@ -209,20 +254,25 @@ export async function appendMessage(
 /**
  * Replace a stored message's text and parts, e.g. when an approved change finishes and
  * the reply continues in the same message. Scoped to the conversation, which is checked
- * for ownership first; a message id from another conversation updates nothing.
+ * for ownership first; a message id from another conversation updates nothing. `metadata`
+ * is left as it is unless given.
  */
 export async function updateMessage(
   workspaceId: WorkspaceId,
   userId: UserId,
   conversationId: AiConversationId,
   messageId: string,
-  input: { content: string; parts: unknown[] },
+  input: { content: string; parts: unknown[]; metadata?: Record<string, unknown> },
 ): Promise<void> {
   await assertOwned(workspaceId, userId, conversationId);
   await unwrapVoid(
     getDataClient()
       .from("ai_messages")
-      .update({ content: input.content, parts: input.parts as Json })
+      .update({
+        content: input.content,
+        parts: input.parts as Json,
+        ...(input.metadata ? { metadata: input.metadata as Json } : {}),
+      })
       .eq("id", messageId)
       .eq("conversation_id", conversationId),
   );
@@ -280,6 +330,34 @@ export async function renameConversation(
       .eq("workspace_id", workspaceId)
       .eq("user_id", userId),
   );
+}
+
+/**
+ * Replace a conversation's title only if it still reads exactly `from`: one conditional
+ * update, so a title the person typed in the meantime is never overwritten. Returns
+ * whether the title was replaced.
+ *
+ * Unlike a rename this does not bump `updatedAt`. It runs a moment after a reply has
+ * finished, and the mobile app sends the `updatedAt` it last loaded with its next request
+ * as the version it expects; moving it here would make that request fail as a conflict.
+ */
+export async function replaceConversationTitle(
+  workspaceId: WorkspaceId,
+  userId: UserId,
+  conversationId: AiConversationId,
+  change: { from: string; to: string },
+): Promise<boolean> {
+  const rows = await unwrap(
+    getDataClient()
+      .from("ai_conversations")
+      .update({ title: change.to })
+      .eq("id", conversationId)
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .eq("title", change.from)
+      .select("id"),
+  );
+  return rows.length > 0;
 }
 
 /**

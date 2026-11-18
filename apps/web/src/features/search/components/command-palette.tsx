@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { defaultFilter } from "cmdk";
+import { Sparkles } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -20,6 +21,8 @@ import {
 } from "@/config/navigation";
 import { SEARCH_MODULE_LABEL, type SearchResultGroup } from "@/types/search";
 import { cn } from "@/lib/utils";
+import { brand } from "@/config/brand";
+import { askHai } from "@/lib/assistant/launcher";
 import { Button } from "@/components/ui/button";
 import type { ModuleKey } from "@/config/modules";
 import type { WorkspaceRole } from "@/lib/domain/database-enums";
@@ -31,6 +34,7 @@ import type { WorkspaceRole } from "@/lib/domain/database-enums";
  * sidebar entry (Receipts, GST / BAS, Vehicles, settings sections); a **Create** group built
  * from the same list as the header "New" menu; and **live search** groups fetched from
  * `/api/search` with a 150ms debounce. Selecting any item navigates + closes the palette.
+ * Whatever was typed can also be put to hAI as a question (the last entry).
  *
  * Navigation is filtered locally; server results are already matched against fields such as
  * customer company and notes that may not appear in the displayed label. Each response belongs
@@ -236,6 +240,25 @@ export function CommandPalette({
               ),
             )
           : null}
+
+        {/* Last, and only once the search has answered, so Enter still opens the first page
+            or record that matched instead of this entry. */}
+        {term && !loading ? (
+          <CommandGroup heading={brand.assistantName}>
+            <CommandItem
+              value="ask-assistant"
+              onSelect={() => {
+                onOpenChange(false);
+                askHai({ question: term, send: true });
+              }}
+            >
+              <Sparkles className="size-4 shrink-0 text-brand-blue" aria-hidden />
+              <span className="truncate">
+                Ask {brand.assistantName}: &ldquo;{term}&rdquo;
+              </span>
+            </CommandItem>
+          </CommandGroup>
+        ) : null}
       </CommandList>
     </CommandDialog>
   );

@@ -9,6 +9,7 @@ import { PERIODS, parsePeriod, type Period } from "@/utils/periods";
 import { MODULES, MODULE_KEYS } from "@/config/modules";
 import { ActivityFeed } from "@/features/activity/components/activity-feed";
 import { loadDashboardPage } from "@/features/dashboard/api/actions";
+import { BriefingCard } from "@/features/dashboard/components/briefing-card";
 import { KpiCard } from "@/features/dashboard/components/kpi-card";
 import { ModuleSummaryCard } from "@/features/dashboard/components/module-summary-card";
 import { AttentionList } from "@/features/dashboard/components/attention-list";
@@ -169,6 +170,8 @@ export default async function DashboardPage({
 
       {data.setup ? <SetupChecklistCard setup={data.setup} /> : null}
 
+      {data.briefing ? <BriefingCard briefing={data.briefing} /> : null}
+
       {/* KPI row */}
       <section aria-label="Key metrics">
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -187,7 +190,17 @@ export default async function DashboardPage({
             The next actions most likely to keep cash and paperwork moving.
           </p>
         </div>
-        <AttentionList items={data.attentionItems} />
+        {data.insightsUnavailable ? (
+          // An empty list would read as "all caught up", which is not known here.
+          <p
+            role="status"
+            className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground"
+          >
+            What needs attention could not be loaded just now. Reload the page to try again.
+          </p>
+        ) : (
+          <AttentionList items={data.attentionItems} />
+        )}
       </section>
 
       {/* Per-module summary cards */}

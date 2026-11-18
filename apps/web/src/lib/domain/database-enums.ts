@@ -88,3 +88,9 @@ export type VehicleExpenseType = "fuel" | "maintenance" | "insurance" | "registr
  * via tools rather than trusting cached tool output).
  */
 export type AiMessageRole = "user" | "assistant";
+
+/**
+ * How often a member receives the briefing digest for one workspace. `off` is also what a
+ * member with no saved choice gets: the digest is opt-in.
+ */
+export type AiDigestFrequency = "off" | "daily" | "weekly";

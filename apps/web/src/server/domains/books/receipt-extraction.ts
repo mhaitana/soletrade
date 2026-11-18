@@ -10,7 +10,7 @@ export type {
 } from "@/lib/domain/books/receipt-extraction-types";
 import "server-only";
 import { getBillingState } from "@/server/foundation/billing/state";
-import { generateText, Output } from "ai";
+import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { z } from "zod";
 import { getDataClient } from "@/server/infrastructure/db/client";
 import {
@@ -26,6 +26,8 @@ import { normalizeListOffset } from "@/utils/pagination";
 import { getFile, downloadFileBytes } from "@/server/foundation/files";
 import { getWorkspace } from "@/server/foundation/workspaces";
 import { aiModelLabel, getAIModel, isMockProvider } from "@/server/infrastructure/ai/provider";
+import { summariseCallUsage, type UsageStep } from "@/server/infrastructure/ai/usage";
+import { recordAiUsage } from "@/server/foundation/ai-usage/usage";
 import { consumeCredit, reverseCreditConsumption } from "@/server/foundation/billing/credits";
 import { publishEvent } from "@/server/infrastructure/events";
 import { writeAudit } from "@/server/foundation/audit";
@@ -257,8 +259,19 @@ export async function extractReceipt(
       extracted = mockExtractedData(new Date(), defaultCurrency);
     } else {
       const { bytes } = await downloadFileBytes(file.storagePath);
-      const { output } = await generateText({
-        model: getAIModel("vision"),
+      const model = getAIModel("vision");
+      // What the read used goes in the usage ledger, whether or not its answer turns out
+      // to be usable. `recordAiUsage` logs its own failure and never throws, so a ledger
+      // problem cannot turn a good extraction into an error.
+      const recordUsage = (steps: readonly UsageStep[]) =>
+        recordAiUsage({
+          ...summariseCallUsage(model, steps),
+          workspaceId,
+          userId: actorId,
+          feature: "receipt",
+        });
+      const result = await generateText({
+        model,
         output: Output.object({ schema: receiptExtractionSchema(defaultCurrency) }),
         // A receipt is a few hundred tokens of JSON; cap the call rather than leaving it at
         // the model default. On reasoning models the reasoning shares this budget.
@@ -276,8 +289,19 @@ export async function extractReceipt(
             ],
           },
         ],
+      }).catch(async (err: unknown) => {
+        // The model answered, and was billed, but what it wrote could not be read as a
+        // receipt. The SDK's error carries what that answer used. Other failures (the
+        // provider refusing or timing out) come with no usage, so there is nothing to record.
+        if (NoObjectGeneratedError.isInstance(err) && err.usage) {
+          await recordUsage([{ usage: err.usage, response: err.response }]);
+        }
+        throw err;
       });
-      extracted = coerceExtractedData(output);
+      // Recorded before the answer is read: reading it throws when the model was cut off
+      // before it finished, and that request was billed too.
+      await recordUsage(result.steps);
+      extracted = coerceExtractedData(result.output);
     }
   } catch (err) {
     // Persist the failure as a rejected row so it's visible in the queue rather than

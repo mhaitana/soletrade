@@ -157,3 +157,101 @@ describe("readyToSendApprovals", () => {
     expect(readyToSendApprovals({ messages: [user("x"), message] })).toBe(false);
   });
 });
+
+describe("createHaiSession and conversations", () => {
+  /** A reply whose headers arrive only when `release()` is called. */
+  function heldReply(conversationId: string) {
+    let release!: () => void;
+    const held = new Promise<Response>((resolve) => {
+      release = () =>
+        resolve(
+          new Response("data: [DONE]\n\n", {
+            headers: {
+              "content-type": "text/event-stream",
+              "X-Conversation-Id": conversationId,
+            },
+          }),
+        );
+    });
+    return { held, release };
+  }
+
+  const send = (session: ReturnType<typeof createHaiSession>) =>
+    session.transport.sendMessages({
+      chatId: "test",
+      messages: [user("Hello")],
+      trigger: "submit-message",
+      messageId: undefined,
+      abortSignal: undefined,
+    });
+
+  it("adopts the conversation the first message created, and names it when the turn ends", async () => {
+    const created = vi.fn();
+    const { held, release } = heldReply("new-1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => held),
+    );
+    try {
+      const session = createHaiSession(null, created);
+      const sending = send(session);
+      release();
+      await sending;
+
+      expect(created).toHaveBeenCalledWith("new-1");
+      expect(session.finishedConversationId()).toBe("new-1");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not attach a late reply's conversation to a chat that has moved on", async () => {
+    const created = vi.fn();
+    const { held, release } = heldReply("abandoned");
+    const fetchMock = vi.fn(() => held);
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const session = createHaiSession(null, created);
+      const sending = send(session);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      // The person starts a new chat (or opens another conversation) before the reply's
+      // headers arrive.
+      session.setConversationId(null);
+      release();
+      await sending;
+
+      // The new chat must not silently continue the abandoned conversation.
+      expect(created).not.toHaveBeenCalled();
+      const next = heldReply("fresh");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => next.held),
+      );
+      const again = send(session);
+      next.release();
+      await again;
+      expect(created).toHaveBeenCalledTimes(1);
+      expect(created).toHaveBeenCalledWith("fresh");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("names the conversation a cut-short turn was for, not the one opened since", async () => {
+    const { held, release } = heldReply("c1");
+    const fetchMock = vi.fn(() => held);
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const session = createHaiSession("c1", () => {});
+      const sending = send(session);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      session.setConversationId("c2"); // another conversation is opened mid-reply
+      release();
+      await sending;
+
+      expect(session.finishedConversationId()).toBe("c1");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

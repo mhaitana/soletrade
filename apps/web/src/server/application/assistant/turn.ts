@@ -6,10 +6,12 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 import { assistantApprovalFor } from "@/lib/assistant/approval-policy";
+import { splitAttachment } from "@/lib/assistant/attachments";
 import {
   mapToolParts,
   messageMadeChanges,
   messageSummary,
+  messageText,
   prepareModelHistory,
   storedToUIMessage,
   toolCallParts,
@@ -19,21 +21,33 @@ import { assistantToolInfo, readToolCardFields } from "@/lib/assistant/tool-cata
 import type { WorkspaceContext } from "@/lib/domain/auth/workspace-context-types";
 import type { Conversation } from "@/lib/domain/conversations/conversations-types";
 import { buildActionPreview } from "@/server/application/assistant/action-preview";
+import { keepAliveUntilTurnEnds, runInBackground } from "@/server/application/assistant/background";
 import {
   ASSISTANT_DAILY_LIMIT_MESSAGE,
   ASSISTANT_DAILY_TURN_LIMIT,
+  attachTurnContext,
   buildAssistantSystemPrompt,
+  buildTurnContext,
+  readTurnContext,
   selectModelHistory,
+  type TurnContext,
 } from "@/server/application/assistant/prompt";
+import {
+  automaticTitle,
+  generateConversationTitle,
+  isAutomaticTitle,
+} from "@/server/application/assistant/title";
 import {
   buildAssistantTools,
   buildMockAssistantReply,
   buildMockHaiSafeAction,
 } from "@/server/application/assistant/tools";
+import { recordAiUsage } from "@/server/foundation/ai-usage/usage";
 import {
   appendMessage,
   createConversation,
   deleteMessages,
+  replaceConversationTitle,
   updateMessage,
 } from "@/server/foundation/conversations/conversations";
 import {
@@ -75,6 +89,10 @@ import type { AiConversationId } from "@/types/ids";
  * server's stored copy; the client only says yes or no to an approval id. The action ledger
  * (`ai_tool_actions`) makes each approved change run at most once, whatever the client
  * resends. The whole reply (text, tool calls, previews) is stored when the stream ends.
+ *
+ * Two things happen beside the reply and never hold it up (see background.ts): what the
+ * model call used is written to the usage ledger, and a new conversation is given a
+ * proper title once its first reply is in.
  */
 
 export class AssistantTurnError extends Error {
@@ -254,8 +272,8 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
   const input = resolveRetry(opts.input, opts.conversation);
   const mock = isMockProvider();
 
-  // Interim spend guard until usage metering exists: a daily cap on model turns per
-  // workspace, checked before anything is stored. The mock provider costs nothing.
+  // Interim spend guard until an allowance per plan is decided: a daily cap on model turns
+  // per workspace, checked before anything is stored. The mock provider costs nothing.
   if (
     !mock &&
     !(await rateLimit(`ai:day:${ctx.workspaceId}`, {
@@ -271,7 +289,9 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
     if (input.kind !== "message") {
       throw new AssistantTurnError(404, "Conversation not found.", "not_found");
     }
-    const title = input.text.length > 40 ? `${input.text.slice(0, 40)}…` : input.text;
+    // The start of what the person typed (see `automaticTitle`). The same function later
+    // decides whether the title is still this one and may be replaced by a generated one.
+    const title = automaticTitle(input.text);
     const id = await createConversation(ctx.workspaceId, ctx.user.id, title);
     conversation = { id, title, updatedAt: new Date(), writeEnabled: false, messages: [] };
   }
@@ -289,13 +309,27 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
     ? {}
     : buildAssistantTools(ctx, installedModules, { writeEnabled: conversation.writeEnabled });
 
-  const history: HaiUIMessage[] = conversation.messages.map(storedToUIMessage);
+  // `metadata` carries what each user message was sent with (its date and page), so the
+  // model is shown earlier messages exactly as it first saw them.
+  const history: HaiUIMessage[] = conversation.messages.map((message) => ({
+    ...storedToUIMessage(message),
+    ...(message.metadata ? { metadata: message.metadata } : {}),
+  }));
   const last = history.at(-1);
   const saveMessage = (message: HaiUIMessage) =>
     updateMessage(ctx.workspaceId, ctx.user.id, conversationId, message.id, {
       content: messageSummary(message),
       parts: [...message.parts],
     });
+  // What a message sent now is sent with: today's date where the workspace is, and the
+  // page on web. It goes on the user message, not in the system prompt, which has to stay
+  // the same from turn to turn for the provider to reuse its cached copy.
+  const turnContext: TurnContext = buildTurnContext({
+    now: new Date(),
+    timezone: workspace?.timezone,
+    surface: opts.surface,
+    pageContext: input.kind === "message" ? input.pageContext : undefined,
+  });
 
   switch (input.kind) {
     case "message": {
@@ -307,12 +341,14 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
         }
       }
       const parts = [{ type: "text" as const, text: input.text }];
+      const metadata = { context: turnContext };
       const id = await appendMessage(ctx.workspaceId, ctx.user.id, conversationId, {
         role: "user",
         content: input.text,
         parts,
+        metadata,
       });
-      history.push({ id, role: "user", parts });
+      history.push({ id, role: "user", parts, metadata });
       break;
     }
 
@@ -416,16 +452,68 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
         await deleteMessages(ctx.workspaceId, ctx.user.id, conversationId, [last.id]);
         history.pop();
       }
-      if (history.at(-1)?.role !== "user") {
+      const question = history.at(-1);
+      if (question?.role !== "user") {
         throw new AssistantTurnError(
           409,
           "There is nothing to answer again.",
           "nothing_to_regenerate",
         );
       }
+      // The message is answered now, which may be a later day than it was sent (or it was
+      // saved before messages carried a date): give it today's, keeping its page.
+      const sentWith = readTurnContext(question.metadata);
+      if (!sentWith || sentWith.date !== turnContext.date) {
+        const metadata = {
+          ...(question.metadata as Record<string, unknown> | undefined),
+          context: { ...turnContext, ...(sentWith?.page ? { page: sentWith.page } : {}) },
+        };
+        await updateMessage(ctx.workspaceId, ctx.user.id, conversationId, question.id, {
+          content: messageSummary(question),
+          parts: [...question.parts],
+          metadata,
+        });
+        history[history.length - 1] = { ...question, metadata };
+      }
       break;
     }
   }
+
+  // A conversation is named by a model once: after the first reply, and only while its
+  // title is still the automatic one (the start of the first message, or the default).
+  // The title seen here is what the later update is conditional on, so a name the person
+  // gives it in the meantime is kept.
+  const firstMessage = history.length === 1 && history[0]!.role === "user" ? history[0]! : null;
+  const titleToReplace =
+    !mock && firstMessage && isAutomaticTitle(conversation.title, messageText(firstMessage.parts))
+      ? conversation.title
+      : null;
+  const nameConversation = async (from: string, firstText: string, reply: string) => {
+    const { title, usage } = await generateConversationTitle({
+      model: getAIModel("light"),
+      firstMessage: firstText,
+      reply,
+    });
+    // The request was made whether or not its answer is usable, so it is always counted.
+    const recorded = recordAiUsage({
+      ...usage,
+      workspaceId: ctx.workspaceId,
+      userId: ctx.user.id,
+      conversationId,
+      feature: "title",
+      surface: opts.surface,
+    }).catch((err) => console.error("[assistant] recording usage failed:", err));
+    try {
+      if (title && title !== from) {
+        await replaceConversationTitle(ctx.workspaceId, ctx.user.id, conversationId, {
+          from,
+          to: title,
+        });
+      }
+    } finally {
+      await recorded;
+    }
+  };
 
   const persist = async ({ responseMessage, isContinuation }: AssistantTurnEnd) => {
     // The SDK answers a declined change inside the model history and leaves the part as
@@ -448,6 +536,16 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
         content,
         parts: [...message.parts],
       });
+      // The first reply is stored: name the conversation, without making anyone wait.
+      if (titleToReplace && firstMessage) {
+        // What the person typed; the line naming an attached receipt says nothing about
+        // what the conversation is about.
+        const firstText = splitAttachment(messageText(firstMessage.parts)).text;
+        const reply = messageText(message.parts);
+        runInBackground("naming the conversation", () =>
+          nameConversation(titleToReplace, firstText, reply),
+        );
+      }
     }
   };
 
@@ -476,11 +574,12 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
       writeEnabled: conversation.writeEnabled,
       approvalsSupported: opts.approvalsSupported,
       workspace,
-      now: new Date(),
-      pageContext: input.kind === "message" ? input.pageContext : undefined,
     });
     const modelMessages = await convertToModelMessages(
-      prepareModelHistory(selectModelHistory(history), new Set(Object.keys(tools))),
+      prepareModelHistory(
+        attachTurnContext(selectModelHistory(history), turnContext),
+        new Set(Object.keys(tools)),
+      ),
       { tools, ignoreIncompleteToolCalls: true },
     );
     const currency = workspace?.defaultCurrency ?? "AUD";
@@ -515,18 +614,46 @@ export async function runAssistantTurn(opts: AssistantTurnOptions): Promise<Resp
       writer.write({ type: "data-actionPreview", id: toolCall.toolCallId, data: preview });
       return "user-approval";
     };
-    return streamAssistantTurn({
-      model,
-      system,
-      messages: history as UIMessage[],
-      modelMessages,
-      tools: withActionLedger(tools, scope),
-      toolApproval,
-      conversationId: conversationIdText,
-      usage: { workspaceId: ctx.workspaceId, surface: opts.surface },
-      abortSignal: opts.abortSignal,
-      onEnd: persist,
-    });
+    // The usage row and the title are written after the reply; ask the platform not to
+    // freeze this request before they are. The turn counts as running until its stream
+    // has ended (or been cancelled: Stop, a dropped connection) and the reply is stored,
+    // because only then has it started everything it is going to start.
+    const turnEnded = keepAliveUntilTurnEnds();
+    try {
+      return streamAssistantTurn({
+        model,
+        system,
+        messages: history as UIMessage[],
+        modelMessages,
+        tools: withActionLedger(tools, scope),
+        toolApproval,
+        conversationId: conversationIdText,
+        usage: { workspaceId: ctx.workspaceId, surface: opts.surface },
+        // Started here and not waited for: the ledger must never fail or slow a reply.
+        onUsage: (usage) =>
+          runInBackground("recording usage", () =>
+            recordAiUsage({
+              ...usage,
+              workspaceId: ctx.workspaceId,
+              userId: ctx.user.id,
+              conversationId,
+              feature: "chat",
+              surface: opts.surface,
+            }),
+          ),
+        abortSignal: opts.abortSignal,
+        onEnd: async (end) => {
+          try {
+            await persist(end);
+          } finally {
+            turnEnded();
+          }
+        },
+      });
+    } catch (err) {
+      turnEnded();
+      throw err;
+    }
   } catch (err) {
     // Failure before streaming starts - most commonly `getAIModel()` throwing because the
     // provider API key is unset. Surface the real cause as a stream error part so the chat

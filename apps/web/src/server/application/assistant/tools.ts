@@ -4,6 +4,8 @@ import { z } from "zod";
 import { authorize, type Permission } from "@/lib/domain/permissions/index";
 import { authorizeOrAudit } from "@/server/application/auth/authorization/index";
 import type { WorkspaceContext } from "@/lib/domain/auth/workspace-context-types";
+import type { InvoiceRow } from "@/lib/domain/invoices/types";
+import type { QuoteRow } from "@/lib/domain/quotes/types";
 import {
   createCustomer,
   getCustomer,
@@ -34,10 +36,20 @@ import {
   createTransaction,
   deleteTransaction,
   getBookSummary,
+  getGstMonthly,
+  getTransaction,
   listTransactions,
   updateTransaction,
 } from "@/server/domains/books/index";
-import { extractReceipt, getExtraction } from "@/server/domains/books/receipt-extraction";
+import {
+  countExtractions,
+  extractReceipt,
+  getExtraction,
+  listExtractions,
+} from "@/server/domains/books/receipt-extraction";
+import { listTaxPeriods } from "@/server/domains/books/tax";
+import { fiscalQuarter, summarizeGstMonthly } from "@/lib/domain/books/calc";
+import { transactionSource } from "@/lib/domain/books/transaction-source";
 import {
   createEarning,
   createExpense,
@@ -50,10 +62,10 @@ import {
 } from "@/server/domains/drive/index";
 import { assistantToolInfo } from "@/lib/assistant/tool-catalog";
 import { consolidateBusinessIncome } from "@soletrade/contracts/business-income";
-import { categoriesForType } from "@/config/books-categories";
+import { categoriesForType, categoryLabel } from "@/config/books-categories";
 import { DRIVE_PLATFORMS, isDrivePlatform } from "@/config/drive-platforms";
 import type { ModuleKey } from "@/config/modules";
-import { periodRange } from "@/utils/periods";
+import { PERIODS, periodRange, type Period } from "@/utils/periods";
 import {
   branded,
   type CustomerId,
@@ -192,6 +204,113 @@ async function recordNumber(
 const PARTIAL_LIST_NOTE =
   " The result is { items, returned, hasMore }; hasMore: true means more rows matched than were returned, so narrow the search or say the list is partial.";
 
+/** A calendar day (UTC) as YYYY-MM-DD, for naming a period in a label. */
+const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+
+/**
+ * What is still owed on an invoice. Invoices are paid in full or not at all (there are no
+ * part payments), so the balance is the whole total while the invoice is with the customer
+ * and nothing otherwise. These are the statuses the dashboard counts as outstanding.
+ */
+const OPEN_INVOICE_STATUSES: ReadonlySet<string> = new Set(["sent", "viewed", "overdue"]);
+const invoiceBalanceDueCents = (invoice: { status: string; totalCents: number }): number =>
+  OPEN_INVOICE_STATUSES.has(invoice.status) ? invoice.totalCents : 0;
+
+/** One invoice as a list row. Shared by listInvoices and the customer summary. */
+function invoiceListItem(r: InvoiceRow) {
+  return {
+    id: r.id,
+    href: `/invoices/${r.id}`,
+    number: r.number,
+    status: r.status,
+    totalCents: r.totalCents,
+    balanceDueCents: invoiceBalanceDueCents(r),
+    currency: r.currency,
+    issueDate: iso(r.issueDate),
+    dueDate: iso(r.dueDate),
+    paidAt: iso(r.paidAt),
+    customerName: r.customerName,
+  };
+}
+
+/** One quote as a list row. Shared by listQuotes and the customer summary. */
+function quoteListItem(r: QuoteRow) {
+  return {
+    id: r.id,
+    href: `/quotes/${r.id}`,
+    number: r.number,
+    status: r.status,
+    totalCents: r.totalCents,
+    currency: r.currency,
+    issueDate: iso(r.issueDate),
+    customerName: r.customerName,
+  };
+}
+
+/** The customer on a record, with the link to their page; null for a walk-in. */
+const customerRef = (id: CustomerId | null, name: string | null) =>
+  id ? { id, name, href: `/customers/${id}` } : null;
+
+/** Line items in document order, without their row ids. */
+const lineItemList = (
+  items: readonly {
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    amountCents: number;
+  }[],
+) =>
+  items.map((item) => ({
+    description: item.description,
+    quantity: item.quantity,
+    unitPriceCents: item.unitPriceCents,
+    amountCents: item.amountCents,
+  }));
+
+/**
+ * How much of a customer's history `getCustomer` reads. The open count and balance come
+ * from one read of their newest invoices, the same read the customer page makes; the
+ * invoices service returns at most 200 rows, so a customer with more is reported as partial.
+ */
+const CUSTOMER_INVOICE_SCAN = 200;
+const CUSTOMER_RECENT = 5;
+
+/** What a customer owes and their latest invoices, from their newest invoices first. */
+function customerInvoiceSummary(rows: readonly InvoiceRow[]) {
+  const open = rows.filter((r) => OPEN_INVOICE_STATUSES.has(r.status));
+  // Invoices carry their own currency, so balances are added up per currency.
+  const balances = new Map<string, number>();
+  for (const r of open) {
+    balances.set(r.currency, (balances.get(r.currency) ?? 0) + r.totalCents);
+  }
+  return {
+    openCount: open.length,
+    overdueCount: open.filter((r) => r.status === "overdue").length,
+    openBalances: [...balances].map(([currency, balanceCents]) => ({ currency, balanceCents })),
+    totalsArePartial: rows.length >= CUSTOMER_INVOICE_SCAN,
+    recent: rows.slice(0, CUSTOMER_RECENT).map(invoiceListItem),
+    hasMore: rows.length > CUSTOMER_RECENT,
+  };
+}
+
+/**
+ * The dates a financial-year quarter covers, or the whole year when `quarter` is null.
+ * `fiscalYear` is the calendar year the financial year starts in, which is how the Tax page
+ * labels quarters ("2026-Q2"). `end` is the last millisecond of the period.
+ */
+function fiscalPeriodRange(
+  fiscalYear: number,
+  quarter: number | null,
+  fyStartMonth: number,
+): { start: Date; end: Date } {
+  const firstMonth = fyStartMonth - 1 + (quarter === null ? 0 : (quarter - 1) * 3);
+  const months = quarter === null ? 12 : 3;
+  return {
+    start: new Date(Date.UTC(fiscalYear, firstMonth, 1)),
+    end: new Date(Date.UTC(fiscalYear, firstMonth + months, 1) - 1),
+  };
+}
+
 /**
  * Resolve a customer reference (id or email) to an active customer id for the
  * invoice/quote write tools. **Email is the preferred, stable reference** - the
@@ -236,10 +355,34 @@ async function resolveCustomerId(
  * search (which matches the number column) then exact-matches `number` to avoid
  * substring ambiguity. Returns the row or `null`.
  */
+/**
+ * A range end given as midnight means "through that day". Paid invoices are recorded in
+ * the books at the time of payment, so an end of exactly 00:00:00 would leave out
+ * everything paid on the last day while keeping that day's manual entries.
+ */
+function throughEndOfDay(end: Date): Date {
+  const atMidnight =
+    end.getUTCHours() === 0 &&
+    end.getUTCMinutes() === 0 &&
+    end.getUTCSeconds() === 0 &&
+    end.getUTCMilliseconds() === 0;
+  return atMidnight ? new Date(end.getTime() + 24 * 60 * 60 * 1000 - 1) : end;
+}
+
+/**
+ * No document number contains a quote or a backslash, and the list search behind these
+ * lookups cannot carry one (the filter fails to parse and the query throws). Such a
+ * "number" is simply not found.
+ */
+function isSearchableNumber(number: string): boolean {
+  return !/["\\]/.test(number);
+}
+
 export async function resolveInvoiceByNumber(
   workspaceId: WorkspaceId,
   number: string,
 ): Promise<{ id: InvoiceId; number: string } | null> {
+  if (!isSearchableNumber(number)) return null;
   const rows = await listInvoices(workspaceId, { search: number, limit: 200 });
   const match = rows.find((r) => r.number === number);
   return match ? { id: match.id, number: match.number } : null;
@@ -250,6 +393,7 @@ export async function resolveQuoteByNumber(
   workspaceId: WorkspaceId,
   number: string,
 ): Promise<{ id: QuoteId; number: string } | null> {
+  if (!isSearchableNumber(number)) return null;
   const rows = await listQuotes(workspaceId, { search: number, limit: 200 });
   const match = rows.find((r) => r.number === number);
   return match ? { id: match.id, number: match.number } : null;
@@ -397,7 +541,7 @@ export function buildAssistantTools(
   if (hasModule("invoices") && can("view:invoice")) {
     tools.listInvoices = tool({
       description:
-        "List invoices for the workspace, newest first. Optional filters: status (draft|sent|viewed|paid|void|overdue), a search term (matches invoice number or customer name/company), and a limit (default 20, max 100). Returns id, number, status, totalCents, currency, issueDate, paidAt, customerName. Use the id with invoice.edit only when the invoice is still editable." +
+        "List invoices for the workspace, newest first. Optional filters: status (draft|sent|viewed|paid|void|overdue), a search term (matches invoice number or customer name/company), and a limit (default 20, max 100). Returns id, number, status, totalCents, balanceDueCents (the total while the invoice is sent, viewed or overdue; 0 for draft, paid and void), currency, issueDate, dueDate, paidAt, customerName. Use getInvoice for line items. Use the id with invoice.edit only when the invoice is still editable." +
         PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         status: z
@@ -422,22 +566,7 @@ export function buildAssistantTools(
           search: input.search,
           limit: listLimit(input.limit) + 1,
         });
-        return listResult(
-          rows,
-          listLimit(input.limit),
-          (r) => ({
-            id: r.id,
-            href: `/invoices/${r.id}`,
-            number: r.number,
-            status: r.status,
-            totalCents: r.totalCents,
-            currency: r.currency,
-            issueDate: iso(r.issueDate),
-            paidAt: iso(r.paidAt),
-            customerName: r.customerName,
-          }),
-          "/invoices",
-        );
+        return listResult(rows, listLimit(input.limit), invoiceListItem, "/invoices");
       },
     });
   }
@@ -446,7 +575,7 @@ export function buildAssistantTools(
   if (hasModule("quotes") && can("view:quote")) {
     tools.listQuotes = tool({
       description:
-        "List quotes for the workspace, newest first. Optional filters: status (draft|sent|viewed|accepted|declined|expired|converted), a search term (matches quote number or customer name/company), and a limit (default 20, max 100). Returns id, number, status, totalCents, currency, issueDate, customerName. Use the id with quote.edit only when the quote is still editable." +
+        "List quotes for the workspace, newest first. Optional filters: status (draft|sent|viewed|accepted|declined|expired|converted), a search term (matches quote number or customer name/company), and a limit (default 20, max 100). Returns id, number, status, totalCents, currency, issueDate, customerName. Use getQuote for line items and the expiry date. Use the id with quote.edit only when the quote is still editable." +
         PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         status: z
@@ -471,21 +600,7 @@ export function buildAssistantTools(
           search: input.search,
           limit: listLimit(input.limit) + 1,
         });
-        return listResult(
-          rows,
-          listLimit(input.limit),
-          (r) => ({
-            id: r.id,
-            href: `/quotes/${r.id}`,
-            number: r.number,
-            status: r.status,
-            totalCents: r.totalCents,
-            currency: r.currency,
-            issueDate: iso(r.issueDate),
-            customerName: r.customerName,
-          }),
-          "/quotes",
-        );
+        return listResult(rows, listLimit(input.limit), quoteListItem, "/quotes");
       },
     });
   }
@@ -494,7 +609,7 @@ export function buildAssistantTools(
   if (hasModule("books") && can("view:books")) {
     tools.listTransactions = tool({
       description:
-        "List Books transactions (income/expense) for the workspace, newest first. Optional filters: type (income|expense), a search term (matches description or customer name/company), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 100). Returns id, type, amountCents, currency, date, description, category, customerName. Use the id to update or delete a transaction." +
+        "List Books transactions (income/expense) for the workspace, newest first. Optional filters: type (income|expense), a search term (matches description or customer name/company), dateFrom (ISO), dateTo (ISO), and a limit (default 20, max 100). Returns id, type, amountCents, currency, date, description, category, customerName. Use getTransaction for the full record and getPeriodSummary for totals. Use the id to update or delete a transaction." +
         PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         type: z.enum(["income", "expense"]).optional().describe("Filter by transaction type."),
@@ -687,7 +802,7 @@ export function buildAssistantTools(
   if (can("view:customer")) {
     tools.listCustomers = tool({
       description:
-        "List customers for the workspace, newest first. Optional search (matches name/email/company) and a limit (default 20, max 100). Returns id, name, email, company, phone. Use the id to update a customer or attach one to an invoice/quote." +
+        "List customers for the workspace, newest first. Optional search (matches name/email/company) and a limit (default 20, max 100). Returns id, name, email, company, phone. Use getCustomer for what a customer owes and their recent invoices and quotes. Use the id to update a customer or attach one to an invoice/quote." +
         PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         search: z.string().optional().describe("Substring match on name, email, or company."),
@@ -725,7 +840,8 @@ export function buildAssistantTools(
   if (can("view:activity")) {
     tools.listRecentActivity = tool({
       description:
-        "List recent activity events for the workspace, newest first. Optional limit (default 10, max 100). Returns type, entityType, createdAt, actorFullName.",
+        "List recent activity events for the workspace, newest first. Optional limit (default 10, max 100). Returns type, entityType, createdAt, actorFullName." +
+        PARTIAL_LIST_NOTE,
       inputSchema: z.object({
         limit: z
           .number()
@@ -737,12 +853,449 @@ export function buildAssistantTools(
       }),
       execute: async (input) => {
         const page = await listActivity(workspaceId, { limit: clampLimit(input.limit, 10, 100) });
-        return page.items.map((a) => ({
+        const items = page.items.map((a) => ({
           type: a.type,
           entityType: a.entityType,
           createdAt: iso(a.createdAt),
           actorFullName: a.actorFullName,
         }));
+        // The service already reads one row past the limit; a next-page cursor means older
+        // events exist, so the result says so like every other list.
+        return { items, returned: items.length, hasMore: page.nextCursor !== null };
+      },
+    });
+  }
+
+  // ── Record and summary lookups ────────────────────────────────────────────
+  // One record in full, or a total worked out in Postgres. Gated like the lists: offered
+  // only when the module is installed and the role can view the resource. A record that is
+  // missing or belongs to another workspace comes back as { error }, which the model can
+  // recover from. A result carries the href of the page that shows the same thing, when
+  // there is one, and a recordLabel naming it for the chat card.
+
+  // getInvoice - module-gated.
+  if (hasModule("invoices") && can("view:invoice")) {
+    tools.getInvoice = tool({
+      description:
+        "Get one invoice in full. Pass invoiceNumber (preferred, e.g. INV-2026-0007) or invoiceId (from listInvoices). Returns id, number, status, customer { id, name }, issueDate, dueDate, sentAt, paidAt, paidVia (stripe = paid online through the payment link, manual = marked paid by hand, null = not paid), currency, taxRate (integer percent), pricesIncludeTax, lineItems (description, quantity, unitPriceCents, amountCents), subtotalCents, taxCents, totalCents, amountPaidCents, balanceDueCents and notes. Invoices are paid in full or not at all: balanceDueCents is the total while the invoice is sent, viewed or overdue, and 0 for draft, paid and void. Returns an error if the invoice isn't found.",
+      inputSchema: z.object({
+        invoiceNumber: z
+          .string()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe("The invoice number (e.g. INV-2026-0007)."),
+        invoiceId: z.string().uuid().optional().describe("The invoice id (from listInvoices)."),
+      }),
+      execute: async (input) => {
+        let invoiceId: InvoiceId | null = input.invoiceId
+          ? branded<"InvoiceId">(input.invoiceId)
+          : null;
+        if (!invoiceId && input.invoiceNumber) {
+          const number = input.invoiceNumber.trim();
+          const resolved = await resolveInvoiceByNumber(workspaceId, number);
+          if (!resolved) return { error: `Invoice ${number} not found.` };
+          invoiceId = resolved.id;
+        }
+        if (!invoiceId) return { error: "Provide an invoiceNumber or an invoiceId." };
+        const invoice = await getInvoice(workspaceId, invoiceId);
+        if (!invoice) return { error: "Invoice not found." };
+        const paid = invoice.status === "paid";
+        return {
+          id: invoice.id,
+          href: `/invoices/${invoice.id}`,
+          recordLabel: invoice.number,
+          number: invoice.number,
+          status: invoice.status,
+          customer: customerRef(invoice.customerId, invoice.customerName),
+          issueDate: iso(invoice.issueDate),
+          dueDate: iso(invoice.dueDate),
+          sentAt: iso(invoice.sentAt),
+          paidAt: iso(invoice.paidAt),
+          // There is no payments table: an invoice records one payment. The charge id is
+          // written only when Stripe took the money; the payment-intent id is not a reliable
+          // sign, because it is set as soon as the customer opens the payment form.
+          paidVia: paid ? (invoice.stripeChargeId ? "stripe" : "manual") : null,
+          currency: invoice.currency,
+          taxRate: invoice.taxRate,
+          pricesIncludeTax: invoice.pricesIncludeTax,
+          lineItems: lineItemList(invoice.lineItems),
+          subtotalCents: invoice.subtotalCents,
+          taxCents: invoice.taxCents,
+          totalCents: invoice.totalCents,
+          amountPaidCents: paid ? invoice.totalCents : 0,
+          balanceDueCents: invoiceBalanceDueCents(invoice),
+          notes: invoice.notes,
+        };
+      },
+    });
+  }
+
+  // getQuote - module-gated.
+  if (hasModule("quotes") && can("view:quote")) {
+    tools.getQuote = tool({
+      description:
+        "Get one quote in full. Pass quoteNumber (preferred, e.g. QUO-2026-0003) or quoteId (from listQuotes). Returns id, number, status, customer { id, name }, issueDate, validUntil (the expiry date), sentAt, acceptedAt, declinedAt, convertedAt, currency, taxRate (integer percent), pricesIncludeTax, lineItems (description, quantity, unitPriceCents, amountCents), subtotalCents, taxCents, totalCents, convertedInvoice { id, number } when the quote became an invoice, and notes. Returns an error if the quote isn't found.",
+      inputSchema: z.object({
+        quoteNumber: z
+          .string()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe("The quote number (e.g. QUO-2026-0003)."),
+        quoteId: z.string().uuid().optional().describe("The quote id (from listQuotes)."),
+      }),
+      execute: async (input) => {
+        let quoteId: QuoteId | null = input.quoteId ? branded<"QuoteId">(input.quoteId) : null;
+        if (!quoteId && input.quoteNumber) {
+          const number = input.quoteNumber.trim();
+          const resolved = await resolveQuoteByNumber(workspaceId, number);
+          if (!resolved) return { error: `Quote ${number} not found.` };
+          quoteId = resolved.id;
+        }
+        if (!quoteId) return { error: "Provide a quoteNumber or a quoteId." };
+        const quote = await getQuote(workspaceId, quoteId);
+        if (!quote) return { error: "Quote not found." };
+        const convertedInvoiceId = quote.convertedInvoiceId;
+        // The invoice number is read only when this role may see invoices; the link itself
+        // is already on the quote. A failed read leaves the number out, not the quote.
+        const convertedInvoiceNumber =
+          convertedInvoiceId && hasModule("invoices") && can("view:invoice")
+            ? await recordNumber(() => getInvoice(workspaceId, convertedInvoiceId))
+            : null;
+        return {
+          id: quote.id,
+          href: `/quotes/${quote.id}`,
+          recordLabel: quote.number,
+          number: quote.number,
+          status: quote.status,
+          customer: customerRef(quote.customerId, quote.customerName),
+          issueDate: iso(quote.issueDate),
+          validUntil: iso(quote.validUntil),
+          sentAt: iso(quote.sentAt),
+          acceptedAt: iso(quote.acceptedAt),
+          declinedAt: iso(quote.declinedAt),
+          convertedAt: iso(quote.convertedAt),
+          currency: quote.currency,
+          taxRate: quote.taxRate,
+          pricesIncludeTax: quote.pricesIncludeTax,
+          lineItems: lineItemList(quote.lineItems),
+          subtotalCents: quote.subtotalCents,
+          taxCents: quote.taxCents,
+          totalCents: quote.totalCents,
+          convertedInvoice: convertedInvoiceId
+            ? {
+                id: convertedInvoiceId,
+                href: `/invoices/${convertedInvoiceId}`,
+                number: convertedInvoiceNumber,
+              }
+            : null,
+          notes: quote.notes,
+        };
+      },
+    });
+  }
+
+  // getCustomer - platform service, not module-gated. The invoice and quote parts of the
+  // summary follow their own module and permission gates and are null when not allowed.
+  if (can("view:customer")) {
+    tools.getCustomer = tool({
+      description:
+        "Get one customer with a short account summary. Pass customerId (from listCustomers) or customerEmail; to find a customer by name, call listCustomers first. Returns id, name, email, phone, company, notes, createdAt, invoices and quotes. invoices is { openCount, overdueCount, openBalances (one { currency, balanceCents } per currency), totalsArePartial, recent, hasMore }: open means sent, viewed or overdue; recent is the 5 newest invoices with the same fields as listInvoices; hasMore only means the customer has more invoices than the 5 listed. The open counts and balances cover the customer's newest 200 invoices and are complete unless totalsArePartial is true - if it is, say the totals may be incomplete. quotes is { recent (the 5 newest, same fields as listQuotes), hasMore }. invoices or quotes is null when that module isn't installed or the user can't view it. Returns an error if the customer isn't found.",
+      inputSchema: z.object({
+        customerId: z.string().uuid().optional().describe("The customer id (from listCustomers)."),
+        customerEmail: z
+          .string()
+          .email()
+          .optional()
+          .describe("The customer's email, when you don't have the id."),
+      }),
+      execute: async (input) => {
+        if (!input.customerId && !input.customerEmail) {
+          return { error: "Provide a customerId or a customerEmail." };
+        }
+        const customer = input.customerId
+          ? await getCustomer(workspaceId, branded<"CustomerId">(input.customerId))
+          : await getCustomerByEmail(workspaceId, input.customerEmail);
+        if (!customer) {
+          return {
+            error: "Customer not found. Call listCustomers to search by name, email or company.",
+          };
+        }
+        const [invoiceRows, quoteRows] = await Promise.all([
+          hasModule("invoices") && can("view:invoice")
+            ? listInvoices(workspaceId, { customerId: customer.id, limit: CUSTOMER_INVOICE_SCAN })
+            : Promise.resolve(null),
+          hasModule("quotes") && can("view:quote")
+            ? listQuotes(workspaceId, { customerId: customer.id, limit: CUSTOMER_RECENT + 1 })
+            : Promise.resolve(null),
+        ]);
+
+        return {
+          id: customer.id,
+          href: `/customers/${customer.id}`,
+          recordLabel: customer.name,
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+          company: customer.company,
+          notes: customer.notes,
+          createdAt: iso(customer.createdAt),
+          invoices: invoiceRows ? customerInvoiceSummary(invoiceRows) : null,
+          quotes: quoteRows
+            ? {
+                recent: quoteRows.slice(0, CUSTOMER_RECENT).map(quoteListItem),
+                hasMore: quoteRows.length > CUSTOMER_RECENT,
+              }
+            : null,
+        };
+      },
+    });
+  }
+
+  // Books lookups - module-gated (Books).
+  if (hasModule("books") && can("view:books")) {
+    tools.getTransaction = tool({
+      description:
+        "Get one Books transaction in full. Required: transactionId (from listTransactions). Returns id, type (income|expense), amountCents, gstCents (the GST part of the amount), currency, date, description, category (slug), categoryLabel, customer { id, name }, source, receiptFileId, notes, createdAt, updatedAt. source is set when the transaction mirrors an invoice or a Drive record ({ module, label, href }): it is read-only in Books and is changed from that record instead. Returns an error if the transaction isn't found.",
+      inputSchema: z.object({
+        transactionId: z.string().uuid().describe("The transaction id (from listTransactions)."),
+      }),
+      execute: async (input) => {
+        const tx = await getTransaction(
+          workspaceId,
+          branded<"BookTransactionId">(input.transactionId),
+        );
+        if (!tx) return { error: "Transaction not found." };
+        return {
+          id: tx.id,
+          href: `/books/${tx.id}`,
+          recordLabel: tx.description,
+          type: tx.type,
+          amountCents: tx.amountCents,
+          gstCents: tx.gstCents,
+          currency: tx.currency,
+          date: iso(tx.date),
+          description: tx.description,
+          category: tx.category,
+          categoryLabel: categoryLabel(tx.type, tx.category) ?? tx.category,
+          customer: customerRef(tx.customerId, tx.customerName),
+          source: transactionSource(tx),
+          receiptFileId: tx.receiptFileId,
+          notes: tx.notes,
+          createdAt: iso(tx.createdAt),
+          updatedAt: iso(tx.updatedAt),
+        };
+      },
+    });
+
+    tools.getPeriodSummary = tool({
+      description:
+        "Get the Books profit and loss for a period: income, expenses and net, with GST and a breakdown by category and by month. Totals are worked out in the database over every transaction in the period; use this instead of adding up listTransactions rows. Amounts are added as recorded: if some transactions are in another currency they are not converted, so say the totals mix currencies when listTransactions shows more than one. Books already holds paid invoices and Drive records as mirrored transactions, so do not add those on top. Pass period (week = this week from Monday, month = this month, quarter = this financial quarter, year = the current financial year, calendar = this calendar year, all = all time; each runs up to now), or pass dateFrom and/or dateTo (ISO 8601, e.g. 2026-07-01T00:00:00Z to 2026-09-30T23:59:59Z) for any other range such as last quarter. With no arguments it covers the current financial year. Returns period, from, to, currency, incomeCents, expenseCents, netCents, gstCollectedCents, gstPaidCents, netGstCents, transactionCount, byCategory (type, category, label, amountCents, count) and monthly (month, incomeCents, expenseCents, netCents). All zeros means nothing was recorded in the period.",
+      inputSchema: z.object({
+        period: z
+          .enum(["week", "month", "quarter", "year", "calendar", "all"])
+          .optional()
+          .describe("A preset period ending now. Ignored when dateFrom or dateTo is given."),
+        dateFrom: z.string().datetime().optional().describe("Inclusive lower bound (ISO 8601)."),
+        dateTo: z
+          .string()
+          .datetime()
+          .optional()
+          .describe(
+            "Inclusive upper bound (ISO 8601). A time of 00:00:00 is taken as the whole of that day.",
+          ),
+      }),
+      execute: async (input) => {
+        const workspace = await getWorkspace(workspaceId);
+        const now = new Date();
+        const custom = input.dateFrom !== undefined || input.dateTo !== undefined;
+        const period: Period = input.period ?? "year";
+        // Presets resolve exactly as the Books page does, including the workspace's
+        // financial-year start, so the figures match what the page shows for that period.
+        const range = custom
+          ? {
+              start: input.dateFrom ? new Date(input.dateFrom) : null,
+              end: input.dateTo ? throughEndOfDay(new Date(input.dateTo)) : now,
+            }
+          : periodRange(period, now, workspace?.fyStartMonth ?? 7);
+        if (range.start && range.start > range.end) {
+          return { error: "dateFrom must be on or before dateTo." };
+        }
+        const summary = await getBookSummary(workspaceId, {
+          dateFrom: range.start ?? undefined,
+          dateTo: range.end,
+        });
+        const recordLabel = custom
+          ? range.start
+            ? `${isoDay(range.start)} to ${isoDay(range.end)}`
+            : `Until ${isoDay(range.end)}`
+          : PERIODS.find((option) => option.key === period)?.label;
+        return {
+          period: custom ? "custom" : period,
+          recordLabel,
+          from: iso(range.start),
+          to: iso(range.end),
+          currency: workspace?.defaultCurrency ?? "AUD",
+          incomeCents: summary.incomeCents,
+          expenseCents: summary.expenseCents,
+          netCents: summary.netCents,
+          gstCollectedCents: summary.gstCollectedCents,
+          gstPaidCents: summary.gstPaidCents,
+          netGstCents: summary.netGstCents,
+          transactionCount: summary.count,
+          byCategory: summary.byCategory.map((c) => ({
+            type: c.type,
+            category: c.category,
+            label: categoryLabel(c.type, c.category) ?? c.category,
+            amountCents: c.amountCents,
+            count: c.count,
+          })),
+          monthly: summary.monthly,
+          // The Books page can show a preset period but not an arbitrary range, so only a
+          // preset links to it. "year" is the page's default and needs no parameter.
+          ...(custom ? {} : { href: period === "year" ? "/books" : `/books?period=${period}` }),
+        };
+      },
+    });
+
+    tools.getGstSummary = tool({
+      description:
+        "Get the GST (BAS) position for a financial-year quarter or a whole financial year: GST collected on income, GST paid on expenses, and the net. These are the figures on the Tax page, worked out in the database. fiscalYear is the calendar year the financial year starts in (with a July start, 2026 means July 2026 to June 2027) and quarter 1 is its first three months, so read from and to for the actual dates. With no arguments it returns the current quarter; fiscalYear alone returns that whole year; quarter alone means that quarter of the current financial year. Returns fiscalYear, quarter (null for a whole year), from, to, currency, gstCollectedCents, gstPaidCents, netGstCents, position (owed = GST to pay, refund = refund due, nil), lodgedAt and lodgedNetGstCents for a lodged quarter, and quarters: each quarter of that financial year that has GST or was lodged (label, quarter, gstCollectedCents, gstPaidCents, netGstCents, lodgedAt, lodgedNetGstCents). A lodged quarter keeps the snapshot taken when it was lodged, which can differ from the live figures if transactions changed since. For GST over any other date range, use getPeriodSummary.",
+      inputSchema: z.object({
+        fiscalYear: z
+          .number()
+          .int()
+          .min(2000)
+          .max(2100)
+          .optional()
+          .describe("The calendar year the financial year starts in. Defaults to the current one."),
+        quarter: z
+          .number()
+          .int()
+          .min(1)
+          .max(4)
+          .optional()
+          .describe("Quarter of the financial year, 1-4, counted from its first month."),
+      }),
+      execute: async (input) => {
+        // The same three reads as the Tax page: monthly GST totals from Postgres, bucketed
+        // into the workspace's financial-year quarters, plus the lodged snapshots.
+        const [workspace, months, lodgedPeriods] = await Promise.all([
+          getWorkspace(workspaceId),
+          getGstMonthly(workspaceId),
+          listTaxPeriods(workspaceId),
+        ]);
+        const fyStartMonth = workspace?.fyStartMonth ?? 7;
+        const current = fiscalQuarter(new Date(), fyStartMonth);
+        const fiscalYear = input.fiscalYear ?? current.fiscalYear;
+        const quarter = input.quarter ?? (input.fiscalYear === undefined ? current.quarter : null);
+
+        const live = summarizeGstMonthly(months, fyStartMonth).byQuarter;
+        const quarters = [1, 2, 3, 4].flatMap((q) => {
+          const label = `${fiscalYear}-Q${q}`;
+          const point = live.find((p) => p.label === label);
+          const lodged = lodgedPeriods.find((p) => p.periodLabel === label);
+          if (!point && !lodged) return [];
+          return [
+            {
+              label,
+              quarter: q,
+              gstCollectedCents: point?.gstCollectedCents ?? 0,
+              gstPaidCents: point?.gstPaidCents ?? 0,
+              netGstCents: point?.netGstCents ?? 0,
+              lodgedAt: iso(lodged?.lodgedAt ?? null),
+              lodgedNetGstCents: lodged ? lodged.netGstCents : null,
+            },
+          ];
+        });
+        const selected =
+          quarter === null ? quarters : quarters.filter((q) => q.quarter === quarter);
+        const gstCollectedCents = selected.reduce((sum, q) => sum + q.gstCollectedCents, 0);
+        const gstPaidCents = selected.reduce((sum, q) => sum + q.gstPaidCents, 0);
+        const netGstCents = gstCollectedCents - gstPaidCents;
+        const range = fiscalPeriodRange(fiscalYear, quarter, fyStartMonth);
+        // A year has no label of its own in the app, and "FY2026" reads as a different year
+        // depending on the convention, so a whole year is named by its dates.
+        const recordLabel =
+          quarter === null
+            ? `${isoDay(range.start)} to ${isoDay(range.end)}`
+            : `${fiscalYear}-Q${quarter}`;
+        const lodgedQuarter = quarter === null ? undefined : selected[0];
+        return {
+          recordLabel,
+          fiscalYear,
+          quarter,
+          from: iso(range.start),
+          to: iso(range.end),
+          currency: workspace?.defaultCurrency ?? "AUD",
+          gstCollectedCents,
+          gstPaidCents,
+          netGstCents,
+          position: netGstCents > 0 ? "owed" : netGstCents < 0 ? "refund" : "nil",
+          lodgedAt: lodgedQuarter?.lodgedAt ?? null,
+          lodgedNetGstCents: lodgedQuarter?.lodgedNetGstCents ?? null,
+          quarters,
+          href: "/books/tax",
+        };
+      },
+    });
+  }
+
+  // listReceiptQueue - module-gated (Books). The receipt queue is a manage:books surface
+  // in the app (the Receipts page shows a permission message to anyone else), so the tool
+  // is gated the same way even though it only reads.
+  if (hasModule("books") && can("manage:books")) {
+    tools.listReceiptQueue = tool({
+      description:
+        "List scanned receipts in the Books receipt queue, newest first. Optional status (default pending): pending = read and waiting for review, reviewed = checked but not yet applied, applied = turned into a transaction, rejected = could not be read or was discarded. Optional limit (default 20, max 100). Returns id, status, processing (true while the receipt is still being read), scannedAt, merchant, date, totalCents, taxCents, currency, category, confidence (0-1; low means check it carefully), transactionId and href for an applied receipt, and errorMessage. The receipt contents are null until the scan has been read. The user reviews and applies receipts on the Receipts page; you cannot apply them." +
+        PARTIAL_LIST_NOTE +
+        " total is the full number of receipts with that status, even when the list is partial.",
+      inputSchema: z.object({
+        status: z
+          .enum(["pending", "reviewed", "applied", "rejected"])
+          .optional()
+          .describe("Which receipts to list (default pending)."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(LIST_MAX)
+          .optional()
+          .describe("Max rows to return (default 20)."),
+      }),
+      execute: async (input) => {
+        const status = input.status ?? "pending";
+        const limit = listLimit(input.limit);
+        const [rows, total] = await Promise.all([
+          listExtractions(workspaceId, { status, limit: limit + 1 }),
+          countExtractions(workspaceId, { status }),
+        ]);
+        return {
+          ...listResult(
+            rows,
+            limit,
+            (r) => ({
+              id: r.id,
+              status: r.status,
+              processing: r.processing,
+              scannedAt: iso(r.createdAt),
+              merchant: r.extractedData?.merchant ?? null,
+              date: r.extractedData?.date ?? null,
+              totalCents: r.extractedData?.totalCents ?? null,
+              taxCents: r.extractedData?.taxCents ?? null,
+              currency: r.extractedData?.currency ?? null,
+              category: r.extractedData?.category ?? null,
+              confidence: r.extractedData?.confidence ?? null,
+              transactionId: r.transactionId,
+              ...(r.transactionId ? { href: `/books/${r.transactionId}` } : {}),
+              errorMessage: r.errorMessage,
+            }),
+            `/books/receipts?status=${status}`,
+          ),
+          total,
+          status,
+        };
       },
     });
   }

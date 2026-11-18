@@ -22,7 +22,10 @@ import {
   buildSetupChecklist,
   type SetupChecklist,
 } from "@/features/dashboard/utils/setup-checklist";
-import { countExtractions } from "@/server/domains/books/receipt-extraction";
+import { buildAttentionItems } from "@/features/dashboard/utils/attention-items";
+import { collectInsightFacts } from "@/server/application/insights/facts";
+import { composeBriefing } from "@/lib/domain/insights/briefing";
+import { formatAsOf } from "@/lib/domain/insights/local-date";
 import { consolidateBusinessIncome, type PeriodIncome } from "@soletrade/contracts/business-income";
 
 /**
@@ -44,6 +47,9 @@ import { consolidateBusinessIncome, type PeriodIncome } from "@soletrade/contrac
  * canonical income source when installed because it contains the Invoice/Drive mirrors; without
  * Books, paid invoices and Drive earnings are combined. Outstanding and Ready to invoice remain
  * current-state snapshots.
+ *
+ * The briefing card and the "Needs attention" list are both built from one read of the
+ * member's insight facts (`collectInsightFacts`), the same facts the briefing digest sends.
  */
 
 const DASHBOARD_DEFAULT_PERIOD: Period = "month";
@@ -85,6 +91,16 @@ export interface AttentionItemData {
   icon: "invoice" | "quote" | "receipt" | "draft";
 }
 
+export interface BriefingCardData {
+  /** One or two sentences built from the member's facts; says so when nothing is waiting. */
+  headline: string;
+  /** When the facts were read: an ISO instant, and the same moment in workspace time. */
+  asOf: string;
+  asOfLabel: string;
+  /** Lists the headline's facts can be dealt with in; empty when nothing is waiting. */
+  links: { id: string; label: string; href: string }[];
+}
+
 export interface DashboardData {
   period: Period;
   workspaceName: string;
@@ -92,7 +108,17 @@ export interface DashboardData {
   installedModules: ModuleKey[];
   kpis: KpiCardData[];
   moduleCards: ModuleCardData[];
+  /**
+   * Null while no module is installed (there is nothing a briefing could cover yet) and
+   * when the facts could not be read.
+   */
+  briefing: BriefingCardData | null;
   attentionItems: AttentionItemData[];
+  /**
+   * The facts behind the briefing and "Needs attention" could not be read, so the page
+   * must not claim that nothing is waiting.
+   */
+  insightsUnavailable: boolean;
   activity: ActivityPage;
   /** Getting-started checklist built from real data; null when complete or not applicable to the viewer's role. */
   setup: SetupChecklist | null;
@@ -110,12 +136,7 @@ async function invoicesCards(
   currentRange: { start: Date | null; end: Date },
   previousRange: { start: Date; end: Date } | null,
   currency: string,
-): Promise<{
-  outstanding: KpiCardData;
-  income: PeriodIncome;
-  card: ModuleCardData;
-  signals: { overdueCount: number; overdueCents: number; draftCount: number };
-}> {
+): Promise<{ outstanding: KpiCardData; income: PeriodIncome; card: ModuleCardData }> {
   const cur = await getInvoiceDashboardSummary(workspaceId, currentRange, previousRange);
 
   const outstanding: KpiCardData = {
@@ -151,11 +172,6 @@ async function invoicesCards(
     outstanding,
     income: { currentCents: cur.paidCents, previousCents: cur.previousPaidCents },
     card,
-    signals: {
-      overdueCount: cur.overdueCount,
-      overdueCents: cur.overdueCents,
-      draftCount: cur.draftCount,
-    },
   };
 }
 
@@ -267,11 +283,7 @@ async function quotesCards(
   workspaceId: WorkspaceId,
   currentRange: { start: Date | null; end: Date },
   currency: string,
-): Promise<{
-  pending: KpiCardData;
-  card: ModuleCardData;
-  signals: { acceptedCount: number; acceptedValueCents: number };
-}> {
+): Promise<{ pending: KpiCardData; card: ModuleCardData }> {
   const cur = await getQuoteDashboardSummary(workspaceId, currentRange);
 
   const pending: KpiCardData = {
@@ -303,14 +315,7 @@ async function quotesCards(
           }
         : null,
   };
-  return {
-    pending,
-    card,
-    signals: {
-      acceptedCount: cur.readyCount,
-      acceptedValueCents: cur.acceptedValueCents,
-    },
-  };
+  return { pending, card };
 }
 
 // --- Loader -----------------------------------------------------------------
@@ -342,7 +347,7 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
     books,
     drive,
     quotes,
-    pendingReceiptCount,
+    facts,
     activity,
     customerCount,
     sentInvoiceCount,
@@ -352,9 +357,16 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
     has("books") ? booksCards(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("drive") ? driveCard(ctx.workspaceId, currentRange, previousRange, currency) : null,
     has("quotes") ? quotesCards(ctx.workspaceId, currentRange, currency) : null,
-    has("books") && authorize(ctx.role, "manage:books").ok
-      ? countExtractions(ctx.workspaceId, { status: "pending" })
-      : Promise.resolve(0),
+    // What this member can be told needs attention, limited by installed modules and role.
+    // The rest of the dashboard does not depend on them, so a failure here (for example
+    // the web app deployed before its migration) costs these two sections, not the page.
+    collectInsightFacts(
+      { workspaceId: ctx.workspaceId, role: ctx.role },
+      { workspace, installedModules: installed },
+    ).catch((error: unknown) => {
+      console.error("[dashboard] insight facts unavailable", error);
+      return null;
+    }),
     listActivity(ctx.workspaceId, { limit: 5 }),
     wantsSetup && authorize(ctx.role, "view:customer").ok
       ? countCustomers(ctx.workspaceId)
@@ -420,51 +432,22 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
   if (drive) moduleCards.push(drive.card);
   if (quotes) moduleCards.push(quotes.card);
 
-  const attentionItems: AttentionItemData[] = [];
-  if (invoices?.signals.overdueCount) {
-    attentionItems.push({
-      id: "overdue-invoices",
-      title: `${invoices.signals.overdueCount} overdue ${invoices.signals.overdueCount === 1 ? "invoice" : "invoices"}`,
-      detail: `${formatCents(invoices.signals.overdueCents, currency)} is past due and may need a follow-up.`,
-      href: "/invoices?status=overdue",
-      actionLabel: "Review overdue",
-      tone: "danger",
-      icon: "invoice",
-    });
-  }
-  if (quotes?.signals.acceptedCount) {
-    attentionItems.push({
-      id: "accepted-quotes",
-      title: `${quotes.signals.acceptedCount} accepted ${quotes.signals.acceptedCount === 1 ? "quote is" : "quotes are"} ready to invoice`,
-      detail: `${formatCents(quotes.signals.acceptedValueCents, currency)} of approved work is waiting to be converted.`,
-      href: "/quotes?status=accepted",
-      actionLabel: "Create invoices",
-      tone: "info",
-      icon: "quote",
-    });
-  }
-  if (pendingReceiptCount > 0) {
-    attentionItems.push({
-      id: "pending-receipts",
-      title: `${pendingReceiptCount} ${pendingReceiptCount === 1 ? "receipt needs" : "receipts need"} review`,
-      detail: "Confirm the extracted details before adding them to your books.",
-      href: "/books/receipts?status=pending",
-      actionLabel: "Review receipts",
-      tone: "warning",
-      icon: "receipt",
-    });
-  }
-  if (invoices?.signals.draftCount) {
-    attentionItems.push({
-      id: "draft-invoices",
-      title: `${invoices.signals.draftCount} draft ${invoices.signals.draftCount === 1 ? "invoice" : "invoices"}`,
-      detail: "Finish or remove drafts so your invoice list reflects active work.",
-      href: "/invoices?status=draft",
-      actionLabel: "Finish drafts",
-      tone: "neutral",
-      icon: "draft",
-    });
-  }
+  // The briefing card and the "Needs attention" list read the same facts, so they agree.
+  const attentionItems = facts ? buildAttentionItems(facts) : [];
+  const composed = facts ? composeBriefing(facts) : null;
+  const briefing: BriefingCardData | null =
+    facts && composed
+      ? {
+          headline: composed.headline,
+          asOf: facts.asOf,
+          asOfLabel: formatAsOf(new Date(facts.asOf), facts.timezone),
+          links: composed.items.map((item) => ({
+            id: item.id,
+            label: item.linkLabel,
+            href: item.href,
+          })),
+        }
+      : null;
 
   return {
     period,
@@ -473,7 +456,9 @@ export async function loadDashboardPage(params?: { period?: Period }): Promise<D
     installedModules: installed,
     kpis,
     moduleCards,
+    briefing: installed.length > 0 ? briefing : null,
     attentionItems,
+    insightsUnavailable: facts === null,
     activity,
     setup: wantsSetup
       ? buildSetupChecklist({

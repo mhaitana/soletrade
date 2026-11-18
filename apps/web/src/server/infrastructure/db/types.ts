@@ -481,6 +481,116 @@ type GeneratedDatabase = {
           },
         ];
       };
+      ai_digest_preferences: {
+        Row: {
+          created_at: string;
+          frequency: Database["public"]["Enums"]["ai_digest_frequency"];
+          last_period: string | null;
+          updated_at: string;
+          user_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          frequency?: Database["public"]["Enums"]["ai_digest_frequency"];
+          last_period?: string | null;
+          updated_at?: string;
+          user_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          frequency?: Database["public"]["Enums"]["ai_digest_frequency"];
+          last_period?: string | null;
+          updated_at?: string;
+          user_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_digest_preferences_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_digest_preferences_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_message_feedback: {
+        Row: {
+          comment: string | null;
+          conversation_id: string;
+          created_at: string;
+          id: string;
+          message_id: string | null;
+          message_text: string;
+          rating: string;
+          updated_at: string;
+          user_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          comment?: string | null;
+          conversation_id: string;
+          created_at?: string;
+          id?: string;
+          message_id?: string | null;
+          message_text?: string;
+          rating: string;
+          updated_at?: string;
+          user_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          comment?: string | null;
+          conversation_id?: string;
+          created_at?: string;
+          id?: string;
+          message_id?: string | null;
+          message_text?: string;
+          rating?: string;
+          updated_at?: string;
+          user_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_message_feedback_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_conversations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_message_feedback_message_id_fkey";
+            columns: ["message_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_messages";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_message_feedback_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_message_feedback_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       ai_messages: {
         Row: {
           content: string;
@@ -585,6 +695,126 @@ type GeneratedDatabase = {
           },
           {
             foreignKeyName: "ai_tool_actions_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_usage_events: {
+        Row: {
+          cache_read_tokens: number;
+          cache_write_tokens: number;
+          conversation_id: string | null;
+          created_at: string;
+          feature: string;
+          id: string;
+          input_tokens: number;
+          model: string;
+          output_tokens: number;
+          provider: string;
+          step_count: number;
+          surface: string | null;
+          user_id: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          conversation_id?: string | null;
+          created_at?: string;
+          feature: string;
+          id?: string;
+          input_tokens?: number;
+          model: string;
+          output_tokens?: number;
+          provider: string;
+          step_count?: number;
+          surface?: string | null;
+          user_id?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          conversation_id?: string | null;
+          created_at?: string;
+          feature?: string;
+          id?: string;
+          input_tokens?: number;
+          model?: string;
+          output_tokens?: number;
+          provider?: string;
+          step_count?: number;
+          surface?: string | null;
+          user_id?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_events_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_conversations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_usage_events_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_usage_events_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_usage_monthly: {
+        Row: {
+          cache_read_tokens: number;
+          cache_write_tokens: number;
+          call_count: number;
+          feature: string;
+          input_tokens: number;
+          month: string;
+          output_tokens: number;
+          step_count: number;
+          updated_at: string;
+          workspace_id: string;
+        };
+        Insert: {
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          call_count?: number;
+          feature: string;
+          input_tokens?: number;
+          month: string;
+          output_tokens?: number;
+          step_count?: number;
+          updated_at?: string;
+          workspace_id: string;
+        };
+        Update: {
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          call_count?: number;
+          feature?: string;
+          input_tokens?: number;
+          month?: string;
+          output_tokens?: number;
+          step_count?: number;
+          updated_at?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_monthly_workspace_id_fkey";
             columns: ["workspace_id"];
             isOneToOne: false;
             referencedRelation: "workspaces";
@@ -2898,6 +3128,14 @@ type GeneratedDatabase = {
         Args: { p_token: string; p_user_email: string; p_user_id: string };
         Returns: Json;
       };
+      ai_digest_local_time: {
+        Args: { p_now: string; p_timezone: string };
+        Returns: string;
+      };
+      claim_ai_digests: {
+        Args: { p_limit?: number; p_now: string };
+        Returns: Json;
+      };
       consume_credit: {
         Args: {
           p_actor_user_id?: string;
@@ -2989,6 +3227,16 @@ type GeneratedDatabase = {
         };
         Returns: Json;
       };
+      get_insight_facts: {
+        Args: {
+          p_days?: number;
+          p_include_invoices?: boolean;
+          p_include_quotes?: boolean;
+          p_today: string;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
       get_invoice_dashboard_summary: {
         Args: {
           p_current_from?: string;
@@ -3011,6 +3259,10 @@ type GeneratedDatabase = {
         Args: { p_conversation_id: string; p_user_id: string };
         Returns: boolean;
       };
+      is_workspace_admin: {
+        Args: { p_user_id: string; p_workspace_id: string };
+        Returns: boolean;
+      };
       is_workspace_member: {
         Args: { p_user_id: string; p_workspace_id: string };
         Returns: boolean;
@@ -3018,6 +3270,24 @@ type GeneratedDatabase = {
       list_due_credit_expiries: {
         Args: { p_limit?: number; p_now: string };
         Returns: Json;
+      };
+      record_ai_usage: {
+        Args: {
+          p_cache_read_tokens?: number;
+          p_cache_write_tokens?: number;
+          p_conversation_id?: string;
+          p_created_at?: string;
+          p_feature: string;
+          p_input_tokens: number;
+          p_model: string;
+          p_output_tokens: number;
+          p_provider: string;
+          p_step_count?: number;
+          p_surface?: string;
+          p_user_id?: string;
+          p_workspace_id: string;
+        };
+        Returns: string;
       };
       show_limit: { Args: never; Returns: number };
       show_trgm: { Args: { "": string }; Returns: string[] };
@@ -3050,6 +3320,7 @@ type GeneratedDatabase = {
         | "support_agent"
         | "security_auditor"
         | "read_only_admin";
+      ai_digest_frequency: "off" | "daily" | "weekly";
       ai_message_role: "user" | "assistant";
       ai_tool_action_status: "pending" | "approved" | "denied" | "running" | "succeeded" | "failed";
       billing_credit_entry_type:
@@ -3226,6 +3497,7 @@ export const Constants = {
         "security_auditor",
         "read_only_admin",
       ],
+      ai_digest_frequency: ["off", "daily", "weekly"],
       ai_message_role: ["user", "assistant"],
       ai_tool_action_status: ["pending", "approved", "denied", "running", "succeeded", "failed"],
       billing_credit_entry_type: [

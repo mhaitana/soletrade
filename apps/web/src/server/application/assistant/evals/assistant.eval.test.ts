@@ -41,6 +41,11 @@ vi.mock("@/server/foundation/conversations/tool-actions", async () => {
   const harness = await import("@/testing/assistant-harness");
   return harness.fakeToolActions;
 });
+// The usage ledger is in memory in both modes: a live run still writes no data.
+vi.mock("@/server/foundation/ai-usage/usage", async () => {
+  const harness = await import("@/testing/assistant-harness");
+  return harness.fakeAiUsage;
+});
 vi.mock("@/server/foundation/module-installations/index", () => ({
   getInstalledModules: async () => ["invoices", "customers"],
 }));

@@ -61,7 +61,7 @@ credentials. Server env validation lives in server infrastructure; optional secr
 are asserted at each provider boundary. Browser public values retain their framework
 prefixes. `pnpm stripe:setup --env-file .env.prod` resolves the file from `apps/web`.
 
-All five cron entries remain in `apps/web/vercel.json`; preserve paths and auth.
+All six cron entries remain in `apps/web/vercel.json`; preserve paths and auth.
 Follow `docs/DEPLOYMENT.md` for the coordinated Vercel root-directory cutover.
 
 Before modifying Next code, read the installed documentation at

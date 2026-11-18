@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Menu, MoreHorizontal, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import type { WorkspaceRole } from "@/lib/domain/database-enums";
 import type { WorkspaceId } from "@/types/ids";
 import { brand } from "@/config/brand";
 import { HaiPanelFrame } from "@/components/hai-panel-frame";
+import { onHaiAsk, type HaiAsk } from "@/lib/assistant/launcher";
+import { canAttachReceipts } from "@/lib/assistant/attachments";
 
 // The assistant and AI SDK are only needed after the user asks to open hAI.
 // Keep the panel mounted after its first use so drafts and streams survive closing.
@@ -175,7 +177,26 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [haiOpen, setHaiOpen] = useState(false);
   const [haiStarted, setHaiStarted] = useState(false);
+  // A question put to hAI from elsewhere in the app (command palette, dashboard, a record
+  // page). The id tells the panel a new one arrived, even with the same wording.
+  const [haiAsk, setHaiAsk] = useState<(HaiAsk & { id: number; workspaceId: WorkspaceId }) | null>(
+    null,
+  );
   const haiTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(
+    () =>
+      onHaiAsk((ask) => {
+        setHaiStarted(true);
+        setHaiOpen(true);
+        setHaiAsk((current) => ({
+          ...ask,
+          id: (current?.id ?? 0) + 1,
+          workspaceId: activeWorkspaceId,
+        }));
+      }),
+    [activeWorkspaceId],
+  );
 
   return (
     <div className="min-h-dvh overflow-x-clip">
@@ -289,6 +310,10 @@ export function AppShell({
             open={haiOpen}
             onOpenChange={setHaiOpen}
             returnFocusRef={haiTriggerRef}
+            // Switching workspace remounts the panel; a question asked in the previous
+            // workspace must not be sent again in the new one.
+            ask={haiAsk?.workspaceId === activeWorkspaceId ? haiAsk : null}
+            canAttachReceipts={canAttachReceipts(role, installedModules)}
           />
         </Suspense>
       ) : null}

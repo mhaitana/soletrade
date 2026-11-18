@@ -8,22 +8,18 @@ import {
   History,
   LoaderCircle,
   MessageSquarePlus,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
 import { brand } from "@/config/brand";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
-import type { ConversationSummary } from "@/lib/domain/conversations/conversations-types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listPanelConversationsAction } from "@/features/assistant/api/actions";
 import { DeleteConversationDialog } from "@/features/assistant/components/delete-conversation-dialog";
-
-type Load =
-  | { status: "loading" }
-  | { status: "error" }
-  | { status: "ready"; conversations: ConversationSummary[] };
+import { useConversationList } from "@/features/assistant/hooks/use-conversation-list";
 
 /**
  * The side panel's History: the person's conversations, listed inside the panel. Picking
@@ -50,41 +46,31 @@ export function HaiPanelHistory({
   onBack: () => void;
   onClose: () => void;
 }) {
-  const [load, setLoad] = useState<Load>({ status: "loading" });
-  const [attempt, setAttempt] = useState(0);
+  const list = useConversationList();
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const deleteButtonRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const conversations = await listPanelConversationsAction();
-        if (!cancelled) setLoad({ status: "ready", conversations });
-      } catch {
-        if (!cancelled) setLoad({ status: "error" });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [attempt]);
+  const listRef = useRef<HTMLUListElement>(null);
+  // Where focus goes after "Show more": the first of the rows it adds.
+  const focusRowAfterMore = useRef<number | null>(null);
 
   // Announce the view to screen readers and keep keyboard focus inside the panel.
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
 
-  function forget(id: string) {
-    setLoad((current) =>
-      current.status === "ready"
-        ? { status: "ready", conversations: current.conversations.filter((c) => c.id !== id) }
-        : current,
-    );
-  }
+  // After "Show more", focus moves to the first row it added: the button may be gone,
+  // and focus must not fall out of the panel.
+  const rowCount = list.conversations.length;
+  useEffect(() => {
+    const from = focusRowAfterMore.current;
+    if (from === null || list.loadingMore) return;
+    focusRowAfterMore.current = null;
+    const row = listRef.current?.querySelectorAll<HTMLElement>("li > button:first-child")[from];
+    (row ?? headingRef.current)?.focus();
+  }, [list.loadingMore, rowCount]);
 
   async function open(id: string) {
     if (opening) return;
@@ -101,7 +87,7 @@ export function HaiPanelHistory({
     // Opened: the panel is back on its chat and this view is gone.
     if (found) return;
     setOpening(null);
-    forget(id);
+    list.remove(id);
     setOpenError("That conversation is no longer available.");
   }
 
@@ -151,96 +137,141 @@ export function HaiPanelHistory({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="relative mb-3">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={list.query}
+            onChange={(event) => list.setQuery(event.target.value)}
+            placeholder="Search conversations"
+            aria-label="Search conversations"
+            maxLength={80}
+            className="pl-9"
+          />
+        </div>
         {openError ? (
           <p className="mb-3 text-sm text-destructive" role="alert">
             {openError}
           </p>
         ) : null}
-        {load.status === "loading" ? (
+        {list.failed ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+            <p className="text-sm text-muted-foreground" role="alert">
+              Your conversations could not be loaded.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={list.retry}>
+              Try again
+            </Button>
+          </div>
+        ) : list.loading ? (
           <div className="space-y-2" role="status" aria-label="Loading conversations">
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-14 w-full rounded-lg" />
             ))}
           </div>
-        ) : load.status === "error" ? (
-          <div className="flex min-h-full flex-col items-center justify-center gap-3 py-6 text-center">
-            <p className="text-sm text-muted-foreground" role="alert">
-              Your conversations could not be loaded.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setLoad({ status: "loading" });
-                setAttempt((current) => current + 1);
-              }}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : load.conversations.length === 0 ? (
-          <div className="flex min-h-full flex-col items-center justify-center py-6 text-center">
-            <History className="size-7 text-muted-foreground" aria-hidden />
-            <p className="mt-3 text-sm font-medium">No conversations yet</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Ask {brand.assistantName} something and the conversation is kept here.
-            </p>
-          </div>
+        ) : list.conversations.length === 0 ? (
+          list.term ? (
+            <div className="py-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                No conversations match &ldquo;{list.term}&rdquo;.
+              </p>
+              <button
+                type="button"
+                onClick={() => list.setQuery("")}
+                className="mt-1 cursor-pointer text-sm text-brand-blue hover:underline"
+              >
+                Clear search
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <History className="size-7 text-muted-foreground" aria-hidden />
+              <p className="mt-3 text-sm font-medium">No conversations yet</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Ask {brand.assistantName} something and the conversation is kept here.
+              </p>
+            </div>
+          )
         ) : (
-          <ul className="space-y-2" aria-label="Conversations">
-            {load.conversations.map((conversation) => {
-              const id = conversation.id as string;
-              const isCurrent = id === activeId;
-              return (
-                <li
-                  key={id}
-                  className={cn(
-                    "flex items-stretch rounded-lg border transition-colors",
-                    isCurrent
-                      ? "border-brand-blue/40 bg-brand-blue/5"
-                      : "border-border bg-card hover:bg-muted/40",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => void open(id)}
-                    disabled={opening !== null}
-                    aria-current={isCurrent ? "true" : undefined}
-                    className="flex min-h-14 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-3 py-2 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-default"
+          <>
+            <ul ref={listRef} className="space-y-2" aria-label="Conversations">
+              {list.conversations.map((conversation) => {
+                const id = conversation.id as string;
+                const isCurrent = id === activeId;
+                return (
+                  <li
+                    key={id}
+                    className={cn(
+                      "flex items-stretch rounded-lg border transition-colors",
+                      isCurrent
+                        ? "border-brand-blue/40 bg-brand-blue/5"
+                        : "border-border bg-card hover:bg-muted/40",
+                    )}
                   >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{conversation.title}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {isCurrent ? "Open now · " : ""}
-                        <time dateTime={conversation.updatedAt.toISOString()}>
-                          {formatRelativeTime(conversation.updatedAt)}
-                        </time>
+                    <button
+                      type="button"
+                      onClick={() => void open(id)}
+                      disabled={opening !== null}
+                      aria-current={isCurrent ? "true" : undefined}
+                      className="flex min-h-14 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-3 py-2 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-default"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">{conversation.title}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {isCurrent ? "Open now · " : ""}
+                          <time dateTime={conversation.updatedAt.toISOString()}>
+                            {formatRelativeTime(conversation.updatedAt)}
+                          </time>
+                        </span>
                       </span>
-                    </span>
-                    {opening === id ? (
-                      <LoaderCircle
-                        className="size-4 shrink-0 animate-spin text-muted-foreground"
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      deleteButtonRef.current = event.currentTarget;
-                      setConfirmDelete({ id, title: conversation.title });
-                    }}
-                    disabled={opening !== null}
-                    aria-label={`Delete conversation ${conversation.title}`}
-                    className="grid w-11 shrink-0 cursor-pointer place-items-center rounded-r-lg text-muted-foreground outline-none transition-colors hover:text-destructive focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-default disabled:opacity-50"
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      {opening === id ? (
+                        <LoaderCircle
+                          className="size-4 shrink-0 animate-spin text-muted-foreground"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        deleteButtonRef.current = event.currentTarget;
+                        setConfirmDelete({ id, title: conversation.title });
+                      }}
+                      disabled={opening !== null}
+                      aria-label={`Delete conversation ${conversation.title}`}
+                      className="grid w-11 shrink-0 cursor-pointer place-items-center rounded-r-lg text-muted-foreground outline-none transition-colors hover:text-destructive focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-default disabled:opacity-50"
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {list.hasMore ? (
+              <div className="mt-3 text-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    focusRowAfterMore.current = rowCount;
+                    void list.showMore();
+                  }}
+                  disabled={list.loadingMore}
+                >
+                  {list.loadingMore ? "Loading…" : "Show more"}
+                </Button>
+                {list.moreFailed ? (
+                  <p className="mt-2 text-xs text-destructive" role="alert">
+                    Older conversations could not be loaded. Try again.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </>
         )}
         <p className="sr-only" aria-live="polite">
           {opening ? "Opening conversation…" : ""}
@@ -264,7 +295,7 @@ export function HaiPanelHistory({
         onCancel={() => setConfirmDelete(null)}
         onDeleted={(id) => {
           setConfirmDelete(null);
-          forget(id);
+          list.remove(id);
           onDeleted(id);
         }}
         onCloseAutoFocus={() => {

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { isToolUIPart } from "ai";
-import { Check, Copy, RotateCcw } from "lucide-react";
+import { Check, Copy, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   actionPreviewFor,
@@ -10,8 +10,11 @@ import {
   messageText,
   type HaiUIMessage,
 } from "@/lib/assistant/messages";
+import type { MessageRating } from "@/lib/domain/conversations/conversations-types";
 import { HaiToolPart } from "@/features/assistant/hooks/use-hai-tool-navigation";
 import { HaiMarkdown } from "@/features/assistant/components/hai-markdown";
+import { AttachmentChip } from "@/features/assistant/components/receipt-attachment";
+import { splitAttachment } from "@/lib/assistant/attachments";
 
 const ACTION_CLASS =
   "inline-flex min-h-8 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 max-md:min-h-11 max-md:px-2.5";
@@ -27,6 +30,8 @@ export function HaiMessage({
   isLatest,
   onDecide,
   onRegenerate,
+  rating,
+  onRate,
   className,
 }: {
   message: HaiUIMessage;
@@ -36,19 +41,30 @@ export function HaiMessage({
   isLatest: boolean;
   onDecide: (approvalId: string, approved: boolean) => void;
   onRegenerate?: (messageId: string) => void;
+  /** This person's thumbs up / down on the reply, if any. */
+  rating?: MessageRating;
+  /** Rate the reply, add a note, or clear the rating (`null`). Resolves true when saved. */
+  onRate?: (messageId: string, rating: MessageRating | null, comment?: string) => Promise<boolean>;
   className?: string;
 }) {
   const text = messageText(message.parts);
   if (message.role === "user") {
+    // An attached receipt travels as the last line of the text; show it as a chip.
+    const { text: typed, attachment } = splitAttachment(text);
     return (
       <div className="flex justify-end">
         <div
           className={cn(
-            "whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground",
+            "min-w-0 whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground",
             className,
           )}
         >
-          {text}
+          {typed}
+          {attachment ? (
+            <div>
+              <AttachmentChip name={attachment.name} />
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -87,7 +103,7 @@ export function HaiMessage({
           <div className="rounded-lg bg-muted px-3 py-2 text-muted-foreground">…</div>
         ) : null}
         {!busy && (text || canRegenerate) ? (
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {text ? <CopyButton text={text} /> : null}
             {canRegenerate ? (
               <button
@@ -101,10 +117,106 @@ export function HaiMessage({
                 <span className="max-md:sr-only">Answer again</span>
               </button>
             ) : null}
+            {/* Only a stored reply can be rated; its id is the stored row's id. */}
+            {text && onRate && STORED_ID.test(message.id) ? (
+              <FeedbackButtons
+                rating={rating}
+                onRate={(next, comment) => onRate(message.id, next, comment)}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
     </div>
+  );
+}
+
+const STORED_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Thumbs up and down. Either is recorded as soon as it is pressed (pressing it again
+ * clears it); a thumbs down then offers a line for what was wrong, which is optional.
+ */
+function FeedbackButtons({
+  rating,
+  onRate,
+}: {
+  rating?: MessageRating;
+  onRate: (rating: MessageRating | null, comment?: string) => Promise<boolean>;
+}) {
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "noted" | "failed">("idle");
+
+  async function press(next: MessageRating) {
+    const clearing = rating === next;
+    setStatus("idle");
+    setNoteOpen(next === "down" && !clearing);
+    const saved = await onRate(clearing ? null : next);
+    if (!saved) {
+      setNoteOpen(false);
+      setStatus("failed");
+    }
+  }
+
+  async function sendNote(event: FormEvent) {
+    event.preventDefault();
+    if (!note.trim()) return;
+    setStatus("saving");
+    const saved = await onRate("down", note);
+    setStatus(saved ? "noted" : "failed");
+    if (saved) {
+      setNoteOpen(false);
+      setNote("");
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className={cn(ACTION_CLASS, rating === "up" && "text-foreground")}
+        onClick={() => void press("up")}
+        aria-pressed={rating === "up"}
+        aria-label="Good answer"
+        title="Good answer"
+      >
+        <ThumbsUp className={cn("size-3.5", rating === "up" && "fill-current")} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className={cn(ACTION_CLASS, rating === "down" && "text-foreground")}
+        onClick={() => void press("down")}
+        aria-pressed={rating === "down"}
+        aria-label="Bad answer"
+        title="Bad answer"
+      >
+        <ThumbsDown className={cn("size-3.5", rating === "down" && "fill-current")} aria-hidden />
+      </button>
+      {noteOpen ? (
+        <form onSubmit={(event) => void sendNote(event)} className="flex w-full items-center gap-2">
+          <input
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            maxLength={1000}
+            aria-label="What was wrong with this answer? (optional)"
+            placeholder="What was wrong? (optional)"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:h-11"
+          />
+          <button
+            type="submit"
+            disabled={!note.trim() || status === "saving"}
+            className={cn(ACTION_CLASS, "border border-border text-foreground")}
+          >
+            {status === "saving" ? "Sending…" : "Send note"}
+          </button>
+        </form>
+      ) : null}
+      <span className="text-xs text-muted-foreground" role="status">
+        {status === "noted" ? "Thanks, noted." : ""}
+        {status === "failed" ? "That could not be saved. Please try again." : ""}
+      </span>
+    </>
   );
 }
 

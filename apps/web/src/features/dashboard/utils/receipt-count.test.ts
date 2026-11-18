@@ -132,7 +132,18 @@ describe("dashboard receipt review count", () => {
 
   it("does not present a failed count query as an empty review queue", async () => {
     responseStatus = 403;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(loadDashboardPage()).rejects.toThrow(/PostgREST error/);
+    // The page still loads, flagged so it shows "could not be loaded" where the list would
+    // be, never "all caught up".
+    const dashboard = await loadDashboardPage();
+
+    expect(dashboard.insightsUnavailable).toBe(true);
+    expect(dashboard.briefing).toBeNull();
+    expect(logged).toHaveBeenCalledWith(
+      "[dashboard] insight facts unavailable",
+      expect.objectContaining({ message: expect.stringMatching(/PostgREST error/) }),
+    );
+    logged.mockRestore();
   });
 });

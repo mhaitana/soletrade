@@ -21,7 +21,7 @@ in your Vercel env. The current production URL is
 3. Use the package's `pnpm build` (`next build`) as the build command. The root pnpm
    lockfile supplies workspace dependencies; Next traces files from the repository root.
 4. Create and inspect a preview deployment before switching production. Confirm
-   shared contracts resolve, public assets load, and all five cron routes remain configured.
+   shared contracts resolve, public assets load, and all six cron routes remain configured.
 5. For a rebuilt rollback to pre-monorepo source, restore the project's Root Directory
    to the repository root along with that source revision. An existing immutable
    deployment can be rolled back without rebuilding. Restore `apps/web` before building
@@ -161,9 +161,32 @@ has its own buckets, so the effective limit is `max × replica_count`. For prod:
 | `23 0 * * *` | `/api/cron/quote-expired`          |
 | `31 0 * * *` | `/api/cron/credit-expired`         |
 | `11 0 * * *` | `/api/cron/module-cancel-finalize` |
+| `7 * * * *`  | `/api/cron/assistant-digest`       |
 
-Preserve `CRON_SECRET`; Vercel sends it as a bearer token. All route paths and
-existing authentication behavior are unchanged.
+Preserve `CRON_SECRET`; Vercel sends it as a bearer token. The first five route paths and
+their authentication behavior are unchanged; the sixth uses the same check.
+
+### Briefing digest (`/api/cron/assistant-digest`)
+
+Sends the opt-in briefing digest. It needs migration
+`20261119100000_assistant_briefings.sql`; apply it before deploying. The dashboard reads
+its briefing through the same migration's `get_insight_facts` function, and until that
+exists it shows "could not be loaded" for the briefing and "Needs attention".
+
+- It runs every hour because each workspace's 07:00 falls in a different hour. A member is
+  picked when they chose Daily or Weekly under Settings > hAI, are still an active member,
+  it is 07:00 or later in the workspace's timezone (and a Monday there, for Weekly), and
+  they have not been picked yet that local day. Nobody is opted in by default.
+- The database marks a member as picked before anything is sent (`claim_ai_digests`), so a
+  repeated or overlapping run cannot send twice. A run handles at most 200 members and
+  stops claiming after 40 seconds; the rest are picked up by the next run.
+- A member with nothing to report is sent nothing. Otherwise they get an in-app
+  notification and an email through Resend. Without `RESEND_API_KEY` / `EMAIL_FROM` the
+  in-app notification is the whole digest; a failed email never blocks it.
+- The response is `{ ok, claimed, sent, emailed, skipped, failed }`. `failed` above zero
+  means a member's digest could not be built or saved; the error is in the function log.
+- No model is called and no new environment variables are needed. The route sets
+  `maxDuration = 60`.
 
 ## 8. First-deploy smoke test
 

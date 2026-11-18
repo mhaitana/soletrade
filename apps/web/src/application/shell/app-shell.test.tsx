@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/application/shell/app-shell";
+import { askHai } from "@/lib/assistant/launcher";
 import type { WorkspaceId } from "@/types/ids";
 import type { WorkspaceRole } from "@/lib/domain/database-enums";
 
@@ -45,10 +46,10 @@ vi.mock("@/features/notifications/components/notification-bell", () => ({
 vi.mock("@/features/assistant/components/hai-assistant-panel", async () => {
   const { useState } = await import("react");
   return {
-    HaiAssistantPanel: ({ open }: { open: boolean }) => {
+    HaiAssistantPanel: ({ open, ask }: { open: boolean; ask?: { question?: string } | null }) => {
       const [draft, setDraft] = useState("");
       return (
-        <aside hidden={!open} aria-label="hAI global assistant">
+        <aside hidden={!open} aria-label="hAI global assistant" data-asked={ask?.question}>
           <input
             aria-label="Assistant draft"
             value={draft}
@@ -110,6 +111,56 @@ describe("AppShell assistant lifecycle", () => {
     await waitFor(() => expect(draft).toBeVisible());
     expect(screen.getByLabelText("Assistant draft")).toHaveValue("Help with my invoice");
   });
+});
+
+it("opens the assistant with a question asked from elsewhere in the app", async () => {
+  render(
+    <AppShell
+      workspaces={[]}
+      activeWorkspaceId={"workspace" as WorkspaceId}
+      installedModules={[]}
+      role="owner"
+      userEmail="owner@example.com"
+      notificationCount={0}
+    >
+      <p>Page</p>
+    </AppShell>,
+  );
+  expect(screen.queryByLabelText("hAI global assistant")).not.toBeInTheDocument();
+
+  act(() => askHai({ question: "Summarise this invoice", send: true }));
+
+  const panel = await screen.findByLabelText("hAI global assistant");
+  expect(panel).toBeVisible();
+  expect(panel).toHaveAttribute("data-asked", "Summarise this invoice");
+});
+
+it("does not carry a question into another workspace", async () => {
+  const shell = (workspace: string) => (
+    <AppShell
+      workspaces={[]}
+      activeWorkspaceId={workspace as WorkspaceId}
+      installedModules={[]}
+      role="owner"
+      userEmail="owner@example.com"
+      notificationCount={0}
+    >
+      <p>Page</p>
+    </AppShell>
+  );
+  const { rerender } = render(shell("first-workspace"));
+  act(() => askHai({ question: "Summarise this invoice", send: true }));
+  expect(await screen.findByLabelText("hAI global assistant")).toHaveAttribute(
+    "data-asked",
+    "Summarise this invoice",
+  );
+
+  // Switching workspace remounts the assistant; the old question must not reach it,
+  // or it would be sent again there.
+  rerender(shell("second-workspace"));
+  await waitFor(() =>
+    expect(screen.getByLabelText("hAI global assistant")).not.toHaveAttribute("data-asked"),
+  );
 });
 
 it("removes Audit log from navigation and open search when the workspace role changes", () => {

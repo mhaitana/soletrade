@@ -104,11 +104,11 @@ test("settings tabs and selects are at least 44px tall", async ({ ownerPage: pag
 test("assistant controls are at least 40px tall", async ({ ownerPage: page }) => {
   await page.goto("/assistant", { waitUntil: "networkidle" });
 
-  // Ensure the empty-state prompt chips are shown.
-  await page.getByRole("link", { name: /new$/i }).click();
+  // Ensure the empty-state prompts are shown.
+  await page.getByRole("link", { name: "New conversation" }).click();
   await page.waitForURL("/assistant");
 
-  // Suggested prompt chips end with a question mark.
+  // Suggested prompts end with a question mark.
   const firstPrompt = page.locator("button").filter({ hasText: /\?$/ }).first();
   await expectMinHeight(firstPrompt, 40, "Assistant suggested prompt");
 

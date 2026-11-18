@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  briefingDigestEmail,
   inviteLink,
   invoiceLink,
   invoiceOverdueEmail,
@@ -13,6 +14,7 @@ import {
   refundIssuedEmail,
 } from "@/server/application/notifications/templates";
 import {
+  type BriefingDigestEmailMeta,
   type InvoiceEmailMeta,
   type QuoteEmailMeta,
   type QuoteMerchantMeta,
@@ -267,6 +269,152 @@ describe("quoteDeclinedEmail", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// hAI Wave 5 - briefing digest email
+// ─────────────────────────────────────────────────────────────────────────────
+
+function digestMeta(overrides: Partial<BriefingDigestEmailMeta> = {}): BriefingDigestEmailMeta {
+  return {
+    workspaceName: "Acme Plumbing",
+    frequency: "daily",
+    facts: {
+      // 07:07 on 19 November 2026 in Sydney.
+      asOf: "2026-11-18T20:07:00.000Z",
+      today: "2026-11-19",
+      timezone: "Australia/Sydney",
+      currency: "AUD",
+      overdueInvoices: { count: 3, totalCents: 450000 },
+      invoicesDueSoon: { count: 2, totalCents: 120000 },
+      draftInvoices: { count: 1 },
+      acceptedQuotes: { count: 1, totalCents: 90000 },
+      quotesExpiringSoon: { count: 2, totalCents: 300000 },
+      receiptsToReview: { count: 4 },
+      gstToLodge: { periodLabel: "2026-Q1", netGstCents: 123400 },
+    },
+    ...overrides,
+  };
+}
+
+describe("briefingDigestEmail", () => {
+  it("names the workspace and the frequency in the subject", () => {
+    expect(briefingDigestEmail(digestMeta(), APP_URL).subject).toBe(
+      "Your daily briefing for Acme Plumbing",
+    );
+    expect(briefingDigestEmail(digestMeta({ frequency: "weekly" }), APP_URL).subject).toBe(
+      "Your weekly briefing for Acme Plumbing",
+    );
+  });
+
+  it("states each fact with its total and a link into the app", () => {
+    const { text, html } = briefingDigestEmail(digestMeta(), APP_URL);
+    const lines = [
+      ["3 invoices are overdue, totalling $4,500.00 AUD.", "/invoices?status=overdue"],
+      ["2 invoices are due in the next 7 days, totalling $1,200.00 AUD.", "/invoices"],
+      ["1 accepted quote is ready to invoice, worth $900.00 AUD.", "/quotes?status=accepted"],
+      ["2 quotes expire in the next 7 days, worth $3,000.00 AUD.", "/quotes"],
+      ["4 receipts need review.", "/books/receipts?status=pending"],
+      ["1 draft invoice is unfinished.", "/invoices?status=draft"],
+      ["GST for 2026-Q1 is not marked as lodged: $1,234.00 AUD owed.", "/books/tax"],
+    ] as const;
+    for (const [statement, path] of lines) {
+      expect(text).toContain(`- ${statement}\n  ${APP_URL}${path}`);
+      expect(html).toContain(statement);
+      expect(html).toContain(`href="${APP_URL}${path}"`);
+    }
+    expect(html).toContain(`href="${APP_URL}/dashboard"`);
+    expect(html).toContain("Open dashboard");
+    expect(text).toContain(`Open your dashboard:\n${APP_URL}/dashboard`);
+  });
+
+  it("says when the facts were read, in the workspace's timezone", () => {
+    const { text, html } = briefingDigestEmail(digestMeta(), APP_URL);
+    expect(text).toMatch(/As of 19 Nov, 7:07 am \(Australia\/Sydney\)/i);
+    expect(html).toMatch(/As of 19 Nov, 7:07 am \(Australia\/Sydney\)/i);
+  });
+
+  it("says clearly how to turn the digest off, with a link to the setting", () => {
+    const daily = briefingDigestEmail(digestMeta(), APP_URL);
+    const optOut =
+      "You are getting this because you turned on the daily briefing digest for Acme Plumbing. " +
+      "To turn it off, open Settings > hAI and set Briefing digest to Off.";
+    expect(daily.text).toContain(`${optOut}\n${APP_URL}/settings/assistant`);
+    const document = new DOMParser().parseFromString(daily.html, "text/html");
+    expect(document.body.textContent).toContain(optOut);
+    expect(document.querySelector(`a[href="${APP_URL}/settings/assistant"]`)?.textContent).toBe(
+      "Open hAI settings",
+    );
+    expect(briefingDigestEmail(digestMeta({ frequency: "weekly" }), APP_URL).text).toContain(
+      "you turned on the weekly briefing digest",
+    );
+  });
+
+  it("includes only the facts this member has", () => {
+    const meta = digestMeta();
+    const { text, html } = briefingDigestEmail(
+      {
+        ...meta,
+        facts: {
+          ...meta.facts,
+          overdueInvoices: { count: 1, totalCents: 9900 },
+          invoicesDueSoon: { count: 0, totalCents: 0 },
+          draftInvoices: { count: 0 },
+          acceptedQuotes: null,
+          quotesExpiringSoon: null,
+          receiptsToReview: null,
+          gstToLodge: null,
+        },
+      },
+      APP_URL,
+    );
+    expect(text).toContain("- 1 invoice is overdue, totalling $99.00 AUD.");
+    expect(text.match(/^- /gm)).toHaveLength(1);
+    for (const absent of ["quote", "receipt", "GST", "draft"]) {
+      expect(text).not.toContain(absent);
+      expect(html).not.toContain(absent);
+    }
+  });
+
+  it("prints no figure that is not one of the facts", () => {
+    const { text } = briefingDigestEmail(digestMeta(), APP_URL);
+    const figures = text
+      // Fixed wording, the timestamp line and the quarter label are not figures.
+      .replace(/^As of .*$/m, "")
+      .replaceAll("next 7 days", "")
+      .replaceAll("2026-Q1", "")
+      .match(/\d[\d,.]*\d|\d/g);
+    const allowed = new Set([
+      "3",
+      "4,500.00",
+      "2",
+      "1,200.00",
+      "1",
+      "900.00",
+      "3,000.00",
+      "4",
+      "1,234.00",
+    ]);
+    expect(figures!.filter((figure) => !allowed.has(figure))).toEqual([]);
+  });
+
+  it("escapes the workspace name in HTML and keeps it as written elsewhere", () => {
+    const email = briefingDigestEmail(
+      digestMeta({ workspaceName: 'Smith & <Sons> "Plumbing"' }),
+      APP_URL,
+    );
+    expect(email.html).toContain("Smith &amp; &lt;Sons&gt; &quot;Plumbing&quot;");
+    expect(email.html).not.toContain("<Sons>");
+    expect(email.subject).toBe('Your daily briefing for Smith & <Sons> "Plumbing"');
+    expect(email.text).toContain('briefing digest for Smith & <Sons> "Plumbing"');
+  });
+
+  it("builds links from the deployment origin, with or without a trailing slash", () => {
+    const email = briefingDigestEmail(digestMeta(), "https://tenant.example.com/");
+    expect(email.text).toContain("https://tenant.example.com/invoices?status=overdue");
+    expect(email.text).toContain("https://tenant.example.com/settings/assistant");
+    expect(email.text).not.toContain("example.com//");
+  });
+});
+
 describe("HB email branding", () => {
   const cases = [
     ["invoice sent", () => invoiceSentEmail(meta(), APP_URL)],
@@ -303,6 +451,7 @@ describe("HB email branding", () => {
           APP_URL,
         ),
     ],
+    ["briefing digest", () => briefingDigestEmail(digestMeta(), APP_URL)],
   ] as const;
 
   it.each(cases)(

@@ -26,7 +26,7 @@ import { branded, type UserId, type WorkspaceId } from "@/types/ids";
  * Australian); the quarter starts on day 1 of `fyStartMonth + (quarter-1)*3` (mod 12).
  * `end` is the inclusive last ms of the quarter (first ms of the next quarter − 1).
  */
-function quarterRange(
+export function quarterRange(
   fiscalYear: number,
   quarter: number,
   fyStartMonth: number = 7,

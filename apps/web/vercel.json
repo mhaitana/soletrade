@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/module-cancel-finalize",
       "schedule": "11 0 * * *"
+    },
+    {
+      "path": "/api/cron/assistant-digest",
+      "schedule": "7 * * * *"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { CustomerId } from "@/types/ids";
+import type { InsightFacts } from "@/lib/domain/insights/facts";
 
 export type InvoiceEmailMeta = {
   number: string;
@@ -61,4 +62,12 @@ export type RefundMeta = {
   reason: string | null;
   moduleKey: string | null;
   method: string | null;
+};
+
+export type BriefingDigestEmailMeta = {
+  workspaceName: string;
+  /** How often this member asked for the digest; it words the subject and the opt-out line. */
+  frequency: "daily" | "weekly";
+  /** The member's own facts. The email states these and nothing else. */
+  facts: InsightFacts;
 };

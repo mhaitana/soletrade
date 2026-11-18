@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import { messageText, toolCallParts, type HaiUIMessage } from "@/lib/assistant/messages";
+import { publishHaiEvent, type HaiSurface } from "@/features/assistant/hooks/use-hai-events";
 
 /**
  * The hAI chat shared by the assistant page and the side panel.
@@ -100,6 +101,8 @@ function currentPageContext(): HaiPageContext {
 }
 
 export interface UseHaiChatOptions {
+  /** Which surface this chat is on; the other one is told when a turn finishes. */
+  surface: HaiSurface;
   /** Chat instance id; changing it starts a fresh chat. */
   chatId: string;
   /** The stored conversation this chat continues, if any. */
@@ -117,12 +120,21 @@ export interface UseHaiChatOptions {
  */
 export function createHaiSession(initialId: string | null, onCreated: (id: string) => void) {
   let conversationId = initialId;
+  // Bumped whenever the chat is pointed at another conversation (or a new one), so a
+  // response that arrives afterwards cannot attach the conversation it created to a chat
+  // that has moved on.
+  let generation = 0;
+  // The conversation the latest request belongs to. A turn cut short by opening another
+  // conversation still finishes; its finish must name the conversation it was for, not the
+  // one now on screen.
+  let requestConversationId = initialId;
   // Decisions already sent. The SDK re-checks `sendAutomaticallyWhen` after every reply,
   // so without this a decision still visible in the reply could be sent a second time.
   const sentDecisions = new Set<string>();
   const transport = new DefaultChatTransport<HaiUIMessage>({
     api: "/api/assistant",
     prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
+      requestConversationId = conversationId;
       const body = haiRequestBody({
         conversationId,
         messages,
@@ -138,10 +150,12 @@ export function createHaiSession(initialId: string | null, onCreated: (id: strin
       return { body };
     },
     fetch: async (url, init) => {
+      const sentIn = generation;
       const response = await globalThis.fetch(url, init);
       const id = response.headers.get("X-Conversation-Id");
-      if (id && conversationId === null) {
+      if (id && sentIn === generation && conversationId === null) {
         conversationId = id;
+        requestConversationId = id;
         onCreated(id);
       }
       return response;
@@ -151,6 +165,11 @@ export function createHaiSession(initialId: string | null, onCreated: (id: strin
     transport,
     setConversationId(id: string | null) {
       conversationId = id;
+      generation += 1;
+    },
+    /** The conversation the request that just finished was for. */
+    finishedConversationId(): string | null {
+      return requestConversationId;
     },
     /** Send automatically once every change is decided and a decision is not yet sent. */
     readyToSend({ messages }: { messages: HaiUIMessage[] }): boolean {
@@ -178,7 +197,11 @@ export function useHaiChat(options: UseHaiChatOptions) {
     messages: options.initialMessages,
     transport: session.transport,
     sendAutomaticallyWhen: session.readyToSend,
-    onFinish: options.onFinish,
+    onFinish: () => {
+      const id = session.finishedConversationId();
+      if (id) publishHaiEvent(options.surface, { type: "conversation-updated", id });
+      options.onFinish?.();
+    },
   });
 
   const busy = chat.status === "submitted" || chat.status === "streaming";

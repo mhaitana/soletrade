@@ -13,6 +13,15 @@ import {
   type UIMessageChunk,
   type UIMessageStreamWriter,
 } from "ai";
+import {
+  cachedConversationTail,
+  cachedSystemPrompt,
+  cachedToolDefinitions,
+  stableToolOrder,
+  stableToolPayloads,
+  usesCacheBreakpoints,
+} from "@/server/infrastructure/ai/prompt-cache";
+import { createUsageReporter, type AiCallUsage } from "@/server/infrastructure/ai/usage";
 
 /**
  * Streaming primitives for the AI assistant (Phase 10). Two paths:
@@ -45,6 +54,10 @@ export interface AssistantTurnEnd {
 
 export interface StreamAssistantTurnOptions {
   model: LanguageModel;
+  /**
+   * The system prompt. It must be the same text on every turn of a conversation: the
+   * provider's prompt cache only reuses a prefix that has not changed.
+   */
   system: string;
   /**
    * The conversation as the chat shows it. Ends with the user's message, or with the
@@ -64,6 +77,12 @@ export interface StreamAssistantTurnOptions {
   onEnd: (end: AssistantTurnEnd) => Promise<void> | void;
   /** Labels for the per-call usage log line. Identifiers only, never message content. */
   usage?: { workspaceId: string; surface: string };
+  /**
+   * Called once with what the call used, when it finishes or is stopped after at least
+   * one completed step. It runs inside the stream, so it must return straight away: start
+   * any storing and do not wait for it. A throw is logged and goes no further.
+   */
+  onUsage?: (usage: AiCallUsage) => void;
   /**
    * Forwarded to `streamText` so an aborted client request (user navigates away,
    * cancels) tears down the upstream model call instead of billing a full
@@ -119,15 +138,29 @@ async function reportTurnEnd(
  * (provider 401, missing key, tool throw) instead of the SDK's generic "An error occurred.".
  */
 export function streamAssistantTurn(opts: StreamAssistantTurnOptions): Response {
+  // Anthropic reuses a marked prefix of the request (tools, system prompt, conversation);
+  // see prompt-cache.ts. Other providers get no marks. What is fixed for everyone is the
+  // order of the tools and the form of tool calls and results, since any provider that
+  // caches a prefix needs the same bytes to recognise it.
+  const caching = usesCacheBreakpoints(opts.model);
+  const reportUsage = createUsageReporter(opts.model, opts.onUsage);
   const stream = createUIMessageStream({
     originalMessages: opts.messages,
     generateId: () => crypto.randomUUID(),
     execute: ({ writer }) => {
       const result = streamText({
         model: opts.model,
-        instructions: opts.system,
+        instructions: caching ? cachedSystemPrompt(opts.system) : opts.system,
         messages: opts.modelMessages,
-        tools: opts.tools,
+        tools: caching ? cachedToolDefinitions(opts.tools) : opts.tools,
+        toolOrder: stableToolOrder(opts.tools),
+        // Before every request: put tool calls and results in the one form they have both
+        // in flight and replayed from the store, then (each step adds calls and results, so
+        // the end of the conversation moves) mark the new end for caching.
+        prepareStep: ({ messages }) => {
+          const stable = stableToolPayloads(messages);
+          return { messages: caching ? cachedConversationTail(stable) : stable };
+        },
         toolApproval: async ({ toolCall }) =>
           opts.toolApproval(
             { toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, input: toolCall.input },
@@ -151,11 +184,17 @@ export function streamAssistantTurn(opts: StreamAssistantTurnOptions): Response 
               steps: steps.length,
               inputTokens: totalUsage.inputTokens ?? null,
               cacheReadTokens: totalUsage.inputTokenDetails?.cacheReadTokens ?? null,
+              cacheWriteTokens: totalUsage.inputTokenDetails?.cacheWriteTokens ?? null,
               outputTokens: totalUsage.outputTokens ?? null,
               totalTokens: totalUsage.totalTokens ?? null,
             }),
           );
+          reportUsage(steps);
         },
+        // A stopped turn was still billed for the steps it finished. The step that was
+        // cut off is not in `steps`: the SDK only knows what a request used once the
+        // provider has finished answering it, so that part of a stopped turn is not known.
+        onAbort: ({ steps }) => reportUsage(steps),
       });
       writer.merge(toUIMessageStream({ stream: result.stream }));
     },

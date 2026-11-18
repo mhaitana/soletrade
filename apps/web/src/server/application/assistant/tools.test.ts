@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateText, type ToolSet } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
+import { assistantApprovalFor } from "@/lib/assistant/approval-policy";
+import { ASSISTANT_TOOLS } from "@/lib/assistant/tool-catalog";
 import { branded } from "@/types/ids";
 import type { WorkspaceContext } from "@/lib/domain/auth/workspace-context-types";
 import type { ModuleKey } from "@/config/modules";
@@ -56,9 +58,20 @@ const listVehiclesMock = vi.fn();
 // Receipt extraction mocks.
 const extractReceiptMock = vi.fn();
 const getExtractionMock = vi.fn();
+const listExtractionsMock = vi.fn();
+const countExtractionsMock = vi.fn();
 vi.mock("@/server/domains/books/receipt-extraction", () => ({
   extractReceipt: (...a: unknown[]) => extractReceiptMock(...a),
   getExtraction: (...a: unknown[]) => getExtractionMock(...a),
+  listExtractions: (...a: unknown[]) => listExtractionsMock(...a),
+  countExtractions: (...a: unknown[]) => countExtractionsMock(...a),
+}));
+// Record and summary lookup mocks.
+const getTransactionMock = vi.fn();
+const getGstMonthlyMock = vi.fn();
+const listTaxPeriodsMock = vi.fn();
+vi.mock("@/server/domains/books/tax", () => ({
+  listTaxPeriods: (...a: unknown[]) => listTaxPeriodsMock(...a),
 }));
 
 vi.mock("@/server/domains/invoices/index", () => ({
@@ -79,6 +92,8 @@ vi.mock("@/server/domains/quotes/index", () => ({
 vi.mock("@/server/domains/books/index", () => ({
   listTransactions: (...a: unknown[]) => listTransactionsMock(...a),
   getBookSummary: (...a: unknown[]) => getBookSummaryMock(...a),
+  getGstMonthly: (...a: unknown[]) => getGstMonthlyMock(...a),
+  getTransaction: (...a: unknown[]) => getTransactionMock(...a),
   createTransaction: (...a: unknown[]) => createTransactionMock(...a),
   updateTransaction: (...a: unknown[]) => updateTransactionMock(...a),
   deleteTransaction: (...a: unknown[]) => deleteTransactionMock(...a),
@@ -217,6 +232,8 @@ describe("buildAssistantTools - gating", () => {
   it("offers every tool to a readonly role when all modules are installed", async () => {
     const { buildAssistantTools } = await import("@/server/application/assistant/tools");
     const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    // Everything that only needs view:R. listReceiptQueue is absent: the receipt queue
+    // needs manage:books, which readonly does not have.
     expect(Object.keys(tools).sort()).toEqual(
       [
         "getWorkspaceOverview",
@@ -229,6 +246,12 @@ describe("buildAssistantTools - gating", () => {
         "listDriveExpenses",
         "listCustomers",
         "listRecentActivity",
+        "getInvoice",
+        "getQuote",
+        "getCustomer",
+        "getTransaction",
+        "getPeriodSummary",
+        "getGstSummary",
         "navigateWorkspace",
         "openForm",
       ].sort(),
@@ -244,6 +267,7 @@ describe("buildAssistantTools - gating", () => {
         "getWorkspaceOverview",
         "listCustomers",
         "listRecentActivity",
+        "getCustomer",
         "navigateWorkspace",
         "openForm",
       ].sort(),
@@ -312,6 +336,7 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
 
   it("listInvoices returns trimmed rows with ISO dates and calls the service with the ctx workspaceId", async () => {
     const issue = new Date("2026-01-15T00:00:00.000Z");
+    const due = new Date("2026-01-29T00:00:00.000Z");
     listInvoicesMock.mockResolvedValue([
       {
         id: "secret-id",
@@ -321,6 +346,7 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
         totalCents: 12500,
         currency: "AUD",
         issueDate: issue,
+        dueDate: due,
         paidAt: null,
         customerName: "Jane Co",
         notes: "should not leak",
@@ -345,8 +371,11 @@ describe("buildAssistantTools - execute trims + scopes to workspace", () => {
       number: "INV-001",
       status: "overdue",
       totalCents: 12500,
+      // Still owed in full: an overdue invoice has not been paid.
+      balanceDueCents: 12500,
       currency: "AUD",
       issueDate: issue.toISOString(),
+      dueDate: due.toISOString(),
       paidAt: null,
       customerName: "Jane Co",
     });
@@ -1746,5 +1775,1183 @@ describe("buildAssistantTools - write tools", () => {
     expect(assistantActionAudits()).toMatchObject([
       { targetType: "receipt_extraction", targetId: "ext-3" },
     ]);
+  });
+});
+
+/**
+ * Record and summary lookups: one record in full, or totals worked out in Postgres. Each
+ * is offered by module and view permission like the lists, reads only the ctx workspace,
+ * and reports a missing record as { error } instead of throwing.
+ */
+describe("buildAssistantTools - record and summary lookups", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Freeze "now" for tools that resolve a period from today's date. */
+  function freezeNow(isoNow: string): void {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(isoNow));
+  }
+
+  const INVOICE_ID = "00000000-0000-4000-8000-0000000000a1";
+  const QUOTE_ID = "00000000-0000-4000-8000-0000000000a2";
+  const CUSTOMER_ID = "00000000-0000-4000-8000-0000000000a3";
+  const TRANSACTION_ID = "00000000-0000-4000-8000-0000000000a4";
+
+  function invoiceRow(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: INVOICE_ID,
+      workspaceId: "secret-ws",
+      customerId: CUSTOMER_ID,
+      customerName: "Jane Co",
+      number: "INV-2026-0007",
+      status: "overdue",
+      issueDate: new Date("2026-10-01T00:00:00.000Z"),
+      dueDate: new Date("2026-10-15T00:00:00.000Z"),
+      currency: "AUD",
+      taxRate: 10,
+      pricesIncludeTax: false,
+      subtotalCents: 50000,
+      taxCents: 5000,
+      totalCents: 55000,
+      notes: "Net 14",
+      paymentMethods: null,
+      publicToken: "secret-token",
+      sentAt: new Date("2026-10-01T02:00:00.000Z"),
+      paidAt: null,
+      stripePaymentIntentId: null,
+      stripeChargeId: null,
+      createdAt: new Date("2026-10-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-10-01T02:00:00.000Z"),
+      lineItems: [
+        {
+          id: "line-1",
+          invoiceId: INVOICE_ID,
+          description: "Consulting",
+          quantity: 10,
+          unitPriceCents: 5000,
+          amountCents: 50000,
+          position: 0,
+        },
+      ],
+      ...over,
+    };
+  }
+
+  function quoteRow(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: QUOTE_ID,
+      workspaceId: "secret-ws",
+      customerId: CUSTOMER_ID,
+      customerName: "Jane Co",
+      number: "QUO-2026-0003",
+      status: "sent",
+      issueDate: new Date("2026-11-01T00:00:00.000Z"),
+      validUntil: new Date("2026-12-01T00:00:00.000Z"),
+      currency: "AUD",
+      taxRate: 10,
+      pricesIncludeTax: false,
+      subtotalCents: 20000,
+      taxCents: 2000,
+      totalCents: 22000,
+      notes: null,
+      termsConditions: "Long terms that stay out of the result",
+      publicToken: "secret-token",
+      sentAt: new Date("2026-11-01T01:00:00.000Z"),
+      acceptedAt: null,
+      declinedAt: null,
+      convertedAt: null,
+      convertedInvoiceId: null,
+      createdAt: new Date("2026-11-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-11-01T01:00:00.000Z"),
+      lineItems: [
+        {
+          id: "line-1",
+          quoteId: QUOTE_ID,
+          description: "Fit-out",
+          quantity: 2,
+          unitPriceCents: 10000,
+          amountCents: 20000,
+          position: 0,
+        },
+      ],
+      sections: [{ id: "sec-1", quoteId: QUOTE_ID, title: "Scope", body: "Works", position: 0 }],
+      ...over,
+    };
+  }
+
+  const LOOKUP_TOOLS = [
+    "getInvoice",
+    "getQuote",
+    "getCustomer",
+    "getTransaction",
+    "getPeriodSummary",
+    "getGstSummary",
+    "listReceiptQueue",
+  ];
+
+  // ── Gating ───────────────────────────────────────────────────────────────────
+
+  it("offers each lookup only when its module is installed", async () => {
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const none = buildAssistantTools(ctx("owner"), []);
+    // Customers are a platform service; everything else needs its module.
+    expect(LOOKUP_TOOLS.filter((name) => none[name])).toEqual(["getCustomer"]);
+
+    const invoicesOnly = buildAssistantTools(ctx("owner"), ["invoices"]);
+    expect(LOOKUP_TOOLS.filter((name) => invoicesOnly[name])).toEqual([
+      "getInvoice",
+      "getCustomer",
+    ]);
+
+    const quotesOnly = buildAssistantTools(ctx("owner"), ["quotes"]);
+    expect(LOOKUP_TOOLS.filter((name) => quotesOnly[name])).toEqual(["getQuote", "getCustomer"]);
+
+    const booksOnly = buildAssistantTools(ctx("owner"), ["books"]);
+    expect(LOOKUP_TOOLS.filter((name) => booksOnly[name])).toEqual([
+      "getCustomer",
+      "getTransaction",
+      "getPeriodSummary",
+      "getGstSummary",
+      "listReceiptQueue",
+    ]);
+  });
+
+  it("offers each lookup only to a role that can view the resource", async () => {
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    // employee has no books grant: no transaction, P&L, GST or receipt lookups.
+    const employee = buildAssistantTools(ctx("employee"), ALL_MODULES);
+    expect(LOOKUP_TOOLS.filter((name) => employee[name])).toEqual([
+      "getInvoice",
+      "getQuote",
+      "getCustomer",
+    ]);
+    // manager and readonly can view books but not manage them: no receipt queue.
+    for (const role of ["manager", "readonly"] as const) {
+      const tools = buildAssistantTools(ctx(role), ALL_MODULES);
+      expect(tools.getTransaction, role).toBeDefined();
+      expect(tools.getPeriodSummary, role).toBeDefined();
+      expect(tools.getGstSummary, role).toBeDefined();
+      expect(tools.listReceiptQueue, role).toBeUndefined();
+    }
+    // accountant manages books. The queue is a lookup, so it does not need writeEnabled.
+    const accountant = buildAssistantTools(ctx("accountant"), ALL_MODULES);
+    expect(LOOKUP_TOOLS.filter((name) => accountant[name])).toEqual(LOOKUP_TOOLS);
+  });
+
+  it("every tool the builder offers is in the catalogue, and every lookup runs without approval", async () => {
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES, { writeEnabled: true });
+    for (const name of Object.keys(tools)) {
+      // A tool missing from the catalogue would be refused by the approval policy.
+      expect(Object.hasOwn(ASSISTANT_TOOLS, name), name).toBe(true);
+    }
+    for (const name of LOOKUP_TOOLS) {
+      expect(tools[name], name).toBeDefined();
+      expect(ASSISTANT_TOOLS[name]?.kind, name).toBe("read");
+      expect(assistantApprovalFor(name, { approvalsSupported: false }), name).toEqual({
+        type: "not-applicable",
+      });
+    }
+  });
+
+  // ── List fixes from the review ────────────────────────────────────────────────
+
+  it("listInvoices reports the due date and a balance that follows the status", async () => {
+    const due = new Date("2026-10-15T00:00:00.000Z");
+    listInvoicesMock.mockResolvedValue(
+      ["draft", "sent", "viewed", "overdue", "paid", "void"].map((status) =>
+        invoiceRow({ id: `inv-${status}`, status, dueDate: status === "draft" ? null : due }),
+      ),
+    );
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const out = (await run(buildAssistantTools(ctx("readonly"), ALL_MODULES).listInvoices)) as {
+      items: { status: string; balanceDueCents: number; dueDate: string | null }[];
+    };
+    // Owed in full while the invoice is with the customer; nothing before or after.
+    expect(Object.fromEntries(out.items.map((r) => [r.status, r.balanceDueCents]))).toEqual({
+      draft: 0,
+      sent: 55000,
+      viewed: 55000,
+      overdue: 55000,
+      paid: 0,
+      void: 0,
+    });
+    expect(out.items[0]!.dueDate).toBeNull();
+    expect(out.items[1]!.dueDate).toBe(due.toISOString());
+  });
+
+  it("listRecentActivity says when older events exist", async () => {
+    const event = {
+      id: "a1",
+      type: "invoice.sent",
+      entityType: "invoice",
+      actorFullName: "Sam",
+      createdAt: new Date("2026-01-02T00:00:00.000Z"),
+      metadata: { secret: true },
+    };
+    listActivityMock.mockResolvedValue({
+      items: [event],
+      nextCursor: { createdAt: "2026-01-02T00:00:00.000000+00:00", id: "a1" },
+    });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const tools = buildAssistantTools(c, []);
+    expect(await run(tools.listRecentActivity, { limit: 1 })).toEqual({
+      items: [
+        {
+          type: "invoice.sent",
+          entityType: "invoice",
+          createdAt: "2026-01-02T00:00:00.000Z",
+          actorFullName: "Sam",
+        },
+      ],
+      returned: 1,
+      hasMore: true,
+    });
+    expect(listActivityMock).toHaveBeenCalledWith(c.workspaceId, { limit: 1 });
+
+    listActivityMock.mockResolvedValue({ items: [event], nextCursor: null });
+    expect(await run(tools.listRecentActivity)).toMatchObject({ returned: 1, hasMore: false });
+  });
+
+  // ── getInvoice ───────────────────────────────────────────────────────────────
+
+  it("getInvoice resolves a number in the ctx workspace and returns the trimmed invoice", async () => {
+    listInvoicesMock.mockResolvedValue([
+      // A longer number that only contains the one asked for must not match.
+      { id: "other", number: "INV-2026-00070" },
+      { id: INVOICE_ID, number: "INV-2026-0007" },
+    ]);
+    getInvoiceMock.mockResolvedValue(invoiceRow());
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const out = await run(buildAssistantTools(c, ALL_MODULES).getInvoice, {
+      invoiceNumber: " INV-2026-0007 ",
+    });
+    // The whole shape: nothing else from the row (workspace id, public payment token,
+    // Stripe ids, line item ids) reaches the model.
+    expect(out).toEqual({
+      id: INVOICE_ID,
+      href: `/invoices/${INVOICE_ID}`,
+      recordLabel: "INV-2026-0007",
+      number: "INV-2026-0007",
+      status: "overdue",
+      customer: { id: CUSTOMER_ID, name: "Jane Co", href: `/customers/${CUSTOMER_ID}` },
+      issueDate: "2026-10-01T00:00:00.000Z",
+      dueDate: "2026-10-15T00:00:00.000Z",
+      sentAt: "2026-10-01T02:00:00.000Z",
+      paidAt: null,
+      paidVia: null,
+      currency: "AUD",
+      taxRate: 10,
+      pricesIncludeTax: false,
+      lineItems: [
+        { description: "Consulting", quantity: 10, unitPriceCents: 5000, amountCents: 50000 },
+      ],
+      subtotalCents: 50000,
+      taxCents: 5000,
+      totalCents: 55000,
+      amountPaidCents: 0,
+      balanceDueCents: 55000,
+      notes: "Net 14",
+    });
+    expect(listInvoicesMock).toHaveBeenCalledWith(c.workspaceId, {
+      search: "INV-2026-0007",
+      limit: 200,
+    });
+    expect(getInvoiceMock).toHaveBeenCalledWith(c.workspaceId, INVOICE_ID);
+  });
+
+  it("getInvoice by id skips the number search and reports how a paid invoice was paid", async () => {
+    const paidAt = new Date("2026-10-20T05:00:00.000Z");
+    getInvoiceMock.mockResolvedValue(
+      invoiceRow({
+        status: "paid",
+        paidAt,
+        stripePaymentIntentId: "pi_123",
+        stripeChargeId: "ch_123",
+        customerId: null,
+      }),
+    );
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    const online = await run(tools.getInvoice, { invoiceId: INVOICE_ID });
+    expect(online).toMatchObject({
+      status: "paid",
+      paidAt: paidAt.toISOString(),
+      paidVia: "stripe",
+      amountPaidCents: 55000,
+      balanceDueCents: 0,
+      // A walk-in invoice has no customer record to link to.
+      customer: null,
+    });
+    expect(listInvoicesMock).not.toHaveBeenCalled();
+
+    // The customer opened the payment form (which stores a payment intent) but paid some
+    // other way, and the invoice was marked paid by hand: no charge, so not a Stripe payment.
+    getInvoiceMock.mockResolvedValue(
+      invoiceRow({ status: "paid", paidAt, stripePaymentIntentId: "pi_123" }),
+    );
+    expect(await run(tools.getInvoice, { invoiceId: INVOICE_ID })).toMatchObject({
+      paidVia: "manual",
+      amountPaidCents: 55000,
+    });
+
+    // A draft has not been issued, so nothing is owed on it yet.
+    getInvoiceMock.mockResolvedValue(invoiceRow({ status: "draft", sentAt: null }));
+    expect(await run(tools.getInvoice, { invoiceId: INVOICE_ID })).toMatchObject({
+      paidVia: null,
+      amountPaidCents: 0,
+      balanceDueCents: 0,
+    });
+  });
+
+  it("getInvoice returns an error when the invoice isn't found or no reference is given", async () => {
+    listInvoicesMock.mockResolvedValue([]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    expect(await run(tools.getInvoice, { invoiceNumber: "INV-9999" })).toEqual({
+      error: "Invoice INV-9999 not found.",
+    });
+    expect(getInvoiceMock).not.toHaveBeenCalled();
+
+    // An id from another workspace reads as missing: the service is workspace-scoped.
+    getInvoiceMock.mockResolvedValue(null);
+    expect(await run(tools.getInvoice, { invoiceId: INVOICE_ID })).toEqual({
+      error: "Invoice not found.",
+    });
+    expect(await run(tools.getInvoice, {})).toEqual({
+      error: "Provide an invoiceNumber or an invoiceId.",
+    });
+  });
+
+  it("getInvoice treats a number the search cannot carry as not found, without searching", async () => {
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    listInvoicesMock.mockClear();
+
+    // A quote in the search text breaks the list filter; no real number contains one.
+    expect(await run(tools.getInvoice, { invoiceNumber: 'INV-"7"' })).toEqual({
+      error: 'Invoice INV-"7" not found.',
+    });
+    expect(listInvoicesMock).not.toHaveBeenCalled();
+  });
+
+  // ── getQuote ─────────────────────────────────────────────────────────────────
+
+  it("getQuote resolves a number and returns the trimmed quote", async () => {
+    listQuotesMock.mockResolvedValue([{ id: QUOTE_ID, number: "QUO-2026-0003" }]);
+    getQuoteMock.mockResolvedValue(quoteRow());
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const out = await run(buildAssistantTools(c, ALL_MODULES).getQuote, {
+      quoteNumber: "QUO-2026-0003",
+    });
+    expect(out).toEqual({
+      id: QUOTE_ID,
+      href: `/quotes/${QUOTE_ID}`,
+      recordLabel: "QUO-2026-0003",
+      number: "QUO-2026-0003",
+      status: "sent",
+      customer: { id: CUSTOMER_ID, name: "Jane Co", href: `/customers/${CUSTOMER_ID}` },
+      issueDate: "2026-11-01T00:00:00.000Z",
+      validUntil: "2026-12-01T00:00:00.000Z",
+      sentAt: "2026-11-01T01:00:00.000Z",
+      acceptedAt: null,
+      declinedAt: null,
+      convertedAt: null,
+      currency: "AUD",
+      taxRate: 10,
+      pricesIncludeTax: false,
+      lineItems: [
+        { description: "Fit-out", quantity: 2, unitPriceCents: 10000, amountCents: 20000 },
+      ],
+      subtotalCents: 20000,
+      taxCents: 2000,
+      totalCents: 22000,
+      convertedInvoice: null,
+      notes: null,
+    });
+    expect(listQuotesMock).toHaveBeenCalledWith(c.workspaceId, {
+      search: "QUO-2026-0003",
+      limit: 200,
+    });
+    expect(getQuoteMock).toHaveBeenCalledWith(c.workspaceId, QUOTE_ID);
+    // Not converted, so there is no invoice to look up.
+    expect(getInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("getQuote names the invoice a quote was converted to, when the role can see invoices", async () => {
+    const convertedAt = new Date("2026-11-10T00:00:00.000Z");
+    getQuoteMock.mockResolvedValue(
+      quoteRow({ status: "converted", convertedAt, convertedInvoiceId: INVOICE_ID }),
+    );
+    getInvoiceMock.mockResolvedValue({ id: INVOICE_ID, number: "INV-2026-0012" });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const withInvoices = await run(buildAssistantTools(c, ALL_MODULES).getQuote, {
+      quoteId: QUOTE_ID,
+    });
+    expect(withInvoices).toMatchObject({
+      status: "converted",
+      convertedAt: convertedAt.toISOString(),
+      convertedInvoice: {
+        id: INVOICE_ID,
+        href: `/invoices/${INVOICE_ID}`,
+        number: "INV-2026-0012",
+      },
+    });
+    expect(getInvoiceMock).toHaveBeenCalledWith(c.workspaceId, INVOICE_ID);
+    expect(listQuotesMock).not.toHaveBeenCalled();
+
+    // Without the Invoices module the invoice is not read; the link on the quote remains.
+    getInvoiceMock.mockClear();
+    const quotesOnly = await run(buildAssistantTools(c, ["quotes"]).getQuote, {
+      quoteId: QUOTE_ID,
+    });
+    expect(quotesOnly).toMatchObject({
+      convertedInvoice: { id: INVOICE_ID, href: `/invoices/${INVOICE_ID}`, number: null },
+    });
+    expect(getInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("getQuote returns an error when the quote isn't found or no reference is given", async () => {
+    listQuotesMock.mockResolvedValue([]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    expect(await run(tools.getQuote, { quoteNumber: "QUO-9999" })).toEqual({
+      error: "Quote QUO-9999 not found.",
+    });
+    expect(getQuoteMock).not.toHaveBeenCalled();
+    expect(await run(tools.getQuote, { quoteId: QUOTE_ID })).toEqual({ error: "Quote not found." });
+    expect(await run(tools.getQuote, {})).toEqual({
+      error: "Provide a quoteNumber or a quoteId.",
+    });
+  });
+
+  // ── getCustomer ──────────────────────────────────────────────────────────────
+
+  const customerRow = {
+    id: CUSTOMER_ID,
+    workspaceId: "secret-ws",
+    name: "Jane Co",
+    email: "jane@example.com",
+    phone: "+61 400 000 000",
+    company: "Jane Co Pty",
+    notes: "Prefers email",
+    createdAt: new Date("2026-01-05T00:00:00.000Z"),
+    updatedAt: new Date("2026-02-05T00:00:00.000Z"),
+  };
+
+  it("getCustomer returns contact details with what the customer owes and their recent documents", async () => {
+    getCustomerMock.mockResolvedValue(customerRow);
+    listInvoicesMock.mockResolvedValue([
+      invoiceRow({ id: "inv-1", number: "INV-1", status: "overdue", totalCents: 55000 }),
+      invoiceRow({ id: "inv-2", number: "INV-2", status: "sent", totalCents: 10000 }),
+      invoiceRow({
+        id: "inv-3",
+        number: "INV-3",
+        status: "viewed",
+        totalCents: 7000,
+        currency: "NZD",
+      }),
+      invoiceRow({ id: "inv-4", number: "INV-4", status: "paid", totalCents: 99000 }),
+      invoiceRow({ id: "inv-5", number: "INV-5", status: "draft", totalCents: 1000 }),
+      invoiceRow({ id: "inv-6", number: "INV-6", status: "void", totalCents: 2000 }),
+    ]);
+    listQuotesMock.mockResolvedValue([quoteRow()]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const out = (await run(buildAssistantTools(c, ALL_MODULES).getCustomer, {
+      customerId: CUSTOMER_ID,
+    })) as {
+      invoices: { recent: Record<string, unknown>[] } & Record<string, unknown>;
+      quotes: { recent: Record<string, unknown>[]; hasMore: boolean };
+    } & Record<string, unknown>;
+
+    expect(out).toMatchObject({
+      id: CUSTOMER_ID,
+      href: `/customers/${CUSTOMER_ID}`,
+      recordLabel: "Jane Co",
+      name: "Jane Co",
+      email: "jane@example.com",
+      phone: "+61 400 000 000",
+      company: "Jane Co Pty",
+      notes: "Prefers email",
+      createdAt: "2026-01-05T00:00:00.000Z",
+    });
+    expect(out).not.toHaveProperty("workspaceId");
+    // Open means sent, viewed or overdue; paid, draft and void invoices owe nothing.
+    // Balances are kept apart per currency rather than added across them.
+    expect(out.invoices).toMatchObject({
+      openCount: 3,
+      overdueCount: 1,
+      openBalances: [
+        { currency: "AUD", balanceCents: 65000 },
+        { currency: "NZD", balanceCents: 7000 },
+      ],
+      totalsArePartial: false,
+      hasMore: true,
+    });
+    // Only the five newest are listed, in the same shape as listInvoices rows.
+    expect(out.invoices.recent.map((r) => r.number)).toEqual([
+      "INV-1",
+      "INV-2",
+      "INV-3",
+      "INV-4",
+      "INV-5",
+    ]);
+    expect(out.invoices.recent[0]).toMatchObject({
+      href: "/invoices/inv-1",
+      status: "overdue",
+      balanceDueCents: 55000,
+      dueDate: "2026-10-15T00:00:00.000Z",
+    });
+    expect(out.quotes).toEqual({
+      recent: [
+        {
+          id: QUOTE_ID,
+          href: `/quotes/${QUOTE_ID}`,
+          number: "QUO-2026-0003",
+          status: "sent",
+          totalCents: 22000,
+          currency: "AUD",
+          issueDate: "2026-11-01T00:00:00.000Z",
+          customerName: "Jane Co",
+        },
+      ],
+      hasMore: false,
+    });
+    // Every read is scoped to the ctx workspace and to this customer.
+    expect(getCustomerMock).toHaveBeenCalledWith(c.workspaceId, CUSTOMER_ID);
+    expect(listInvoicesMock).toHaveBeenCalledWith(c.workspaceId, {
+      customerId: CUSTOMER_ID,
+      limit: 200,
+    });
+    expect(listQuotesMock).toHaveBeenCalledWith(c.workspaceId, {
+      customerId: CUSTOMER_ID,
+      limit: 6,
+    });
+  });
+
+  it("getCustomer finds a customer by email and flags totals read from a full page of invoices", async () => {
+    getCustomerByEmailMock.mockResolvedValue(customerRow);
+    // 200 rows is all the invoices service returns, so there may be more behind them.
+    listInvoicesMock.mockResolvedValue(
+      Array.from({ length: 200 }, (_, i) => invoiceRow({ id: `inv-${i}`, status: "paid" })),
+    );
+    listQuotesMock.mockResolvedValue(Array.from({ length: 6 }, () => quoteRow()));
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const out = (await run(buildAssistantTools(c, ALL_MODULES).getCustomer, {
+      customerEmail: "jane@example.com",
+    })) as {
+      invoices: Record<string, unknown> & { recent: unknown[] };
+      quotes: { recent: unknown[]; hasMore: boolean };
+    };
+    expect(getCustomerByEmailMock).toHaveBeenCalledWith(c.workspaceId, "jane@example.com");
+    expect(getCustomerMock).not.toHaveBeenCalled();
+    expect(out.invoices).toMatchObject({
+      openCount: 0,
+      overdueCount: 0,
+      openBalances: [],
+      totalsArePartial: true,
+      hasMore: true,
+    });
+    expect(out.invoices.recent).toHaveLength(5);
+    expect(out.quotes.recent).toHaveLength(5);
+    expect(out.quotes.hasMore).toBe(true);
+  });
+
+  it("getCustomer leaves out invoices and quotes the user has no module for", async () => {
+    getCustomerMock.mockResolvedValue(customerRow);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const out = await run(buildAssistantTools(ctx("readonly"), ["books"]).getCustomer, {
+      customerId: CUSTOMER_ID,
+    });
+    expect(out).toMatchObject({ name: "Jane Co", invoices: null, quotes: null });
+    // Not installed means not read, not read-and-hidden.
+    expect(listInvoicesMock).not.toHaveBeenCalled();
+    expect(listQuotesMock).not.toHaveBeenCalled();
+  });
+
+  it("getCustomer returns an error when the customer isn't found or no reference is given", async () => {
+    getCustomerMock.mockResolvedValue(null);
+    getCustomerByEmailMock.mockResolvedValue(null);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ALL_MODULES);
+    const byId = (await run(tools.getCustomer, { customerId: CUSTOMER_ID })) as { error: string };
+    expect(byId.error).toMatch(/Customer not found/);
+    const byEmail = (await run(tools.getCustomer, { customerEmail: "nobody@x.test" })) as {
+      error: string;
+    };
+    expect(byEmail.error).toMatch(/Customer not found/);
+    expect(await run(tools.getCustomer, {})).toEqual({
+      error: "Provide a customerId or a customerEmail.",
+    });
+    // Nothing about a missing customer is looked up.
+    expect(listInvoicesMock).not.toHaveBeenCalled();
+    expect(listQuotesMock).not.toHaveBeenCalled();
+  });
+
+  // ── getTransaction ───────────────────────────────────────────────────────────
+
+  it("getTransaction returns the full record, including where a mirrored one comes from", async () => {
+    getTransactionMock.mockResolvedValue({
+      id: TRANSACTION_ID,
+      workspaceId: "secret-ws",
+      type: "income",
+      amountCents: 55000,
+      gstCents: 5000,
+      currency: "AUD",
+      date: new Date("2026-10-20T05:00:00.000Z"),
+      description: "Invoice INV-2026-0007",
+      category: "invoice",
+      customerId: CUSTOMER_ID,
+      customerName: "Jane Co",
+      sourceInvoiceId: INVOICE_ID,
+      sourceEarningId: null,
+      sourceExpenseId: null,
+      sourceTripId: null,
+      receiptFileId: null,
+      notes: null,
+      createdAt: new Date("2026-10-20T05:00:00.000Z"),
+      updatedAt: new Date("2026-10-20T05:00:00.000Z"),
+    });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const out = await run(buildAssistantTools(c, ["books"]).getTransaction, {
+      transactionId: TRANSACTION_ID,
+    });
+    expect(out).toEqual({
+      id: TRANSACTION_ID,
+      href: `/books/${TRANSACTION_ID}`,
+      recordLabel: "Invoice INV-2026-0007",
+      type: "income",
+      amountCents: 55000,
+      gstCents: 5000,
+      currency: "AUD",
+      date: "2026-10-20T05:00:00.000Z",
+      description: "Invoice INV-2026-0007",
+      category: "invoice",
+      categoryLabel: "Invoice",
+      customer: { id: CUSTOMER_ID, name: "Jane Co", href: `/customers/${CUSTOMER_ID}` },
+      source: { module: "invoices", label: "Invoice", href: `/invoices/${INVOICE_ID}` },
+      receiptFileId: null,
+      notes: null,
+      createdAt: "2026-10-20T05:00:00.000Z",
+      updatedAt: "2026-10-20T05:00:00.000Z",
+    });
+    expect(getTransactionMock).toHaveBeenCalledWith(c.workspaceId, TRANSACTION_ID);
+  });
+
+  it("getTransaction returns an error when the transaction isn't found", async () => {
+    getTransactionMock.mockResolvedValue(null);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const out = await run(buildAssistantTools(ctx("readonly"), ["books"]).getTransaction, {
+      transactionId: TRANSACTION_ID,
+    });
+    expect(out).toEqual({ error: "Transaction not found." });
+  });
+
+  // ── getPeriodSummary ─────────────────────────────────────────────────────────
+
+  const bookSummary = {
+    incomeCents: 120000,
+    expenseCents: 45000,
+    netCents: 75000,
+    gstCollectedCents: 10909,
+    gstPaidCents: 4090,
+    netGstCents: 6819,
+    count: 14,
+    byCategory: [
+      { type: "income", category: "invoice", amountCents: 120000, count: 4 },
+      { type: "expense", category: "software_expense", amountCents: 30000, count: 6 },
+      { type: "expense", category: "retired_slug", amountCents: 15000, count: 4 },
+    ],
+    monthly: [{ month: "2026-11", incomeCents: 120000, expenseCents: 45000, netCents: 75000 }],
+  };
+
+  it("getPeriodSummary defaults to the workspace's current financial year, as the Books page does", async () => {
+    freezeNow("2026-11-18T03:00:00.000Z");
+    getWorkspaceMock.mockResolvedValue({ defaultCurrency: "NZD", fyStartMonth: 4 });
+    getBookSummaryMock.mockResolvedValue(bookSummary);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const out = await run(buildAssistantTools(c, ["books"]).getPeriodSummary);
+    expect(out).toEqual({
+      period: "year",
+      recordLabel: "Current FY",
+      // The financial year starts in April for this workspace.
+      from: "2026-04-01T00:00:00.000Z",
+      to: "2026-11-18T03:00:00.000Z",
+      currency: "NZD",
+      incomeCents: 120000,
+      expenseCents: 45000,
+      netCents: 75000,
+      gstCollectedCents: 10909,
+      gstPaidCents: 4090,
+      netGstCents: 6819,
+      transactionCount: 14,
+      byCategory: [
+        { type: "income", category: "invoice", label: "Invoice", amountCents: 120000, count: 4 },
+        {
+          type: "expense",
+          category: "software_expense",
+          label: "Software",
+          amountCents: 30000,
+          count: 6,
+        },
+        // A slug that is no longer in the catalogue is shown as stored.
+        {
+          type: "expense",
+          category: "retired_slug",
+          label: "retired_slug",
+          amountCents: 15000,
+          count: 4,
+        },
+      ],
+      monthly: bookSummary.monthly,
+      href: "/books",
+    });
+    // Totals come from the Postgres summary, scoped to the ctx workspace; no rows are read.
+    expect(getBookSummaryMock).toHaveBeenCalledWith(c.workspaceId, {
+      dateFrom: new Date("2026-04-01T00:00:00.000Z"),
+      dateTo: new Date("2026-11-18T03:00:00.000Z"),
+    });
+    expect(listTransactionsMock).not.toHaveBeenCalled();
+  });
+
+  it("getPeriodSummary resolves presets and links to the same period on the Books page", async () => {
+    freezeNow("2026-11-18T03:00:00.000Z");
+    getBookSummaryMock.mockResolvedValue(bookSummary);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ["books"]);
+
+    expect(await run(tools.getPeriodSummary, { period: "month" })).toMatchObject({
+      period: "month",
+      recordLabel: "This month",
+      from: "2026-11-01T00:00:00.000Z",
+      to: "2026-11-18T03:00:00.000Z",
+      href: "/books?period=month",
+    });
+    // A workspace row without a financial-year month falls back to July, like the page.
+    expect(await run(tools.getPeriodSummary, { period: "quarter" })).toMatchObject({
+      recordLabel: "This quarter",
+      from: "2026-10-01T00:00:00.000Z",
+      href: "/books?period=quarter",
+    });
+    expect(await run(tools.getPeriodSummary, { period: "all" })).toMatchObject({
+      period: "all",
+      recordLabel: "All time",
+      from: null,
+      href: "/books?period=all",
+    });
+    expect(getBookSummaryMock).toHaveBeenLastCalledWith(expect.anything(), {
+      dateFrom: undefined,
+      dateTo: new Date("2026-11-18T03:00:00.000Z"),
+    });
+  });
+
+  it("getPeriodSummary takes an explicit date range, which has no page of its own to link to", async () => {
+    freezeNow("2026-11-18T03:00:00.000Z");
+    getBookSummaryMock.mockResolvedValue(bookSummary);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const tools = buildAssistantTools(c, ["books"]);
+    const out = await run(tools.getPeriodSummary, {
+      // The dates win over a preset passed alongside them.
+      period: "month",
+      dateFrom: "2026-07-01T00:00:00.000Z",
+      dateTo: "2026-09-30T23:59:59.000Z",
+    });
+    expect(out).toMatchObject({
+      period: "custom",
+      recordLabel: "2026-07-01 to 2026-09-30",
+      from: "2026-07-01T00:00:00.000Z",
+      to: "2026-09-30T23:59:59.000Z",
+      netCents: 75000,
+    });
+    expect(out).not.toHaveProperty("href");
+    expect(getBookSummaryMock).toHaveBeenCalledWith(c.workspaceId, {
+      dateFrom: new Date("2026-07-01T00:00:00.000Z"),
+      dateTo: new Date("2026-09-30T23:59:59.000Z"),
+    });
+
+    // Only a start: the range runs up to now. Only an end: everything up to it.
+    expect(
+      await run(tools.getPeriodSummary, { dateFrom: "2026-11-01T00:00:00.000Z" }),
+    ).toMatchObject({ recordLabel: "2026-11-01 to 2026-11-18", to: "2026-11-18T03:00:00.000Z" });
+    expect(await run(tools.getPeriodSummary, { dateTo: "2026-06-30T23:59:59.000Z" })).toMatchObject(
+      { recordLabel: "Until 2026-06-30", from: null },
+    );
+  });
+
+  it("getPeriodSummary reads an end date given as midnight as the whole of that day", async () => {
+    getBookSummaryMock.mockResolvedValue(bookSummary);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const tools = buildAssistantTools(c, ["books"]);
+
+    // Paid invoices are recorded at the time of payment, so stopping at 00:00:00 would
+    // leave out everything paid on the last day of the range.
+    await run(tools.getPeriodSummary, {
+      dateFrom: "2026-07-01T00:00:00.000Z",
+      dateTo: "2026-09-30T00:00:00.000Z",
+    });
+
+    expect(getBookSummaryMock).toHaveBeenCalledWith(c.workspaceId, {
+      dateFrom: new Date("2026-07-01T00:00:00.000Z"),
+      dateTo: new Date("2026-09-30T23:59:59.999Z"),
+    });
+  });
+
+  it("getPeriodSummary reports an empty period as zeros and refuses a reversed range", async () => {
+    getBookSummaryMock.mockResolvedValue({
+      incomeCents: 0,
+      expenseCents: 0,
+      netCents: 0,
+      gstCollectedCents: 0,
+      gstPaidCents: 0,
+      netGstCents: 0,
+      count: 0,
+      byCategory: [],
+      monthly: [],
+    });
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ["books"]);
+    // Nothing recorded is an answer, not an error: zeros, not invented figures.
+    expect(await run(tools.getPeriodSummary, { period: "week" })).toMatchObject({
+      incomeCents: 0,
+      expenseCents: 0,
+      netCents: 0,
+      transactionCount: 0,
+      byCategory: [],
+      monthly: [],
+    });
+
+    getBookSummaryMock.mockClear();
+    expect(
+      await run(tools.getPeriodSummary, {
+        dateFrom: "2026-09-30T00:00:00.000Z",
+        dateTo: "2026-07-01T00:00:00.000Z",
+      }),
+    ).toEqual({ error: "dateFrom must be on or before dateTo." });
+    expect(getBookSummaryMock).not.toHaveBeenCalled();
+  });
+
+  // ── getGstSummary ────────────────────────────────────────────────────────────
+
+  const gstMonths = [
+    { month: "2026-06", gstCollectedCents: 9000, gstPaidCents: 100 },
+    { month: "2026-07", gstCollectedCents: 1000, gstPaidCents: 200 },
+    { month: "2026-10", gstCollectedCents: 3000, gstPaidCents: 500 },
+    { month: "2026-11", gstCollectedCents: 2000, gstPaidCents: 4000 },
+  ];
+  const lodgedQ1 = {
+    id: "tax-1",
+    workspaceId: "secret-ws",
+    fiscalYear: 2026,
+    quarter: 1,
+    periodLabel: "2026-Q1",
+    gstCollectedCents: 900,
+    gstPaidCents: 200,
+    netGstCents: 700,
+    lodgedAt: new Date("2026-10-20T00:00:00.000Z"),
+    createdAt: new Date("2026-10-20T00:00:00.000Z"),
+    updatedAt: new Date("2026-10-20T00:00:00.000Z"),
+  };
+
+  it("getGstSummary returns the current quarter from the Tax page's figures", async () => {
+    // 18 November 2026 with a July financial year is Q2 (October to December).
+    freezeNow("2026-11-18T03:00:00.000Z");
+    getGstMonthlyMock.mockResolvedValue(gstMonths);
+    listTaxPeriodsMock.mockResolvedValue([lodgedQ1]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("readonly");
+    const out = await run(buildAssistantTools(c, ["books"]).getGstSummary);
+    expect(out).toEqual({
+      recordLabel: "2026-Q2",
+      fiscalYear: 2026,
+      quarter: 2,
+      from: "2026-10-01T00:00:00.000Z",
+      to: "2026-12-31T23:59:59.999Z",
+      currency: "AUD",
+      gstCollectedCents: 5000,
+      gstPaidCents: 4500,
+      netGstCents: 500,
+      position: "owed",
+      lodgedAt: null,
+      lodgedNetGstCents: null,
+      // Only this financial year's quarters: June 2026 belongs to the year before.
+      quarters: [
+        {
+          label: "2026-Q1",
+          quarter: 1,
+          gstCollectedCents: 1000,
+          gstPaidCents: 200,
+          netGstCents: 800,
+          lodgedAt: "2026-10-20T00:00:00.000Z",
+          // The snapshot taken at lodgement, which the live figure has since moved past.
+          lodgedNetGstCents: 700,
+        },
+        {
+          label: "2026-Q2",
+          quarter: 2,
+          gstCollectedCents: 5000,
+          gstPaidCents: 4500,
+          netGstCents: 500,
+          lodgedAt: null,
+          lodgedNetGstCents: null,
+        },
+      ],
+      href: "/books/tax",
+    });
+    expect(getGstMonthlyMock).toHaveBeenCalledWith(c.workspaceId);
+    expect(listTaxPeriodsMock).toHaveBeenCalledWith(c.workspaceId);
+  });
+
+  it("getGstSummary returns a named quarter or a whole financial year", async () => {
+    freezeNow("2026-11-18T03:00:00.000Z");
+    getGstMonthlyMock.mockResolvedValue(gstMonths);
+    listTaxPeriodsMock.mockResolvedValue([lodgedQ1]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("readonly"), ["books"]);
+
+    // A quarter on its own is that quarter of the current financial year.
+    expect(await run(tools.getGstSummary, { quarter: 1 })).toMatchObject({
+      recordLabel: "2026-Q1",
+      from: "2026-07-01T00:00:00.000Z",
+      to: "2026-09-30T23:59:59.999Z",
+      netGstCents: 800,
+      lodgedAt: "2026-10-20T00:00:00.000Z",
+      lodgedNetGstCents: 700,
+    });
+
+    // A year on its own is the whole year, named by its dates.
+    expect(await run(tools.getGstSummary, { fiscalYear: 2026 })).toMatchObject({
+      recordLabel: "2026-07-01 to 2027-06-30",
+      fiscalYear: 2026,
+      quarter: null,
+      from: "2026-07-01T00:00:00.000Z",
+      to: "2027-06-30T23:59:59.999Z",
+      gstCollectedCents: 6000,
+      gstPaidCents: 4700,
+      netGstCents: 1300,
+      lodgedAt: null,
+    });
+
+    // June 2026 is the last quarter of the year that started in July 2025.
+    expect(await run(tools.getGstSummary, { fiscalYear: 2025, quarter: 4 })).toMatchObject({
+      recordLabel: "2025-Q4",
+      from: "2026-04-01T00:00:00.000Z",
+      to: "2026-06-30T23:59:59.999Z",
+      gstCollectedCents: 9000,
+      gstPaidCents: 100,
+      position: "owed",
+    });
+  });
+
+  it("getGstSummary follows the workspace's financial-year start and reports a refund", async () => {
+    freezeNow("2026-11-18T03:00:00.000Z");
+    getWorkspaceMock.mockResolvedValue({ defaultCurrency: "NZD", fyStartMonth: 1 });
+    getGstMonthlyMock.mockResolvedValue([
+      { month: "2026-11", gstCollectedCents: 1000, gstPaidCents: 2500 },
+    ]);
+    listTaxPeriodsMock.mockResolvedValue([]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const out = await run(buildAssistantTools(ctx("readonly"), ["books"]).getGstSummary);
+    // With a January start, November is in Q4 of 2026.
+    expect(out).toMatchObject({
+      recordLabel: "2026-Q4",
+      from: "2026-10-01T00:00:00.000Z",
+      to: "2026-12-31T23:59:59.999Z",
+      currency: "NZD",
+      netGstCents: -1500,
+      position: "refund",
+    });
+  });
+
+  it("getGstSummary reports a period with no GST as nil rather than an error", async () => {
+    freezeNow("2026-11-18T03:00:00.000Z");
+    getGstMonthlyMock.mockResolvedValue([]);
+    listTaxPeriodsMock.mockResolvedValue([]);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const out = await run(buildAssistantTools(ctx("readonly"), ["books"]).getGstSummary, {
+      fiscalYear: 2024,
+      quarter: 3,
+    });
+    expect(out).toMatchObject({
+      recordLabel: "2024-Q3",
+      gstCollectedCents: 0,
+      gstPaidCents: 0,
+      netGstCents: 0,
+      position: "nil",
+      lodgedAt: null,
+      quarters: [],
+    });
+  });
+
+  // ── listReceiptQueue ─────────────────────────────────────────────────────────
+
+  function extractionRow(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: "ext-1",
+      workspaceId: "secret-ws",
+      fileId: "file-1",
+      status: "pending",
+      processing: false,
+      extractedData: {
+        merchant: "Bunnings",
+        date: "2026-11-10",
+        totalCents: 4200,
+        taxCents: 382,
+        currency: "AUD",
+        category: "supplies",
+        confidence: 0.93,
+        lineItems: [
+          { description: "Screws", quantity: 1, unitPriceCents: 4200, amountCents: 4200 },
+        ],
+      },
+      transactionId: null,
+      errorMessage: null,
+      modelUsed: "some-model",
+      createdAt: new Date("2026-11-11T00:00:00.000Z"),
+      updatedAt: new Date("2026-11-11T00:00:00.000Z"),
+      ...over,
+    };
+  }
+
+  it("listReceiptQueue lists receipts waiting for review with the full count", async () => {
+    listExtractionsMock.mockResolvedValue([
+      extractionRow(),
+      // Still being read: no contents yet.
+      extractionRow({ id: "ext-2", processing: true, extractedData: null }),
+      extractionRow({ id: "ext-3" }),
+    ]);
+    countExtractionsMock.mockResolvedValue(7);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("accountant");
+    const out = await run(buildAssistantTools(c, ["books"]).listReceiptQueue, { limit: 2 });
+    expect(out).toEqual({
+      items: [
+        {
+          id: "ext-1",
+          status: "pending",
+          processing: false,
+          scannedAt: "2026-11-11T00:00:00.000Z",
+          merchant: "Bunnings",
+          date: "2026-11-10",
+          totalCents: 4200,
+          taxCents: 382,
+          currency: "AUD",
+          category: "supplies",
+          confidence: 0.93,
+          transactionId: null,
+          errorMessage: null,
+        },
+        {
+          id: "ext-2",
+          status: "pending",
+          processing: true,
+          scannedAt: "2026-11-11T00:00:00.000Z",
+          merchant: null,
+          date: null,
+          totalCents: null,
+          taxCents: null,
+          currency: null,
+          category: null,
+          confidence: null,
+          transactionId: null,
+          errorMessage: null,
+        },
+      ],
+      returned: 2,
+      hasMore: true,
+      href: "/books/receipts?status=pending",
+      // The count covers the whole queue, not just the rows returned.
+      total: 7,
+      status: "pending",
+    });
+    // Pending is the default; one extra row is read to detect hasMore.
+    expect(listExtractionsMock).toHaveBeenCalledWith(c.workspaceId, {
+      status: "pending",
+      limit: 3,
+    });
+    expect(countExtractionsMock).toHaveBeenCalledWith(c.workspaceId, { status: "pending" });
+  });
+
+  it("listReceiptQueue filters by status and links an applied receipt to its transaction", async () => {
+    listExtractionsMock.mockResolvedValue([
+      extractionRow({ status: "applied", transactionId: TRANSACTION_ID }),
+    ]);
+    countExtractionsMock.mockResolvedValue(1);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const c = ctx("owner");
+    const out = (await run(buildAssistantTools(c, ["books"]).listReceiptQueue, {
+      status: "applied",
+    })) as { items: Record<string, unknown>[] } & Record<string, unknown>;
+    expect(out).toMatchObject({
+      returned: 1,
+      hasMore: false,
+      total: 1,
+      status: "applied",
+      href: "/books/receipts?status=applied",
+    });
+    expect(out.items[0]).toMatchObject({
+      status: "applied",
+      transactionId: TRANSACTION_ID,
+      href: `/books/${TRANSACTION_ID}`,
+    });
+    expect(listExtractionsMock).toHaveBeenCalledWith(c.workspaceId, {
+      status: "applied",
+      limit: 21,
+    });
+  });
+
+  it("listReceiptQueue returns an empty queue as an empty list", async () => {
+    listExtractionsMock.mockResolvedValue([]);
+    countExtractionsMock.mockResolvedValue(0);
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const out = await run(buildAssistantTools(ctx("accountant"), ["books"]).listReceiptQueue);
+    expect(out).toEqual({
+      items: [],
+      returned: 0,
+      hasMore: false,
+      href: "/books/receipts?status=pending",
+      total: 0,
+      status: "pending",
+    });
+  });
+
+  // ── Input validation ─────────────────────────────────────────────────────────
+
+  it("validates lookup inputs before a tool runs", async () => {
+    const { buildAssistantTools } = await import("@/server/application/assistant/tools");
+    const tools = buildAssistantTools(ctx("owner"), ALL_MODULES);
+    // The SDK checks a call against the tool's schema and never runs one that fails.
+    const accepts = (name: string, input: unknown): boolean =>
+      (
+        tools[name]!.inputSchema as { safeParse: (value: unknown) => { success: boolean } }
+      ).safeParse(input).success;
+
+    expect(accepts("getInvoice", { invoiceNumber: "INV-2026-0007" })).toBe(true);
+    expect(accepts("getInvoice", { invoiceId: INVOICE_ID })).toBe(true);
+    expect(accepts("getInvoice", { invoiceId: "not-a-uuid" })).toBe(false);
+    expect(accepts("getQuote", { quoteId: "not-a-uuid" })).toBe(false);
+    expect(accepts("getCustomer", { customerEmail: "jane@example.com" })).toBe(true);
+    expect(accepts("getCustomer", { customerEmail: "not an email" })).toBe(false);
+    expect(accepts("getTransaction", {})).toBe(false);
+    expect(accepts("getTransaction", { transactionId: TRANSACTION_ID })).toBe(true);
+    expect(accepts("getPeriodSummary", {})).toBe(true);
+    expect(accepts("getPeriodSummary", { period: "decade" })).toBe(false);
+    expect(accepts("getPeriodSummary", { dateFrom: "last Tuesday" })).toBe(false);
+    expect(accepts("getGstSummary", { fiscalYear: 2026, quarter: 4 })).toBe(true);
+    expect(accepts("getGstSummary", { quarter: 5 })).toBe(false);
+    expect(accepts("listReceiptQueue", { status: "pending", limit: 100 })).toBe(true);
+    expect(accepts("listReceiptQueue", { status: "lost" })).toBe(false);
+    expect(accepts("listReceiptQueue", { limit: 101 })).toBe(false);
   });
 });

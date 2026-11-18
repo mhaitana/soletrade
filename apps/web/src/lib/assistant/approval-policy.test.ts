@@ -18,6 +18,25 @@ describe("assistantApprovalFor", () => {
     }
   });
 
+  it("runs record and summary lookups without asking, on every app build", () => {
+    // Named one by one: a lookup left out of the catalogue would be refused as unknown.
+    for (const name of [
+      "getInvoice",
+      "getQuote",
+      "getCustomer",
+      "getTransaction",
+      "getPeriodSummary",
+      "getGstSummary",
+      "listReceiptQueue",
+    ]) {
+      expect(assistantApprovalFor(name, supported), name).toEqual({ type: "not-applicable" });
+      expect(assistantApprovalFor(name, { approvalsSupported: false }), name).toEqual({
+        type: "not-applicable",
+      });
+      expect(NEVER_AUTO_APPROVE, name).not.toContain(name);
+    }
+  });
+
   it("asks the person before every change", () => {
     const writes = entries.filter(([, info]) => info.kind === "write");
     expect(writes.length).toBeGreaterThan(0);

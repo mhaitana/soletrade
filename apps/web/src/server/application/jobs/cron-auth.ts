@@ -9,17 +9,20 @@ import { env } from "@/server/infrastructure/config/env";
  * loudly rather than 401-ing silently.
  */
 
-/** Constant-time string compare to avoid leaking the secret length via timing. */
+/**
+ * Constant-time string compare to avoid leaking the secret via timing. When the lengths
+ * differ the loop still runs, against `a` itself, and the length check rejects the value.
+ * The earlier version replaced `b` with `a` in that case and then compared their lengths,
+ * so any value whose length differed from the secret's was accepted.
+ */
 function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    // still do the comparison to keep timing roughly constant
-    b = a;
-  }
+  const sameLength = a.length === b.length;
+  const other = sameLength ? b : a;
   let diff = 0;
   for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    diff |= a.charCodeAt(i) ^ other.charCodeAt(i);
   }
-  return diff === 0 && a.length === b.length && a.length > 0;
+  return sameLength && diff === 0 && a.length > 0;
 }
 
 /** True iff the request carries the shared `CRON_SECRET` (bearer or x-cron-secret). */

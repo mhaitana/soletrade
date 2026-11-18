@@ -22,6 +22,27 @@ describe("assistant tool catalogue", () => {
     expect(assistantToolInfo("deleteTransaction").caution).toBe("cannot-undo");
   });
 
+  it("classifies record and summary lookups as reads, with a label for the chat card", () => {
+    const lookups = {
+      getInvoice: "an invoice",
+      getQuote: "a quote",
+      getCustomer: "a customer",
+      getTransaction: "a transaction",
+      getPeriodSummary: "the profit and loss",
+      getGstSummary: "the GST position",
+      listReceiptQueue: "receipts",
+    };
+    for (const [name, noun] of Object.entries(lookups)) {
+      // `hasOwn`, because an unlisted name would fall back to the write entry.
+      expect(Object.hasOwn(ASSISTANT_TOOLS, name), name).toBe(true);
+      expect(assistantToolInfo(name), name).toEqual({
+        kind: "read",
+        running: `Looking up ${noun}`,
+        done: `Looked up ${noun}`,
+      });
+    }
+  });
+
   it("gives every write tool an audit target", () => {
     for (const [name, info] of Object.entries(ASSISTANT_TOOLS)) {
       if (info.kind === "write") expect(info.target, name).toBeTruthy();

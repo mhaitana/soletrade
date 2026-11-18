@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AskHaiButton } from "@/components/ask-hai-button";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <AskHaiButton question="Summarise this invoice and tell me if anything needs my attention." />
           <Button asChild variant="outline">
             <Link href={`/invoices/${inv.id}/pdf`}>
               <Download className="size-4" aria-hidden />

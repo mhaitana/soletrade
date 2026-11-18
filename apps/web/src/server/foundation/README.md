@@ -1,7 +1,8 @@
 # Foundation services
 
 Reusable backend services shared by product domains: identity, workspaces, membership,
-customers, files, activity/audit, billing, module installations, notifications and conversations.
+customers, files, activity/audit, billing, module installations, notifications, conversations
+and the AI usage ledger.
 
 Import infrastructure, browser-safe domain contracts, and other foundation services through
 explicit entrypoints. Do not import product domains, request/application orchestration, or UI.

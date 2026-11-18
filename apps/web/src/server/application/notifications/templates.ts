@@ -5,6 +5,7 @@ import type {
   QuoteMerchantMeta,
   MemberInvitedEmailMeta,
   RefundMeta,
+  BriefingDigestEmailMeta,
 } from "@/lib/domain/notifications/email-types";
 export type {
   InvoiceEmailMeta,
@@ -13,6 +14,7 @@ export type {
   QuoteMerchantMeta,
   MemberInvitedEmailMeta,
   RefundMeta,
+  BriefingDigestEmailMeta,
 } from "@/lib/domain/notifications/email-types";
 /**
  * Invoice email templates (Phase 5c). Pure functions - no `server-only`, no DB, no I/O - so
@@ -41,6 +43,8 @@ import { formatCents } from "@/lib/domain/billing/pricing";
 import { formatDate as formatDisplayDate } from "@/utils/format-date";
 import { pwaBrand } from "@/config/pwa";
 import { urls } from "@/config/urls";
+import { composeBriefing } from "@/lib/domain/insights/briefing";
+import { formatAsOf } from "@/lib/domain/insights/local-date";
 
 /**
  * Coerce a raw event-bus metadata record into a typed `InvoiceEmailMeta`, validating the
@@ -518,5 +522,68 @@ export function refundIssuedEmail(m: RefundMeta, appUrl = urls.app): RenderedEma
   ]
     .filter(Boolean)
     .join("\n");
+  return { subject, html, text: emailText(text) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Briefing digest email (hAI Wave 5). Sent by the hourly digest job to a member who
+// turned the digest on, and only when there is something to report. It states that
+// member's facts, links each one to the list where it can be dealt with, and says how
+// to turn the digest off. The wording comes from `composeBriefing`; no model writes it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** "Your daily briefing for {workspace}" - sent to one member by the digest job. */
+export function briefingDigestEmail(m: BriefingDigestEmailMeta, appUrl: string): RenderedEmail {
+  const base = appUrl.replace(/\/$/, "");
+  const { facts } = m;
+  const briefing = composeBriefing(facts, (cents) => money(cents, facts.currency));
+  const subject = `Your ${m.frequency} briefing for ${m.workspaceName}`;
+  const asOf = `As of ${formatAsOf(new Date(facts.asOf), facts.timezone)} (${facts.timezone})`;
+  const dashboardLink = `${base}/dashboard`;
+  const settingsLink = `${base}/settings/assistant`;
+  const optOut = `You are getting this because you turned on the ${m.frequency} briefing digest for ${m.workspaceName}. To turn it off, open Settings > ${brand.assistantName} and set Briefing digest to Off.`;
+
+  const rows = briefing.items
+    .map(
+      (item) => `
+      <tr><td style="padding:12px 0;border-top:1px solid #e7e5e4;">
+        <p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">${escapeHtml(item.text)}.</p>
+        <p style="margin:4px 0 0;font-size:13px;line-height:1.5;"><a href="${escapeHtml(base + item.href)}" style="color:#1D4ED8;text-decoration:underline;">${escapeHtml(item.linkLabel)}</a></p>
+      </td></tr>`,
+    )
+    .join("");
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:13px;color:#78716c;">${escapeHtml(asOf)}</p>
+    ${
+      briefing.empty
+        ? `<p style="margin:0;font-size:15px;line-height:1.5;color:#44403c;">${escapeHtml(briefing.headline)}</p>`
+        : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}
+    </table>`
+    }
+    <p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e7e5e4;font-size:13px;line-height:1.5;color:#78716c;">${escapeHtml(optOut)} <a href="${escapeHtml(settingsLink)}" style="color:#1D4ED8;text-decoration:underline;">Open ${escapeHtml(brand.assistantName)} settings</a></p>`;
+  const html = emailHtml({
+    appUrl,
+    accent: pwaBrand.ink,
+    preheading: escapeHtml(m.workspaceName),
+    heading: `Your ${m.frequency} briefing`,
+    bodyHtml,
+    buttonHref: dashboardLink,
+    buttonLabel: "Open dashboard",
+    showButton: true,
+  });
+  const text = [
+    `Your ${m.frequency} briefing for ${m.workspaceName}`,
+    asOf,
+    ``,
+    ...(briefing.empty
+      ? [briefing.headline]
+      : briefing.items.flatMap((item) => [`- ${item.text}.`, `  ${base}${item.href}`])),
+    ``,
+    `Open your dashboard:`,
+    dashboardLink,
+    ``,
+    optOut,
+    settingsLink,
+  ].join("\n");
   return { subject, html, text: emailText(text) };
 }

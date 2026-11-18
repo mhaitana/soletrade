@@ -46,6 +46,13 @@ export const ASSISTANT_TOOLS: Record<string, AssistantToolInfo> = {
   listDriveExpenses: read("vehicle expenses"),
   listCustomers: read("customers"),
   listRecentActivity: read("recent activity"),
+  getInvoice: read("an invoice"),
+  getQuote: read("a quote"),
+  getCustomer: read("a customer"),
+  getTransaction: read("a transaction"),
+  getPeriodSummary: read("the profit and loss"),
+  getGstSummary: read("the GST position"),
+  listReceiptQueue: read("receipts"),
 
   createCustomer: {
     kind: "write",

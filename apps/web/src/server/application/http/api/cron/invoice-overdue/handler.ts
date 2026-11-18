@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { env } from "@/server/infrastructure/config/env";
+import { isCronAuthorized } from "@/server/application/jobs/cron-auth";
 import { runOverdueJob } from "@/server/application/jobs/overdue";
 
 /**
@@ -8,34 +9,18 @@ import { runOverdueJob } from "@/server/application/jobs/overdue";
  * secret (`CRON_SECRET`): Vercel Cron / an external scheduler sends it as
  * `Authorization: Bearer <secret>` (or `x-cron-secret`). 401 on a missing/mismatched
  * secret so a misconfigured scheduler surfaces, rather than a 500 that retries silently.
+ * The check is the shared `isCronAuthorized`; this file used to carry its own copy of the
+ * comparison, which accepted any value whose length differed from the secret's.
  *
  * `force-dynamic` keeps it out of the static optimizer (it mutates the DB).
  */
 
-/** Constant-time string compare to avoid leaking the secret length via timing. */
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    // still do the comparison to keep timing roughly constant
-    b = a;
-  }
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0 && a.length === b.length && a.length > 0;
-}
-
 export async function GET(request: Request): Promise<Response> {
-  const secret = env.CRON_SECRET;
-  if (!secret) {
+  if (!env.CRON_SECRET) {
     console.error("[cron] CRON_SECRET is not configured");
     return NextResponse.json({ error: "Cron not configured." }, { status: 500 });
   }
-  const auth = request.headers.get("authorization");
-  const bearer = auth?.startsWith("Bearer ") ? auth.slice("Bearer ".length) : null;
-  const headerSecret = request.headers.get("x-cron-secret");
-  const provided = bearer ?? headerSecret;
-  if (!provided || !safeEqual(provided, secret)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

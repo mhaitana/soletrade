@@ -21,7 +21,10 @@ export default async function AssistantPage({
     <AssistantChat
       key={c ?? "new"}
       initialConversations={data.conversations}
+      hasMoreConversations={data.hasMoreConversations}
       activeConversation={data.activeConversation}
+      initialFeedback={data.feedback}
+      canAttachReceipts={data.canAttachReceipts}
     />
   );
 }

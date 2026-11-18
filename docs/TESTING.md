@@ -15,8 +15,8 @@ Run commands from the repository root with Node 24.19.0 and pnpm 10.33.0.
 
 Web Vitest owns web and web-script tests. Its default run excludes every filename
 ending in `integration.test.ts[x]`, including `expense-integration.test.ts` and
-`integration.test.ts`. The three self-contained PGlite migration suites remain in
-the default run and resolve migrations from the repository root.
+`integration.test.ts`. The self-contained PGlite migration suites (`*migration*.test.ts`)
+remain in the default run and resolve migrations from the repository root.
 
 Mobile Jest owns component/behavior `.test.ts[x]` suites and excludes
 `.vitest.test.ts` suites, which mobile Vitest owns. Contracts owns its own Vitest

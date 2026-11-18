@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { tool, type ToolSet } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
@@ -47,6 +48,7 @@ type StoredMessage = {
   role: "user" | "assistant";
   content: string;
   parts: unknown[] | null;
+  metadata: Record<string, unknown> | null;
   createdAt: Date;
 };
 
@@ -79,7 +81,11 @@ export const fakeConversations = {
       title: c.title,
       updatedAt: c.updatedAt,
       writeEnabled: c.writeEnabled,
-      messages: c.messages.map((m) => ({ ...m, parts: m.parts ? jsonb(m.parts) : null })),
+      messages: c.messages.map((m) => ({
+        ...m,
+        parts: m.parts ? jsonb(m.parts) : null,
+        metadata: m.metadata ? jsonb(m.metadata) : null,
+      })),
     } as unknown as Conversation;
   },
   async createConversation(workspaceId: unknown, userId: unknown, title?: string) {
@@ -99,7 +105,13 @@ export const fakeConversations = {
     workspaceId: unknown,
     userId: unknown,
     conversationId: unknown,
-    input: { id?: string; role: "user" | "assistant"; content: string; parts?: unknown[] },
+    input: {
+      id?: string;
+      role: "user" | "assistant";
+      content: string;
+      parts?: unknown[];
+      metadata?: Record<string, unknown>;
+    },
   ) {
     const c = owned(workspaceId, userId, conversationId);
     if (!c) throw new Error("conversation not found");
@@ -110,6 +122,7 @@ export const fakeConversations = {
       role: input.role,
       content: input.content,
       parts: input.parts ? jsonb(input.parts) : null,
+      metadata: input.metadata ? jsonb(input.metadata) : null,
       createdAt: new Date(),
     });
     c.updatedAt = new Date();
@@ -120,13 +133,26 @@ export const fakeConversations = {
     userId: unknown,
     conversationId: unknown,
     messageId: string,
-    input: { content: string; parts: unknown[] },
+    input: { content: string; parts: unknown[]; metadata?: Record<string, unknown> },
   ) {
     const c = owned(workspaceId, userId, conversationId);
     const message = c?.messages.find((m) => m.id === messageId);
     if (!message) return;
     message.content = input.content;
     message.parts = jsonb(input.parts);
+    if (input.metadata) message.metadata = jsonb(input.metadata);
+  },
+  /** `UPDATE ... SET title = to WHERE title = from`: true when the title was replaced. */
+  async replaceConversationTitle(
+    workspaceId: unknown,
+    userId: unknown,
+    conversationId: unknown,
+    change: { from: string; to: string },
+  ) {
+    const c = owned(workspaceId, userId, conversationId);
+    if (!c || c.title !== change.from) return false;
+    c.title = change.to;
+    return true;
   },
   async deleteMessages(
     workspaceId: unknown,
@@ -142,7 +168,14 @@ export const fakeConversations = {
 /** Put a conversation in the store directly (e.g. with changes turned on). */
 export function seedConversation(input: {
   writeEnabled?: boolean;
-  messages?: { role: "user" | "assistant"; content: string; parts?: unknown[] }[];
+  /** Defaults to a title nobody would mistake for an automatic one. */
+  title?: string;
+  messages?: {
+    role: "user" | "assistant";
+    content: string;
+    parts?: unknown[];
+    metadata?: Record<string, unknown>;
+  }[];
   workspaceId?: string;
   userId?: string;
 }): string {
@@ -151,7 +184,7 @@ export function seedConversation(input: {
     id,
     workspaceId: input.workspaceId ?? TEST_WORKSPACE,
     userId: input.userId ?? TEST_USER,
-    title: "Test conversation",
+    title: input.title ?? "Test conversation",
     writeEnabled: input.writeEnabled ?? false,
     updatedAt: new Date(),
     messages: (input.messages ?? []).map((m) => ({
@@ -159,6 +192,7 @@ export function seedConversation(input: {
       role: m.role,
       content: m.content,
       parts: m.parts ? jsonb(m.parts) : null,
+      metadata: m.metadata ? jsonb(m.metadata) : null,
       createdAt: new Date(),
     })),
   });
@@ -167,6 +201,70 @@ export function seedConversation(input: {
 
 export function storedMessages(conversationId: string): StoredMessage[] {
   return conversations.get(conversationId)?.messages ?? [];
+}
+
+export function conversationTitle(conversationId: string): string | undefined {
+  return conversations.get(conversationId)?.title;
+}
+
+/** Rename a conversation the way the person would, behind a running turn's back. */
+export function renameSeededConversation(conversationId: string, title: string): void {
+  const conversation = conversations.get(conversationId);
+  if (conversation) conversation.title = title;
+}
+
+/** When a conversation was last changed, as the mobile app reads its version. */
+export function conversationUpdatedAt(conversationId: string): Date | undefined {
+  return conversations.get(conversationId)?.updatedAt;
+}
+
+// ---------------------------------------------------------------- usage ledger
+
+export type UsageRow = {
+  workspaceId: string;
+  userId: string | null;
+  conversationId: string | null;
+  feature: string;
+  surface: string | null;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  steps: number;
+};
+
+const usageLog: UsageRow[] = [];
+let usageFails = false;
+
+/** Stands in for the ledger service. Unlike the real one it can reject, to prove callers cope. */
+export const fakeAiUsage = {
+  async recordAiUsage(event: Partial<UsageRow> & { workspaceId: string; feature: string }) {
+    if (usageFails) throw new Error("usage ledger unavailable");
+    usageLog.push({
+      userId: null,
+      conversationId: null,
+      surface: null,
+      provider: "",
+      model: "",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      steps: 0,
+      ...event,
+    });
+  },
+};
+
+export function usageRows(): UsageRow[] {
+  return [...usageLog];
+}
+
+/** Make every usage write fail from now on. */
+export function failUsageRecording(fail = true): void {
+  usageFails = fail;
 }
 
 // ---------------------------------------------------------------- action ledger
@@ -284,18 +382,43 @@ export function tamperLedgerInput(toolCallId: string, input: unknown): void {
 
 // ---------------------------------------------------------------- model
 
+/** What one model request reports having used; `input` includes the cached tokens. */
+export type ScriptedUsage = {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+};
+
 export type ScriptedStep = {
   text?: string;
   toolCalls?: { id?: string; name: string; input: Record<string, unknown> }[];
+  /** Defaults to 10 input and 5 output tokens, nothing cached. */
+  usage?: ScriptedUsage;
 };
 
 const steps: ScriptedStep[] = [];
 export const modelPrompts: unknown[] = [];
+/** The full options of each streamed model request (tools, provider options, prompt). */
+export const modelCalls: {
+  prompt: unknown;
+  tools?: unknown;
+  providerOptions?: unknown;
+}[] = [];
 
-const usage = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 5, text: 5, reasoning: 0 },
-};
+function providerUsage(scripted: ScriptedUsage = { input: 10, output: 5 }) {
+  const cacheRead = scripted.cacheRead ?? 0;
+  const cacheWrite = scripted.cacheWrite ?? 0;
+  return {
+    inputTokens: {
+      total: scripted.input,
+      noCache: scripted.input - cacheRead - cacheWrite,
+      cacheRead,
+      cacheWrite,
+    },
+    outputTokens: { total: scripted.output, text: scripted.output, reasoning: 0 },
+  };
+}
 
 function streamParts(step: ScriptedStep) {
   const parts: Record<string, unknown>[] = [{ type: "stream-start", warnings: [] }];
@@ -316,10 +439,39 @@ function streamParts(step: ScriptedStep) {
   }
   parts.push({
     type: "finish",
-    usage,
+    usage: providerUsage(step.usage),
     finishReason: { unified: step.toolCalls?.length ? "tool-calls" : "stop", raw: undefined },
   });
   return parts;
+}
+
+// Conversation titles come from a separate, non-streaming request to the same model.
+type ScriptedTitle = { text: string } | { error: string };
+const titles: ScriptedTitle[] = [];
+/** The prompt of each title request, in order. */
+export const titleCalls: { prompt: unknown }[] = [];
+
+/** Queue what the model answers when asked to name a conversation. */
+export function scriptTitle(...next: (string | ScriptedTitle)[]): void {
+  titles.push(...next.map((title) => (typeof title === "string" ? { text: title } : title)));
+}
+
+let titleHook: (() => void | Promise<void>) | null = null;
+
+/**
+ * Run `hook` once, when the next title request has reached the model. The model does not
+ * answer until the hook has finished, so a test can hold the title back for as long as it
+ * needs to look at what happened in the meantime.
+ */
+export function beforeNextTitle(hook: () => void | Promise<void>): void {
+  titleHook = hook;
+}
+
+async function nextTitle(): Promise<ScriptedTitle> {
+  const hook = titleHook;
+  titleHook = null;
+  await hook?.();
+  return titles.shift() ?? { text: "Scripted title" };
 }
 
 /** Queue what the model answers, one entry per model call, in order. */
@@ -331,18 +483,166 @@ export function remainingModelSteps(): number {
   return steps.length;
 }
 
-export const scriptedModel = new MockLanguageModelV4({
-  modelId: "scripted",
-  doStream: async (options) => {
-    modelPrompts.push(options.prompt);
+function scripted(provider: string) {
+  return new MockLanguageModelV4({
+    provider,
+    modelId: "scripted",
+    doStream: async (options) => {
+      modelPrompts.push(options.prompt);
+      modelCalls.push({
+        prompt: options.prompt,
+        tools: options.tools,
+        providerOptions: options.providerOptions,
+      });
+      const step = steps.shift() ?? { text: "(the scripted model has nothing more to say)" };
+      return {
+        stream: convertArrayToReadableStream(
+          streamParts(step) as never[],
+        ) as unknown as ReadableStream<never>,
+      };
+    },
+    doGenerate: async (options) => {
+      titleCalls.push({ prompt: options.prompt });
+      const next = await nextTitle();
+      if ("error" in next) throw new Error(next.error);
+      return {
+        content: [{ type: "text" as const, text: next.text }],
+        finishReason: { unified: "stop" as const, raw: undefined },
+        usage: providerUsage({ input: 40, output: 6 }),
+        warnings: [],
+      };
+    },
+  });
+}
+
+export const scriptedModel = scripted("mock-provider");
+
+// ---------------------------------------------------------------- Anthropic on the wire
+
+/**
+ * The installed Anthropic provider talking to a fake API. It plays the same script as
+ * `scriptedModel`, but the request goes through the real provider code, so a test can
+ * read the JSON body Anthropic would have received (where the cache marks are, in what
+ * order the tools go out) and the usage comes back in Anthropic's own shape.
+ */
+export type AnthropicRequest = {
+  stream?: boolean;
+  system?: { type: string; text: string; cache_control?: unknown }[];
+  tools?: { name: string; cache_control?: unknown }[];
+  messages: { role: string; content: Record<string, unknown>[] }[];
+} & Record<string, unknown>;
+
+/** Every request body the fake API received, streamed turns and title requests alike. */
+export const anthropicRequests: AnthropicRequest[] = [];
+
+const WIRE_MODEL = "wire-test-model";
+
+function anthropicUsage(scripted: ScriptedUsage = { input: 10, output: 5 }) {
+  const cacheRead = scripted.cacheRead ?? 0;
+  const cacheWrite = scripted.cacheWrite ?? 0;
+  // Anthropic reports the uncached input on its own; the provider adds the cached parts.
+  return {
+    input_tokens: scripted.input - cacheRead - cacheWrite,
+    cache_creation_input_tokens: cacheWrite,
+    cache_read_input_tokens: cacheRead,
+    output_tokens: scripted.output,
+  };
+}
+
+function anthropicEvents(step: ScriptedStep): string {
+  const usage = anthropicUsage(step.usage);
+  const events: Record<string, unknown>[] = [
+    {
+      type: "message_start",
+      message: {
+        id: `msg_${randomUUID().slice(0, 8)}`,
+        type: "message",
+        role: "assistant",
+        model: WIRE_MODEL,
+        content: [],
+        stop_reason: null,
+        usage: { ...usage, output_tokens: 0 },
+      },
+    },
+  ];
+  let index = 0;
+  if (step.text) {
+    events.push(
+      { type: "content_block_start", index, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index, delta: { type: "text_delta", text: step.text } },
+      { type: "content_block_stop", index },
+    );
+    index += 1;
+  }
+  for (const call of step.toolCalls ?? []) {
+    events.push(
+      {
+        type: "content_block_start",
+        index,
+        content_block: {
+          type: "tool_use",
+          id: call.id ?? `call-${randomUUID().slice(0, 8)}`,
+          name: call.name,
+          input: {},
+        },
+      },
+      {
+        type: "content_block_delta",
+        index,
+        delta: { type: "input_json_delta", partial_json: JSON.stringify(call.input) },
+      },
+      { type: "content_block_stop", index },
+    );
+    index += 1;
+  }
+  events.push(
+    {
+      type: "message_delta",
+      delta: { stop_reason: step.toolCalls?.length ? "tool_use" : "end_turn", stop_sequence: null },
+      usage: { output_tokens: usage.output_tokens },
+    },
+    { type: "message_stop" },
+  );
+  return events
+    .map((event) => `event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`)
+    .join("");
+}
+
+const fakeAnthropicApi: typeof fetch = async (_url, init) => {
+  const body = JSON.parse(String(init?.body ?? "{}")) as AnthropicRequest;
+  anthropicRequests.push(body);
+  if (body.stream) {
     const step = steps.shift() ?? { text: "(the scripted model has nothing more to say)" };
-    return {
-      stream: convertArrayToReadableStream(
-        streamParts(step) as never[],
-      ) as unknown as ReadableStream<never>,
-    };
-  },
-});
+    return new Response(anthropicEvents(step), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  }
+  // A non-streaming request is the conversation title.
+  const next = await nextTitle();
+  if ("error" in next) {
+    return Response.json(
+      { type: "error", error: { type: "overloaded_error", message: next.error } },
+      { status: 529 },
+    );
+  }
+  return Response.json({
+    id: `msg_${randomUUID().slice(0, 8)}`,
+    type: "message",
+    role: "assistant",
+    model: WIRE_MODEL,
+    content: [{ type: "text", text: next.text }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: anthropicUsage({ input: 40, output: 6 }),
+  });
+};
+
+export const wireAnthropicModel = createAnthropic({
+  apiKey: "test-key",
+  baseURL: "https://anthropic.invalid/v1",
+  fetch: fakeAnthropicApi,
+})(WIRE_MODEL);
 
 // ---------------------------------------------------------------- tools
 
@@ -364,7 +664,11 @@ export function buildTestTools(
   const reads: ToolSet = {
     listInvoices: tool({
       description: "List invoices.",
-      inputSchema: z.object({ status: z.string().optional() }),
+      inputSchema: z.object({
+        status: z.string().optional(),
+        search: z.string().optional(),
+        limit: z.number().optional(),
+      }),
       execute: async () => ({
         items: [{ number: "INV-1", status: "overdue", note: INJECTED_NOTE }],
         returned: 1,
@@ -431,8 +735,15 @@ export async function readChunks(response: Response): Promise<StreamChunk[]> {
 export function resetAssistantHarness(): void {
   conversations.clear();
   ledger.clear();
+  usageLog.length = 0;
+  usageFails = false;
   steps.length = 0;
+  titles.length = 0;
+  titleHook = null;
   modelPrompts.length = 0;
+  modelCalls.length = 0;
+  titleCalls.length = 0;
+  anthropicRequests.length = 0;
   executed.createCustomer = [];
   executed.sendInvoice = [];
   executed.wipeEverything = 0;

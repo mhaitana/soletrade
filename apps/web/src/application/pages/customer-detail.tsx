@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Mail, Phone, Building2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AskHaiButton } from "@/components/ask-hai-button";
 import { CustomerTimeline } from "@/features/customers/components/customer-timeline";
 import { ActivityFeed } from "@/features/activity/components/activity-feed";
 import { loadCustomerTimeline } from "@/features/customers/api/detail/actions";
@@ -58,14 +59,17 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             Added {formatDate(customer.createdAt)}
           </p>
         </div>
-        {canManage ? (
-          <Button asChild variant="outline">
-            <Link href={`/customers/${customer.id}/edit`}>
-              <Pencil className="size-4" aria-hidden />
-              Edit
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <AskHaiButton question="Summarise this customer: what is outstanding and what has happened recently?" />
+          {canManage ? (
+            <Button asChild variant="outline">
+              <Link href={`/customers/${customer.id}/edit`}>
+                <Pencil className="size-4" aria-hidden />
+                Edit
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

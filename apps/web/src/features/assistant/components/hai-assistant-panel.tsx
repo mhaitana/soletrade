@@ -1,29 +1,32 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
-import {
-  ArrowUpRight,
-  Bot,
-  MessageSquarePlus,
-  Send,
-  ShieldCheck,
-  Sparkles,
-  Square,
-  X,
-} from "lucide-react";
+import { Bot, MessageSquarePlus, Send, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import { brand } from "@/config/brand";
+import type { HaiAsk } from "@/lib/assistant/launcher";
+import { withAttachment } from "@/lib/assistant/attachments";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { HaiPanelFrame } from "@/components/hai-panel-frame";
-import { storedToUIMessage } from "@/lib/assistant/messages";
-import { loadPanelConversationAction } from "@/features/assistant/api/actions";
+import { useHaiToolNavigation } from "@/features/assistant/hooks/use-hai-tool-navigation";
 import {
-  toolCallIdsOf,
-  useHaiToolNavigation,
-} from "@/features/assistant/hooks/use-hai-tool-navigation";
+  loadConversation,
+  type LoadedConversation,
+} from "@/features/assistant/hooks/load-conversation";
 import { useHaiChat } from "@/features/assistant/hooks/use-hai-chat";
+import { useMessageFeedback } from "@/features/assistant/hooks/use-message-feedback";
+import { useReceiptAttachment } from "@/features/assistant/hooks/use-receipt-attachment";
+import { publishHaiEvent, useHaiEvents } from "@/features/assistant/hooks/use-hai-events";
+import { useStickToBottom } from "@/features/assistant/hooks/use-stick-to-bottom";
 import { HaiChatError, HaiMessage } from "@/features/assistant/components/hai-message";
 import { HaiPanelHistory } from "@/features/assistant/components/hai-panel-history";
+import { HaiStarters } from "@/features/assistant/components/hai-starters";
+import {
+  AttachReceiptButton,
+  AttachmentStatus,
+} from "@/features/assistant/components/receipt-attachment";
+import { WriteToolsSwitch } from "@/features/assistant/components/write-tools-switch";
 
 const STARTERS = [
   "What should I pay attention to here?",
@@ -58,13 +61,18 @@ export function HaiAssistantPanel({
   open,
   onOpenChange,
   returnFocusRef,
+  ask = null,
+  canAttachReceipts = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
+  /** A question put to hAI from elsewhere in the app; a new `id` is a new request. */
+  ask?: (HaiAsk & { id: number }) | null;
+  /** Books is installed and this person may add receipts, so the input offers to attach one. */
+  canAttachReceipts?: boolean;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [input, setInput] = useState("");
   // History is a view of this panel, not another page: a past conversation opens here.
   const [view, setView] = useState<"chat" | "history">("chat");
@@ -76,12 +84,19 @@ export function HaiAssistantPanel({
   }
   // Tool calls from a restored thread already ran; they must not navigate again.
   const [settled, setSettled] = useState<ReadonlySet<string>>(NO_CALLS);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether hAI may propose changes in the conversation on screen.
+  const [writeEnabled, setWriteEnabled] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyButtonRef = useRef<HTMLButtonElement>(null);
+  const attachButtonRef = useRef<HTMLButtonElement>(null);
+  // Counts what the person has chosen to look at. A stored conversation that finishes
+  // loading after they moved on (sent a message, started a new chat, picked another one,
+  // went back) belongs to an earlier choice and must not replace what is on screen.
+  const choice = useRef(0);
   const leftHistoryRef = useRef(false);
 
   const chat = useHaiChat({
+    surface: "panel",
     chatId: "hai-global-assistant",
     conversationId: null,
     onConversationCreated: storeConversation,
@@ -90,22 +105,75 @@ export function HaiAssistantPanel({
   useHaiToolNavigation(messages, settled);
   const hasMessages = messages.length > 0;
 
+  // Opening the panel, or coming back from History, shows the newest message again.
+  const {
+    attach: attachThread,
+    onScroll: onThreadScroll,
+    follow: followThread,
+  } = useStickToBottom<HTMLDivElement>(`${open}:${view}`);
+
+  // A question from elsewhere in the app (see `askHai`). One that is to be sent starts a
+  // new conversation, so it never lands in the middle of an unrelated one; while a reply
+  // is still arriving it waits in the input instead.
+  const askedQuestion = ask?.question?.trim() ?? "";
+  const sendAsked = Boolean(ask?.send && askedQuestion && !busy);
+  const [seenAsk, setSeenAsk] = useState(0);
+  // The last question sent from an ask, so pressing the same button again while its reply
+  // is still arriving does not also leave a copy of the question in the input.
+  const [lastSentAsk, setLastSentAsk] = useState("");
+  if (ask && ask.id !== seenAsk) {
+    setSeenAsk(ask.id);
+    setView("chat");
+    if (sendAsked) {
+      // `settled` is left alone: the old messages are still on screen until the effect
+      // below empties them, and clearing it here would run their navigation again.
+      setWriteEnabled(false);
+      setLastSentAsk(askedQuestion);
+    } else if (askedQuestion && !(busy && askedQuestion === lastSentAsk)) {
+      setInput(askedQuestion);
+    }
+  }
+  const sentAsk = useRef(0);
+  useEffect(() => {
+    if (!ask || sentAsk.current === ask.id) return;
+    sentAsk.current = ask.id;
+    if (!sendAsked) return;
+    choice.current += 1;
+    chat.startNew();
+    storeConversation(null);
+    followThread();
+    chat.send(askedQuestion);
+    // Runs once per request; the chat's methods are recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask]);
+
+  const feedback = useMessageFeedback();
+  const attachment = useReceiptAttachment();
+
+  /** Put a stored conversation on screen. */
+  function show(conversation: LoadedConversation) {
+    setSettled(conversation.settled);
+    setWriteEnabled(conversation.writeEnabled);
+    feedback.reset(conversation.feedback);
+    restore(conversation.id, conversation.messages);
+  }
+
   // Bring back the thread this tab was showing before a reload.
   useEffect(() => {
     const storedId = readStoredConversation();
     if (!storedId) return;
     let cancelled = false;
+    const mine = choice.current;
     void (async () => {
       try {
-        const conversation = await loadPanelConversationAction({ conversationId: storedId });
-        if (cancelled) return;
+        const conversation = await loadConversation(storedId);
+        // The person did something else in the meantime; leave that alone.
+        if (cancelled || choice.current !== mine) return;
         if (!conversation) {
           storeConversation(null);
           return;
         }
-        const restored = conversation.messages.map(storedToUIMessage);
-        setSettled(toolCallIdsOf(restored));
-        restore(conversation.id, restored);
+        show(conversation);
       } catch {
         // Start fresh; the conversation is still in History.
       }
@@ -117,12 +185,6 @@ export function HaiAssistantPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    const node = scrollRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [messages, open, view]);
-
   // Coming back from History, focus returns to the control that opened it (not the
   // composer: on a phone that would raise the keyboard over the conversation).
   useEffect(() => {
@@ -133,20 +195,38 @@ export function HaiAssistantPanel({
 
   function send(text: string) {
     if (!text.trim() || busy) return;
+    choice.current += 1;
+    followThread();
     chat.send(text);
     setInput("");
   }
 
+  /** Send what is typed, with the attached receipt if there is one. */
+  function sendDraft() {
+    const text = withAttachment(input, attachment.ready);
+    if (!text || busy || attachment.uploading) return;
+    send(text);
+    attachment.clear();
+  }
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
-    send(input);
+    sendDraft();
+  }
+
+  /** Back to an empty chat; the next message starts a new conversation. */
+  function resetConversation() {
+    choice.current += 1;
+    chat.startNew();
+    storeConversation(null);
+    setWriteEnabled(false);
+    feedback.reset({});
   }
 
   function newConversation() {
-    chat.startNew();
-    storeConversation(null);
-    setSettled(NO_CALLS);
+    resetConversation();
     setInput("");
+    attachment.clear();
   }
 
   function showChat() {
@@ -154,14 +234,23 @@ export function HaiAssistantPanel({
     setView("chat");
   }
 
-  /** Show a conversation picked from History. False when it no longer exists. */
+  /** Leave History without picking anything; a conversation still loading is dropped. */
+  function backToChat() {
+    choice.current += 1;
+    showChat();
+  }
+
+  /**
+   * Show a conversation picked from History. False when it no longer exists. If the
+   * person moves on while it loads (back, a new chat, a message), nothing is shown.
+   */
   async function openConversation(id: string): Promise<boolean> {
+    const mine = ++choice.current;
     if (id !== conversationId) {
-      const conversation = await loadPanelConversationAction({ conversationId: id });
+      const conversation = await loadConversation(id);
+      if (choice.current !== mine) return true;
       if (!conversation) return false;
-      const restored = conversation.messages.map(storedToUIMessage);
-      setSettled(toolCallIdsOf(restored));
-      restore(conversation.id, restored);
+      show(conversation);
       storeConversation(conversation.id);
     }
     showChat();
@@ -169,14 +258,34 @@ export function HaiAssistantPanel({
   }
 
   function onConversationDeleted(id: string) {
-    if (id === conversationId) {
-      chat.startNew();
-      storeConversation(null);
-      setSettled(NO_CALLS);
-    }
+    if (id === conversationId) resetConversation();
     // The assistant page lists the same conversations.
-    if (pathname === "/assistant") router.refresh();
+    publishHaiEvent("panel", { type: "conversation-deleted", id });
   }
+
+  function changeWriteEnabled(enabled: boolean) {
+    setWriteEnabled(enabled);
+    if (conversationId) {
+      publishHaiEvent("panel", { type: "write-tools-changed", id: conversationId, enabled });
+    }
+  }
+
+  // What the assistant page did to the conversation this panel is showing.
+  useHaiEvents("panel", (event) => {
+    if (event.id !== conversationId) return;
+    if (event.type === "conversation-deleted") resetConversation();
+    else if (event.type === "write-tools-changed") setWriteEnabled(event.enabled);
+    else if (!busy) {
+      const mine = choice.current;
+      void loadConversation(event.id)
+        .then((latest) => {
+          if (latest && choice.current === mine) show(latest);
+        })
+        .catch(() => {
+          // Keep what is on screen; reopening the conversation shows the rest.
+        });
+    }
+  });
 
   if (view === "history") {
     return (
@@ -190,8 +299,11 @@ export function HaiAssistantPanel({
             newConversation();
             showChat();
           }}
-          onBack={showChat}
-          onClose={() => onOpenChange(false)}
+          onBack={backToChat}
+          onClose={() => {
+            choice.current += 1;
+            onOpenChange(false);
+          }}
         />
       </HaiPanelFrame>
     );
@@ -236,7 +348,34 @@ export function HaiAssistantPanel({
         </Button>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
+      {/* Shown once the conversation exists: the switch needs something to switch. */}
+      {conversationId ? (
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-3 border-b border-border px-4 py-2",
+            writeEnabled && "bg-warning/5",
+          )}
+        >
+          <WriteToolsSwitch
+            conversationId={conversationId}
+            enabled={writeEnabled}
+            onEnabledChange={changeWriteEnabled}
+            disabled={busy}
+            className="shrink-0"
+          />
+          <p className="min-w-0 text-xs leading-4 text-muted-foreground">
+            {writeEnabled
+              ? "Each change waits for your approval."
+              : `${brand.assistantName} can look things up and prepare drafts.`}
+          </p>
+        </div>
+      ) : null}
+
+      <div
+        ref={attachThread}
+        onScroll={onThreadScroll}
+        className="min-h-0 flex-1 overflow-y-auto p-4"
+      >
         {!hasMessages ? (
           <div className="flex min-h-full flex-col justify-center py-6">
             <div className="mb-5">
@@ -247,19 +386,7 @@ export function HaiAssistantPanel({
                 module, and prepare unsaved forms for review.
               </p>
             </div>
-            <div className="space-y-2">
-              {STARTERS.map((starter) => (
-                <button
-                  key={starter}
-                  type="button"
-                  onClick={() => send(starter)}
-                  className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40"
-                >
-                  <span>{starter}</span>
-                  <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                </button>
-              ))}
-            </div>
+            <HaiStarters prompts={STARTERS} onPick={send} className="space-y-2" />
             <div className="mt-5 flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
               <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
               <span>
@@ -278,6 +405,8 @@ export function HaiAssistantPanel({
                 isLatest={index === messages.length - 1}
                 onDecide={chat.decide}
                 onRegenerate={chat.regenerate}
+                rating={feedback.ratings[message.id]}
+                onRate={feedback.rate}
                 className="max-w-[92%] leading-6"
               />
             ))}
@@ -303,7 +432,25 @@ export function HaiAssistantPanel({
       </div>
 
       <div className="shrink-0 border-t border-border bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <AttachmentStatus
+          state={attachment.state}
+          onRemove={() => {
+            attachment.clear();
+            // The chip, and with it the focused remove button, is gone. The paperclip is
+            // disabled while a file uploads, so focus it once this removal has rendered.
+            window.setTimeout(() => attachButtonRef.current?.focus(), 0);
+          }}
+          className="mb-2"
+        />
         <form onSubmit={onSubmit} className="flex items-end gap-2">
+          {canAttachReceipts ? (
+            <AttachReceiptButton
+              buttonRef={attachButtonRef}
+              onPick={(file) => void attachment.attach(file)}
+              disabled={busy || attachment.uploading}
+              className="size-11 xl:size-9"
+            />
+          ) : null}
           <textarea
             ref={inputRef}
             value={input}
@@ -311,7 +458,7 @@ export function HaiAssistantPanel({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                send(input);
+                sendDraft();
               }
             }}
             rows={1}
@@ -337,7 +484,7 @@ export function HaiAssistantPanel({
               type="submit"
               size="icon"
               className="size-11 xl:size-9"
-              disabled={!input.trim()}
+              disabled={(!input.trim() && !attachment.ready) || attachment.uploading}
               aria-label="Send message"
             >
               <Send className="size-4" aria-hidden />

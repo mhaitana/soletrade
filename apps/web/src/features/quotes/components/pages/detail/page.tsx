@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AskHaiButton } from "@/components/ask-hai-button";
 import { ArrowRight, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <AskHaiButton question="Summarise this quote and tell me what to do next." />
           <Button asChild variant="outline">
             <Link href={`/quotes/${q.id}/pdf`}>
               <Download className="size-4" aria-hidden />

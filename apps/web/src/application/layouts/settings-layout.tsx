@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { brand } from "@/config/brand";
 
 const sections = [
   { href: "/settings/account", label: "Account" },
   { href: "/settings", label: "General" },
   { href: "/settings/modules", label: "Modules" },
   { href: "/settings/members", label: "Members" },
+  { href: "/settings/assistant", label: brand.assistantName },
   { href: "/billing", label: "Billing" },
 ];
 

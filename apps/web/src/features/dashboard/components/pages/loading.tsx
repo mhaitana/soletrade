@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 /**
  * Route loading boundary for `/dashboard` (Phase 9). Next.js shows this while the server
  * component's data loads (the dashboard loader fans out to four module services in parallel).
- * Mirrors the real layout - header + period selector + KPI row + module cards - so the shift
- * from skeleton to content is layout-stable (no CLS).
+ * Mirrors the real layout - header + period selector + briefing card + KPI row + module
+ * cards - so the shift from skeleton to content is layout-stable (no CLS).
  */
 export default function DashboardLoading() {
   return (
@@ -17,6 +17,17 @@ export default function DashboardLoading() {
         </div>
         <Skeleton className="h-11 w-32 shrink-0" />
       </div>
+
+      {/* Briefing card skeleton */}
+      <Card className="gap-3 py-5 max-sm:py-4">
+        <CardHeader className="max-sm:px-4">
+          <Skeleton className="h-5 w-28" />
+        </CardHeader>
+        <CardContent className="space-y-3 max-sm:px-4">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-48 max-w-full" />
+        </CardContent>
+      </Card>
 
       {/* KPI row skeleton */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">

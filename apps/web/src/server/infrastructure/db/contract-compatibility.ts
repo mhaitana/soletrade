@@ -28,5 +28,6 @@ export type DatabaseContractCompatibility = [
   >,
   Assert<Equal<Public.VehicleExpenseType, Database["public"]["Enums"]["vehicle_expense_type"]>>,
   Assert<Equal<Public.AiMessageRole, Database["public"]["Enums"]["ai_message_role"]>>,
+  Assert<Equal<Public.AiDigestFrequency, Database["public"]["Enums"]["ai_digest_frequency"]>>,
   Assert<Equal<Json, import("./types").Json>>,
 ];

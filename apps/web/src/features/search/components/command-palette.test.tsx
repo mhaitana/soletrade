@@ -278,4 +278,37 @@ describe("CommandPalette", () => {
 
     expect(push).toHaveBeenCalledWith("/books/tx-2");
   });
+
+  it("puts what was typed to hAI when asked, after the records that matched", async () => {
+    fetchMock.mockResolvedValue(
+      response([
+        {
+          module: "books",
+          results: [{ module: "books", id: "tx-1", label: "Airport parking", href: "/books/tx-1" }],
+        },
+      ]),
+    );
+    const asked: unknown[] = [];
+    const listen = (event: Event) => asked.push((event as CustomEvent).detail);
+    window.addEventListener("hai:ask", listen);
+    const onOpenChange = vi.fn();
+    render(
+      <CommandPalette open onOpenChange={onOpenChange} installedModules={["books"]} role="owner" />,
+    );
+    changeQuery("who owes me money");
+    // Not offered while the search is still running: it would be the only entry, and Enter
+    // would send the question instead of opening the first match.
+    expect(screen.queryByRole("option", { name: /Ask hAI/ })).not.toBeInTheDocument();
+    await finishDebounce();
+
+    const options = screen.getAllByRole("option");
+    expect(options.at(-1)).toHaveTextContent("Ask hAI: “who owes me money”");
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(options.at(-1)!);
+    expect(asked).toEqual([{ question: "who owes me money", send: true }]);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(push).not.toHaveBeenCalled();
+    window.removeEventListener("hai:ask", listen);
+  });
 });

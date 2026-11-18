@@ -6,12 +6,17 @@ import { requireWorkspaceContext } from "@/server/application/auth/workspace-con
 import {
   deleteConversation,
   getConversation,
-  listConversations,
+  listConversationFeedback,
+  listConversationPage,
   renameConversation,
   setConversationWriteEnabled,
+  setMessageFeedback,
   type Conversation,
   type ConversationSummary,
+  type MessageRating,
 } from "@/server/application/assistant/services";
+import { getInstalledModules } from "@/server/foundation/module-installations/index";
+import { canAttachReceipts } from "@/lib/assistant/attachments";
 import { branded, type AiConversationId } from "@/types/ids";
 
 /**
@@ -23,8 +28,31 @@ import { branded, type AiConversationId } from "@/types/ids";
  */
 
 export interface AssistantPageData {
+  /** The most recent conversations (one page). */
   conversations: ConversationSummary[];
+  /** Older conversations exist beyond that page. */
+  hasMoreConversations: boolean;
   activeConversation: Conversation | null;
+  /** The signed-in person's thumbs up / down on replies in the active conversation. */
+  feedback: Record<string, MessageRating>;
+  /** Books is installed and this person may add receipts and files. */
+  canAttachReceipts: boolean;
+}
+
+/**
+ * The member's thumbs up / down in a conversation. A conversation must still open when
+ * these cannot be read (for example the web app deployed before the feedback table's
+ * migration), so a failure shows no ratings instead of failing the page.
+ */
+async function readFeedback(
+  ...scope: Parameters<typeof listConversationFeedback>
+): Promise<Record<string, MessageRating>> {
+  try {
+    return await listConversationFeedback(...scope);
+  } catch (error) {
+    console.error("[assistant] feedback unavailable", error);
+    return {};
+  }
 }
 
 export async function loadAssistantPage(input: {
@@ -34,13 +62,23 @@ export async function loadAssistantPage(input: {
   const conversationId = input.conversationId
     ? (branded<"AiConversationId">(input.conversationId) as AiConversationId)
     : null;
-  const [conversations, activeConversation] = await Promise.all([
-    listConversations(ctx.workspaceId, ctx.user.id),
+  const [page, activeConversation, feedback, installed] = await Promise.all([
+    listConversationPage(ctx.workspaceId, ctx.user.id),
     conversationId
       ? getConversation(ctx.workspaceId, ctx.user.id, conversationId)
       : Promise.resolve(null),
+    conversationId
+      ? readFeedback(ctx.workspaceId, ctx.user.id, conversationId)
+      : Promise.resolve({}),
+    getInstalledModules(ctx.workspaceId),
   ]);
-  return { conversations, activeConversation };
+  return {
+    conversations: page.conversations,
+    hasMoreConversations: page.hasMore,
+    activeConversation,
+    feedback: activeConversation ? feedback : {},
+    canAttachReceipts: canAttachReceipts(ctx.role, installed),
+  };
 }
 
 const deleteSchema = z.object({ conversationId: z.string().uuid() });
@@ -111,17 +149,39 @@ export async function renameConversationAction(input: unknown): Promise<RenameCo
   return { ok: true, title: parsed.data.title };
 }
 
+const listSchema = z.object({
+  search: z.string().trim().max(80).optional(),
+  offset: z.number().int().min(0).max(10_000).optional(),
+});
+
+export interface ConversationListPage {
+  conversations: ConversationSummary[];
+  /** More conversations follow this page. */
+  hasMore: boolean;
+}
+
 /**
- * The signed-in person's conversations in this workspace, newest first, for the side
- * panel's History view.
+ * One page of the signed-in person's conversations in this workspace, newest first, for
+ * the side panel's History and the assistant page's list. `search` matches titles;
+ * `offset` continues a list already on screen.
  */
-export async function listPanelConversationsAction(): Promise<ConversationSummary[]> {
+export async function listConversationsAction(input?: unknown): Promise<ConversationListPage> {
   const ctx = await requireWorkspaceContext();
-  return listConversations(ctx.workspaceId, ctx.user.id);
+  const parsed = listSchema.safeParse(input ?? {});
+  if (!parsed.success) return { conversations: [], hasMore: false };
+  return listConversationPage(ctx.workspaceId, ctx.user.id, {
+    search: parsed.data.search || undefined,
+    offset: parsed.data.offset,
+  });
 }
 
 export interface PanelConversation {
   id: string;
+  title: string;
+  /** Whether hAI may propose changes in this conversation. */
+  writeEnabled: boolean;
+  /** The signed-in person's thumbs up / down on its replies, by message id. */
+  feedback: Record<string, MessageRating>;
   messages: { id: string; role: "user" | "assistant"; content: string; parts: unknown[] | null }[];
 }
 
@@ -136,14 +196,17 @@ export async function loadPanelConversationAction(
   const ctx = await requireWorkspaceContext();
   const parsed = deleteSchema.safeParse(input);
   if (!parsed.success) return null;
-  const conversation = await getConversation(
-    ctx.workspaceId,
-    ctx.user.id,
-    branded<"AiConversationId">(parsed.data.conversationId),
-  );
+  const conversationId = branded<"AiConversationId">(parsed.data.conversationId);
+  const [conversation, feedback] = await Promise.all([
+    getConversation(ctx.workspaceId, ctx.user.id, conversationId),
+    readFeedback(ctx.workspaceId, ctx.user.id, conversationId),
+  ]);
   if (!conversation) return null;
   return {
     id: conversation.id as string,
+    title: conversation.title,
+    writeEnabled: conversation.writeEnabled,
+    feedback,
     messages: conversation.messages.map(({ id, role, content, parts }) => ({
       id,
       role,
@@ -151,4 +214,25 @@ export async function loadPanelConversationAction(
       parts,
     })),
   };
+}
+
+const feedbackSchema = z.object({
+  messageId: z.string().uuid(),
+  rating: z.enum(["up", "down"]).nullable(),
+  comment: z.string().trim().max(1000).optional(),
+});
+
+export type SetMessageFeedbackResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Thumbs up or down on one of hAI's replies, with an optional note; `rating: null` clears
+ * it. Only a reply in one of the signed-in person's own conversations can be rated.
+ */
+export async function setMessageFeedbackAction(input: unknown): Promise<SetMessageFeedbackResult> {
+  const ctx = await requireWorkspaceContext();
+  const parsed = feedbackSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+  const result = await setMessageFeedback(ctx.workspaceId, ctx.user.id, parsed.data);
+  if (result === "not-found") return { ok: false, error: "That reply is no longer available." };
+  return { ok: true };
 }
