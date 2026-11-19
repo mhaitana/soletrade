@@ -18,7 +18,10 @@ function write(name, body = "export const value = 1;\n") {
 write("package.json", JSON.stringify({ private: true }));
 write(
   "apps/web/package.json",
-  JSON.stringify({ name: "@soletrade/web", dependencies: { "@soletrade/contracts": "workspace:*" } }),
+  JSON.stringify({
+    name: "@soletrade/web",
+    dependencies: { "@soletrade/contracts": "workspace:*" },
+  }),
 );
 write("apps/mobile/package.json", JSON.stringify({ name: "@soletrade/mobile" }));
 write(

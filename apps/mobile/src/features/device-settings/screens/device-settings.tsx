@@ -257,9 +257,9 @@ export function DeviceSettings(incoming: MobileFeatureProps) {
       />
       <Note>
         Widgets show a snapshot and its sync time. iOS widget actions open the app for receipt
-        capture or Start Shift. Android provides a separate Soletrade quick actions widget for receipt
-        capture, Start Shift and a new invoice. You can also press and hold the app icon for quick
-        actions. Start and stop each shift explicitly and review its distance before saving.
+        capture or Start Shift. Android provides a separate Soletrade quick actions widget for
+        receipt capture, Start Shift and a new invoice. You can also press and hold the app icon for
+        quick actions. Start and stop each shift explicitly and review its distance before saving.
       </Note>
       <Note>
         Background location can be interrupted by device battery settings, force quit or permission

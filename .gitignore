@@ -63,3 +63,6 @@ supabase/.branches
 .turbo/
 **/.turbo/
 .pnpm-store/
+
+# Offline toolchain (bundled in the upload zip, not committed)
+.tools/

@@ -1,20 +1,23 @@
 import { AppProviders } from "@/application/providers/app-providers";
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { brand } from "@/config/brand";
 import { urls } from "@/config/urls";
 import { getAppleWebAppMetadata, pwaBrand } from "@/config/pwa";
 
-const fontSans = Inter({
+// Fonts are bundled locally (SIL OFL 1.1, see ./fonts) so builds work without network access.
+const fontSans = localFont({
+  src: "./fonts/inter-latin-wght-normal.woff2",
   variable: "--font-sans",
-  subsets: ["latin"],
+  weight: "100 900",
   display: "swap",
 });
 
-const fontMono = JetBrains_Mono({
+const fontMono = localFont({
+  src: "./fonts/jetbrains-mono-latin-wght-normal.woff2",
   variable: "--font-mono",
-  subsets: ["latin"],
+  weight: "100 800",
   display: "swap",
 });
 

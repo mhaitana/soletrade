@@ -32,7 +32,9 @@ describe.skipIf(!HAS_DB)("invoices public payment (requires DATABASE_URL)", () =
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    await seedUsers([{ id: actor, email: "pub-actor@soletrade-test.local", fullName: "Pub Actor" }]);
+    await seedUsers([
+      { id: actor, email: "pub-actor@soletrade-test.local", fullName: "Pub Actor" },
+    ]);
     ws = await createWorkspace(actor, "Pub Test", `pub-test-${Date.now()}`);
     customer = await createCustomer(
       ws,

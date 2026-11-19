@@ -24,7 +24,9 @@ describe.skipIf(!HAS_DB)("subscription service integration (requires DATABASE_UR
 
   beforeAll(async () => {
     clearEventBus();
-    await seedUsers([{ id: actor, email: "sub-actor@soletrade-test.local", fullName: "Sub Actor" }]);
+    await seedUsers([
+      { id: actor, email: "sub-actor@soletrade-test.local", fullName: "Sub Actor" },
+    ]);
     ws1 = await createWorkspace(actor, "Sub Test One", `sub-test-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Sub Test Two", `sub-test-two-${Date.now()}`);
   });

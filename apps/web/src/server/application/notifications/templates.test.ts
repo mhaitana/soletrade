@@ -462,9 +462,7 @@ describe("HB email branding", () => {
       const logo = document.querySelector("img");
 
       expect(logo).not.toBeNull();
-      expect(logo?.getAttribute("src")).toBe(
-        `${APP_URL}/icons/soletrade-v1/icon-192x192.png`,
-      );
+      expect(logo?.getAttribute("src")).toBe(`${APP_URL}/icons/soletrade-v1/icon-192x192.png`);
       expect(logo?.getAttribute("width")).toBe("40");
       expect(logo?.getAttribute("height")).toBe("40");
       expect(logo?.getAttribute("alt")).toBe("");

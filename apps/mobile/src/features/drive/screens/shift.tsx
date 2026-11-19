@@ -276,9 +276,9 @@ export function Shift(incoming: MobileFeatureProps) {
       </Note>
       <Action title="Open device app settings" onPress={() => void Linking.openSettings()} />
       <Note>
-        iPhone Shortcuts: create a shortcut with Open URLs → soletrade://feature/shift. Name it “Start
-        Shift”. It opens this screen; you choose the vehicle and confirm Start. Android: add the
-        Soletrade quick actions widget from your launcher’s Widgets menu.
+        iPhone Shortcuts: create a shortcut with Open URLs → soletrade://feature/shift. Name it
+        “Start Shift”. It opens this screen; you choose the vehicle and confirm Start. Android: add
+        the Soletrade quick actions widget from your launcher’s Widgets menu.
       </Note>
     </NativePage>
   );

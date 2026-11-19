@@ -34,6 +34,21 @@ and [backend setup/release gates](docs/mobile/RELEASE.md) before enabling store
 purchases or running a release. Production migrations, signing, physical-device
 acceptance and store submissions are separate release steps.
 
+## Offline workspace
+
+This copy ships ready to run without network access: `node_modules` is installed and
+`.tools/` holds Node 24.19.0 and pnpm 10.33.0. From the repository root:
+
+```bash
+source .tools/env.sh
+pnpm type-check && pnpm lint && pnpm test:ci
+pnpm build
+```
+
+Fonts (Inter, JetBrains Mono, SIL OFL 1.1) are bundled in `apps/web/src/app/fonts`.
+Supabase local (`pnpm db:start`), Stripe, Resend, Twilio and AI providers need Docker or
+network access and are not available offline.
+
 ## Getting started
 
 ```bash

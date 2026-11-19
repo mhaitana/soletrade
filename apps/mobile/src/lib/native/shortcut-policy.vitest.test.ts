@@ -13,9 +13,11 @@ describe("app shortcut routing", () => {
       ).toBe(item.href);
     expect(shortcutTarget({ id: "unknown", params: binding }, binding, ["drive"])).toBeNull();
     expect(
-      shortcutTarget({ id: "soletrade.exampleift", params: { ...binding, userId: "other" } }, binding, [
-        "drive",
-      ]),
+      shortcutTarget(
+        { id: "soletrade.exampleift", params: { ...binding, userId: "other" } },
+        binding,
+        ["drive"],
+      ),
     ).toBeNull();
     expect(
       shortcutTarget(

@@ -28,7 +28,9 @@ describe.skipIf(!HAS_DB)("books InvoicePaid integration (requires DATABASE_URL)"
   let unsub: (() => void) | null = null;
 
   beforeAll(async () => {
-    await seedUsers([{ id: actor, email: "books-int@soletrade-test.local", fullName: "Books Int" }]);
+    await seedUsers([
+      { id: actor, email: "books-int@soletrade-test.local", fullName: "Books Int" },
+    ]);
     ws1 = await createWorkspace(actor, "Books Int One", `books-int-one-${Date.now()}`);
     ws2 = await createWorkspace(actor, "Books Int Two", `books-int-two-${Date.now()}`);
     // Only ws1 has Books enabled - ws2 exercises the module-gate no-op.

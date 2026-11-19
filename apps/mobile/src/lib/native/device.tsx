@@ -143,7 +143,9 @@ export function AppLock({ userId, children }: { userId: string; children: React.
     [ready, setReady] = useState(false),
     [error, setError] = useState("");
   const unlock = async () => {
-    const result = await LocalAuthentication.authenticateAsync({ promptMessage: "Unlock Soletrade" });
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: "Unlock Soletrade",
+    });
     if (result.success) setLocked(false);
     else setError("Unlock cancelled. Your work remains saved.");
   };
