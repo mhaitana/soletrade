@@ -48,8 +48,8 @@
   "devDependencies": {
     "@soletrade/eslint-config": "workspace:*",
     "eslint": "^9",
-    "prettier": "^3.9.4",
-    "tsx": "^4.23.0",
-    "turbo": "^2.11.10"
+    "prettier": "^3.10.1",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.11"
   }
 }
