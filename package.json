@@ -2,6 +2,7 @@
   "name": "soletrade",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Soletrade - one workspace to run your business.",
   "packageManager": "pnpm@10.33.0",
   "engines": {
